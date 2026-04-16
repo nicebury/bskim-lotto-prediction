@@ -1,0 +1,20 @@
+[project]
+name = "bskim-lotto-backend"
+version = "0.1.0"
+description = "로또 당첨번호 수집 시스템 백엔드 (FastAPI + aiosqlite)"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.27.0",
+    "aiosqlite>=0.20.0",
+    "httpx>=0.27.0",
+    "pydantic>=2.0.0",
+    "numpy>=1.26.0",
+    # Dream → Lotto pipeline
+    "kiwipiepy>=0.17",
+    "sentence-transformers>=2.7",
+    "chromadb>=0.5",
+]
+
+[tool.uv]
+package = false

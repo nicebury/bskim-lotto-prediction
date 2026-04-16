@@ -1,0 +1,13 @@
+{
+  "name": "로또 당첨번호 대시보드",
+  "short_name": "로또 조회",
+  "description": "로또 6/45 역대 회차별 당첨번호·1등 당첨금·당첨자 수 조회",
+  "lang": "ko-KR",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f7fb",
+  "theme_color": "#4f46e5",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
