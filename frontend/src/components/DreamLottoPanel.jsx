@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import html2canvas from 'html2canvas';
 import { api } from '../api.js';
 import LottoBall from './LottoBall.jsx';
+import { ResultActions } from './PredictionPanel.jsx';
 
 const GUBUN_LABEL = { 1: '정확일치', 2: '포함', 3: '유사' };
 const GUBUN_COLOR = { 1: 'exact', 2: 'contain', 3: 'similar' };
@@ -15,6 +17,43 @@ export default function DreamLottoPanel() {
   const [checked, setChecked] = useState(new Set()); // set of result keys
   const [tiers, setTiers] = useState(null);
   const [error, setError] = useState(null);
+  const [toast, setToast] = useState(null);
+  const captureRef = useRef(null);
+
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  };
+
+  const handleCopyTiers = async () => {
+    if (!tiers) return;
+    try {
+      await navigator.clipboard.writeText(buildDreamCopyText(text, tiers));
+      showToast('📋 결과가 클립보드에 복사되었습니다');
+    } catch {
+      showToast('⚠ 복사에 실패했습니다');
+    }
+  };
+
+  const handleSaveImage = async () => {
+    if (!captureRef.current) return;
+    try {
+      showToast('📸 이미지 생성 중...');
+      const canvas = await html2canvas(captureRef.current, {
+        backgroundColor: null,
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+      const link = document.createElement('a');
+      link.download = `dream-lotto-${Date.now()}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      showToast('📸 이미지가 저장되었습니다');
+    } catch {
+      showToast('⚠ 이미지 저장에 실패했습니다');
+    }
+  };
 
   const remaining = MAX_CHARS - text.length;
 
@@ -118,6 +157,7 @@ export default function DreamLottoPanel() {
             꿈 내용을 입력하면 형태소를 분석해 유사한 꿈 단어와 연관된 로또 번호를 찾아드립니다.
             선택한 단어들로 3단계 풀(정확일치 / +포함 / +유사)에서 각 10조합을 생성합니다.
           </p>
+          <DreamHowItWorks />
         </div>
       </div>
 
@@ -233,13 +273,132 @@ export default function DreamLottoPanel() {
         </div>
       )}
 
-      {tiers && <TierResults tiers={tiers} />}
+      {toast && <div className="result-toast">{toast}</div>}
+
+      {tiers && (
+        <>
+          <ResultActions
+            onRerun={reset}
+            onCopy={handleCopyTiers}
+            onSaveImage={handleSaveImage}
+            rerunLabel="🔄 다시 분석"
+            position="top"
+          />
+          <div ref={captureRef} className="predict-capture">
+            <TierResults tiers={tiers} />
+          </div>
+          <ResultActions
+            onRerun={reset}
+            onCopy={handleCopyTiers}
+            onSaveImage={handleSaveImage}
+            rerunLabel="🔄 다시 분석"
+            position="bottom"
+          />
+        </>
+      )}
 
       <p className="predict-disclaimer">
         ⚠ 꿈 단어–번호 매핑은 전통적 해몽 자료 기반이며 실제 당첨 확률과 무관합니다.
       </p>
     </section>
   );
+}
+
+function DreamHowItWorks() {
+  return (
+    <details className="how-it-works">
+      <summary>🤔 어떻게 추천하나요? <span className="how-hint">(꿈해몽)</span></summary>
+      <div className="how-body">
+        <p className="how-intro">
+          오래된 <b>꿈해몽 사전</b>에는 단어마다 "이런 꿈을 꾸면 이런 숫자가 좋다"는
+          전통적 해몽 데이터가 있습니다. 이걸 AI 임베딩(벡터)으로 바꿔
+          여러분의 꿈 문장과 가장 비슷한 단어를 찾아줍니다.
+        </p>
+
+        <div className="how-steps">
+          <div className="how-step">
+            <div className="how-step-num">1</div>
+            <div className="how-step-body">
+              <div className="how-step-title">✂️ 형태소 분석</div>
+              <p>
+                입력한 꿈 문장을 <b>kiwipiepy</b> 로 쪼개서 명사·동사 등
+                의미 있는 키워드만 추립니다.
+                예) "호랑이가 물고기를 물었다" → <b>호랑이, 물고기</b>
+              </p>
+            </div>
+          </div>
+
+          <div className="how-step">
+            <div className="how-step-num">2</div>
+            <div className="how-step-body">
+              <div className="how-step-title">🧠 꿈해몽 사전 검색</div>
+              <p>
+                4,800여 개의 꿈 단어가 담긴 <b>ChromaDB 벡터 DB</b> 에서
+                각 키워드와 의미가 가장 비슷한 단어를 찾습니다.
+                단어별로 <b>정확일치 / 포함 / 유사</b> 3단계로 분류해요.
+              </p>
+            </div>
+          </div>
+
+          <div className="how-step">
+            <div className="how-step-num">3</div>
+            <div className="how-step-body">
+              <div className="how-step-title">🔢 연관 번호 추출</div>
+              <p>
+                꿈해몽 사전의 각 단어에는 전통적으로 연결된
+                <b> 로또 번호(1~45)</b>가 매핑되어 있습니다.
+                매칭된 단어들에서 번호를 모아 <b>풀(pool)</b> 을 만듭니다.
+              </p>
+            </div>
+          </div>
+
+          <div className="how-step">
+            <div className="how-step-num">4</div>
+            <div className="how-step-body">
+              <div className="how-step-title">🎱 3단계 조합 생성</div>
+              <p>
+                사용자가 선택한 단어의 번호 풀에서 <b>6개 조합을 10세트</b> 만듭니다.
+              </p>
+              <div className="how-facts">
+                <span className="how-fact">세트1 · 정확일치만</span>
+                <span className="how-fact">세트2 · 정확 + 포함</span>
+                <span className="how-fact">세트3 · 전체 풀</span>
+              </div>
+              <p>
+                풀이 6개 미만이면 부족분은 랜덤으로 채웁니다.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function buildDreamCopyText(query, tiers) {
+  const lines = [
+    `💭 꿈 해몽 로또 추천 결과`,
+    `꿈: ${query || '-'}`,
+    '',
+  ];
+  const meta = [
+    ['세트 1 · 정확일치 전용', tiers.tier1],
+    ['세트 2 · 정확 + 포함',  tiers.tier2],
+    ['세트 3 · 전체 풀',      tiers.tier3],
+  ];
+  meta.forEach(([label, t]) => {
+    if (!t) {
+      lines.push(`${label}: (해당 풀 없음)`);
+      return;
+    }
+    lines.push(`${label} (풀 ${t.pool_size}개)`);
+    t.combos.forEach((combo, i) => {
+      const nums = combo.map((n) => String(n).padStart(2, '0')).join('  ');
+      lines.push(`  ${i + 1}. ${nums}`);
+    });
+    lines.push('');
+  });
+  return lines.join('\n');
 }
 
 function keyOf(wi, ri) {

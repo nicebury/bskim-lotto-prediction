@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import html2canvas from 'html2canvas';
 import { api } from '../api.js';
 import LottoBall from './LottoBall.jsx';
+import { ResultActions } from './PredictionPanel.jsx';
 
 const STRATEGIES = [
   {
@@ -80,6 +82,13 @@ export default function AltStrategies() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1_000_000));
+  const [toast, setToast] = useState(null);
+  const captureRef = useRef(null);
+
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  };
 
   const load = useCallback(async (newSeed) => {
     setLoading(true);
@@ -105,6 +114,45 @@ export default function AltStrategies() {
   const activeStrategy = STRATEGIES.find((s) => s.id === active);
   const result = data?.[active];
 
+  const handleCopy = async () => {
+    if (!result || !activeStrategy) return;
+    try {
+      const lines = [
+        `✨ 또 다른 추천 방식 · ${activeStrategy.name}`,
+        `${activeStrategy.tagline}`,
+        '',
+      ];
+      result.sets.forEach((set, i) => {
+        const nums = set.numbers.map((n) => String(n).padStart(2, '0')).join('  ');
+        lines.push(`세트 ${i + 1}: ${nums}`);
+      });
+      await navigator.clipboard.writeText(lines.join('\n'));
+      showToast('📋 결과가 클립보드에 복사되었습니다');
+    } catch {
+      showToast('⚠ 복사에 실패했습니다');
+    }
+  };
+
+  const handleSaveImage = async () => {
+    if (!captureRef.current) return;
+    try {
+      showToast('📸 이미지 생성 중...');
+      const canvas = await html2canvas(captureRef.current, {
+        backgroundColor: null,
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+      const link = document.createElement('a');
+      link.download = `alt-${active}-${Date.now()}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      showToast('📸 이미지가 저장되었습니다');
+    } catch {
+      showToast('⚠ 이미지 저장에 실패했습니다');
+    }
+  };
+
   return (
     <section className="alt-section" aria-labelledby="alt-title">
       <div className="alt-head">
@@ -114,16 +162,21 @@ export default function AltStrategies() {
             앙상블(확률 가중)과 다른 각도의 전략 5종. 실제 확률은 모두 동일하지만
             근거가 다릅니다.
           </p>
+          <AltHowItWorks />
         </div>
-        <button
-          className="btn btn-ghost"
-          onClick={regenerate}
-          disabled={loading}
-          title="새로운 시드로 모든 전략 재생성"
-        >
-          🔄 새로 생성
-        </button>
       </div>
+
+      {toast && <div className="result-toast">{toast}</div>}
+
+      {!loading && !error && result && (
+        <ResultActions
+          onRerun={regenerate}
+          onCopy={handleCopy}
+          onSaveImage={handleSaveImage}
+          rerunLabel="🔄 새로 생성"
+          position="top"
+        />
+      )}
 
       <nav className="alt-tabs" role="tablist">
         {STRATEGIES.map((s) => (
@@ -140,7 +193,7 @@ export default function AltStrategies() {
         ))}
       </nav>
 
-      <div className="alt-panel" role="tabpanel">
+      <div ref={captureRef} className="alt-panel" role="tabpanel">
         <div className="alt-tagline">
           <span className="alt-panel-icon">{activeStrategy.icon}</span>
           <div>
@@ -173,6 +226,97 @@ export default function AltStrategies() {
           </>
         ) : null}
       </div>
+
+      {!loading && !error && result && (
+        <ResultActions
+          onRerun={regenerate}
+          onCopy={handleCopy}
+          onSaveImage={handleSaveImage}
+          rerunLabel="🔄 새로 생성"
+          position="bottom"
+        />
+      )}
     </section>
+  );
+}
+
+function AltHowItWorks() {
+  return (
+    <details className="how-it-works">
+      <summary>🤔 5가지 방식이란? <span className="how-hint">(전략 설명)</span></summary>
+      <div className="how-body">
+        <p className="how-intro">
+          앙상블·몬테카를로 예측 말고도, <b>서로 다른 각도로 번호를 고르는 5가지 전략</b>을
+          제공합니다. 실제 당첨 확률은 모두 동일하지만, 번호를 뽑는 근거가 달라요.
+        </p>
+
+        <div className="how-steps">
+          <div className="how-step">
+            <div className="how-step-num">1</div>
+            <div className="how-step-body">
+              <div className="how-step-title">💕 궁합번호</div>
+              <p>
+                역대 회차에서 <b>같이 자주 나온 단짝 번호</b>를 찾습니다.
+                "3번과 17번이 역대 80번이나 같이 나왔다" → 먼저 한 번호를 정하고,
+                그 번호와 궁합이 좋은 번호를 계속 붙여가며 6개를 완성해요.
+              </p>
+            </div>
+          </div>
+
+          <div className="how-step">
+            <div className="how-step-num">2</div>
+            <div className="how-step-body">
+              <div className="how-step-title">⚖️ 구간 균형</div>
+              <p>
+                번호판을 <b>1-15 / 16-30 / 31-45</b> 세 구간으로 나누고
+                각 구간에서 정확히 2개씩 뽑습니다.
+                한쪽으로 몰리는 걸 방지하는 방식이에요.
+              </p>
+            </div>
+          </div>
+
+          <div className="how-step">
+            <div className="how-step-num">3</div>
+            <div className="how-step-body">
+              <div className="how-step-title">🌙 부활 번호</div>
+              <p>
+                <b>30회차 이상 한 번도 안 나오다</b> 최근 5회차 안에
+                깜짝 등장한 "부활" 번호들을 풀에 모아 6개를 고릅니다.
+                "오래 쉬다 돌아온 애가 또 나온다"는 직감을 수식화한 전략입니다.
+              </p>
+            </div>
+          </div>
+
+          <div className="how-step">
+            <div className="how-step-num">4</div>
+            <div className="how-step-body">
+              <div className="how-step-title">🏆 황금 조합</div>
+              <p>
+                역대 당첨 조합 중 <b>5가지 조건을 모두 만족</b>하는
+                "모범 조합"만 뽑아서 그 분포로 번호를 만듭니다.
+              </p>
+              <div className="how-facts">
+                <span className="how-fact">합계 120~150</span>
+                <span className="how-fact">홀짝 3:3</span>
+                <span className="how-fact">고저 3:3</span>
+                <span className="how-fact">끝자리 5종 이상</span>
+                <span className="how-fact">연속 1쌍 이상</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="how-step">
+            <div className="how-step-num">5</div>
+            <div className="how-step-body">
+              <div className="how-step-title">🎲 완전 랜덤</div>
+              <p>
+                분석 없이 <b>1~45에서 균등 랜덤</b>으로 6개.
+                수학적으로는 가장 정직한 방법이자, 다른 전략의 <b>대조군</b>입니다.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </details>
   );
 }

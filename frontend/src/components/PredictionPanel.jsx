@@ -1,4 +1,5 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
+import html2canvas from 'html2canvas';
 import { api } from '../api.js';
 import LottoBall from './LottoBall.jsx';
 
@@ -122,7 +123,7 @@ export default function PredictionPanel() {
 function HowItWorks() {
   return (
     <details className="how-it-works">
-      <summary>🤔 어떻게 추천하나요? <span className="how-hint">(알고리즘 보기)</span></summary>
+      <summary>🤔 어떻게 예측하나요? <span className="how-hint">(알고리즘 보기)</span></summary>
       <div className="how-body">
         <p className="how-intro">
           지난 20년간 로또 당첨번호를 공책에 꼬박꼬박 적어온 로또판매점 사장님이 있다고 상상해 보세요.
@@ -257,10 +258,84 @@ function formatScore(n) {
   return (n * 100).toFixed(1) + '%';
 }
 
+function buildCopyText(result) {
+  const mc = result.montecarlo;
+  const lines = [
+    `🔮 로또 번호 예측 결과 (${result.latest_round}회 기준)`,
+    `분석 ${result.total_rounds.toLocaleString()}회차 · 시뮬레이션 ${mc.total_simulations.toLocaleString()}회 · 유효 조합 ${mc.valid_combos.toLocaleString()}개`,
+    '',
+    '🎯 추천 번호',
+  ];
+  result.recommendations.forEach((rec, i) => {
+    const nums = rec.numbers.map((n) => String(n).padStart(2, '0')).join('  ');
+    lines.push(`  세트 ${i + 1}: ${nums}  (평균 ${(rec.avg_number_hits ?? 0).toLocaleString()}회 등장)`);
+  });
+  lines.push('');
+  lines.push('📋 분석 근거');
+  const sections = [
+    ['빈도 TOP5', result.frequency.top5],
+    ['지연 TOP5', result.delay.top5],
+    ['핫넘버 TOP5', result.hot_cold.top5],
+    ['종합 TOP10', result.ensemble.top10],
+  ];
+  sections.forEach(([label, items]) => {
+    lines.push(`  ${label}: ${items.map((it) => `${it.number}번(${(it.score * 100).toFixed(1)}%)`).join(', ')}`);
+  });
+  return lines.join('\n');
+}
+
 function ResultView({ result, onRerun }) {
   const mc = result.montecarlo;
+  const captureRef = useRef(null);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(buildCopyText(result));
+      showToast('📋 결과가 클립보드에 복사되었습니다');
+    } catch {
+      showToast('⚠ 복사에 실패했습니다');
+    }
+  };
+
+  const handleSaveImage = async () => {
+    if (!captureRef.current) return;
+    try {
+      showToast('📸 이미지 생성 중...');
+      const canvas = await html2canvas(captureRef.current, {
+        backgroundColor: null,
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+      const link = document.createElement('a');
+      link.download = `lotto-prediction-${result.latest_round}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      showToast('📸 이미지가 저장되었습니다');
+    } catch {
+      showToast('⚠ 이미지 저장에 실패했습니다');
+    }
+  };
+
   return (
     <div className="predict-result">
+      {toast && <div className="result-toast">{toast}</div>}
+
+      <ResultActions
+        onRerun={onRerun}
+        onCopy={handleCopy}
+        onSaveImage={handleSaveImage}
+        rerunLabel="🔄 다시 예측"
+        position="top"
+      />
+
+      <div ref={captureRef} className="predict-capture">
       <div className="result-summary">
         <div>
           <span className="muted">분석 회차</span>
@@ -327,14 +402,44 @@ function ResultView({ result, onRerun }) {
         />
       </div>
 
-      <div className="predict-actions">
-        <button className="btn btn-primary" onClick={onRerun}>
-          🔄 다시 예측
-        </button>
-      </div>
+      </div>{/* end predict-capture */}
+
+      <ResultActions
+        onRerun={onRerun}
+        onCopy={handleCopy}
+        onSaveImage={handleSaveImage}
+        rerunLabel="🔄 다시 예측"
+        position="bottom"
+      />
 
       <p className="predict-disclaimer">
         본 추천은 역대 데이터 기반 분석 알고리즘의 결과이며, 당첨을 보장하지 않습니다.
+      </p>
+    </div>
+  );
+}
+
+export function ResultActions({ onRerun, onCopy, onSaveImage, rerunLabel, position = 'top' }) {
+  return (
+    <div className={`result-actions result-actions-${position}`}>
+      <div className="result-actions-row">
+        <button type="button" className="btn btn-primary" onClick={onRerun}>
+          {rerunLabel}
+        </button>
+        {onCopy && (
+          <button type="button" className="btn btn-ghost" onClick={onCopy}>
+            📋 결과 복사
+          </button>
+        )}
+        {onSaveImage && (
+          <button type="button" className="btn btn-ghost" onClick={onSaveImage}>
+            📸 이미지로 저장
+          </button>
+        )}
+      </div>
+      <p className="result-actions-note" role="note">
+        💡 <b>{rerunLabel.replace(/^\S+\s*/, '')}</b>을 누르면 현재 결과가 사라져요.
+        저장하려면 먼저 <b>결과 복사</b> 또는 <b>이미지로 저장</b>을 눌러주세요.
       </p>
     </div>
   );

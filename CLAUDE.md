@@ -206,6 +206,19 @@ CREATE TABLE crawl_logs (
 - 거리(L2) → `1/(1+dist)` 점수로 정규화 (UI 표시용).
 - 자세한 설계: `work_order/task3_dream_lotto.md`.
 
+### 필수 개발 원칙 (SEO + 웹 접근성)
+**모든 프론트엔드 개발은 SEO와 웹 접근성(a11y)을 첫 구현 단계부터 반영.** 기능 완성 후 뒤늦게 붙이지 않는다.
+
+- **시맨틱 HTML**: `<section>/<article>/<header>/<nav>/<main>/<footer>/<time dateTime>` 등 용도에 맞는 태그. `<div>` 남발 금지.
+- **헤딩 계층**: `h1 → h2 → h3` 순서 유지.
+- **ARIA**: `role`, `aria-label`, `aria-selected`, `aria-controls`, `aria-live`, `aria-current` 등 상호작용 요소에 반영. 기본 시맨틱으로 충분하면 과용 금지.
+- **키보드 내비게이션**: `:focus-visible` 스타일, 버튼 `type="button"` 명시.
+- **색 대비**: 텍스트/배경 WCAG AA 이상.
+- **reduced-motion**: `@media (prefers-reduced-motion: reduce)` 존중 (이미 `styles.css` 에 전역 적용).
+- **SEO 메타**: 새 페이지/기능에 `<title>`, `meta description`, OG/Twitter, JSON-LD. 검색·필터 결과 화면은 `document.title` 동적 갱신 (이미 `ResultsBrowser.jsx` 에 예시).
+- **이미지/아이콘**: 의미 있는 건 `alt`, 장식용은 `aria-hidden="true"`.
+- **Core Web Vitals** (LCP/CLS/INP) 도 SEO 요소. 레이아웃 시프트 방지·이미지 최적화.
+
 ### UI 규약
 - **디자인 토큰은 `styles.css` CSS 변수 단일 출처**, Tailwind/CSS-in-JS 미사용
 - 자동 다크 모드 (`prefers-color-scheme`) + `prefers-reduced-motion` 존중

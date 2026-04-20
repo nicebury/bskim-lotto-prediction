@@ -5,6 +5,30 @@ import PredictionPanel from './PredictionPanel.jsx';
 import AltStrategies from './AltStrategies.jsx';
 import DreamLottoPanel from './DreamLottoPanel.jsx';
 
+const RECO_MODES = [
+  {
+    id: 'predict',
+    icon: '🎯',
+    title: '로또 번호 예측',
+    description: '역대 당첨 데이터 AI 분석 알고리즘 + 몬테카를로 시뮬레이션으로 번호를 예측',
+    cta: '어떻게 예측하나요?',
+  },
+  {
+    id: 'dream',
+    icon: '🌙',
+    title: '꿈으로 로또 추천',
+    description: '내가 꿈꾼 내용을 입력하면 꿈을 분석하여 로또 번호를 추천',
+    cta: '어떻게 추천하나요?',
+  },
+  {
+    id: 'strategies',
+    icon: '🎲',
+    title: '5가지 추천전략',
+    description: '이런 번호가 나오지 않을까? 5가지 번호 추천방식 제공',
+    cta: '5가지 방식이란?',
+  },
+];
+
 function formatDateTime(iso) {
   if (!iso) return '-';
   return iso.replace('T', ' ').slice(0, 19);
@@ -28,6 +52,7 @@ export default function Dashboard() {
   const [error, setError] = useState(null);
   const [crawlStatus, setCrawlStatus] = useState({ status: 'idle' });
   const [busy, setBusy] = useState(false);
+  const [recoMode, setRecoMode] = useState('predict');
   const pollRef = useRef(null);
 
   const loadDashboard = useCallback(async () => {
@@ -163,11 +188,30 @@ export default function Dashboard() {
 
       {error && <div className="alert error" role="alert">⚠ {error}</div>}
 
-      <PredictionPanel />
+      <section className="reco-zone" aria-labelledby="reco-zone-title">
+        <header className="reco-zone-head">
+          <span className="reco-zone-eyebrow" aria-hidden>✨ RECOMMENDATION</span>
+          <h2 id="reco-zone-title" className="reco-zone-title">
+            이번 주 번호 추천
+          </h2>
+          <p className="reco-zone-sub">
+            세 가지 추천 방식 중 원하는 스타일을 선택해 보세요. 역대 데이터 분석부터 꿈 해몽까지.
+          </p>
+        </header>
 
-      <AltStrategies />
+        <RecoModeSelector mode={recoMode} onSelect={setRecoMode} />
 
-      <DreamLottoPanel />
+        <div
+          className="reco-slot"
+          id={`reco-panel-${recoMode}`}
+          role="tabpanel"
+          aria-live="polite"
+        >
+          {recoMode === 'predict' && <PredictionPanel />}
+          {recoMode === 'dream' && <DreamLottoPanel />}
+          {recoMode === 'strategies' && <AltStrategies />}
+        </div>
+      </section>
 
       <ResultsBrowser />
 
@@ -177,6 +221,32 @@ export default function Dashboard() {
         데이터: GitHub <code>happylie/lotto_data</code> 덤프 + 네이버 검색 위젯 증분
       </footer>
     </main>
+  );
+}
+
+function RecoModeSelector({ mode, onSelect }) {
+  return (
+    <section className="reco-modes" role="tablist" aria-label="번호 추천 방식 선택">
+      {RECO_MODES.map((m) => {
+        const active = m.id === mode;
+        return (
+          <button
+            key={m.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            aria-controls={`reco-panel-${m.id}`}
+            className={`reco-mode${active ? ' active' : ''}`}
+            onClick={() => onSelect(m.id)}
+          >
+            <div className="reco-mode-icon" aria-hidden>{m.icon}</div>
+            <h3 className="reco-mode-title">{m.title}</h3>
+            <p className="reco-mode-desc">{m.description}</p>
+            <span className="reco-mode-cta">{m.cta}</span>
+          </button>
+        );
+      })}
+    </section>
   );
 }
 

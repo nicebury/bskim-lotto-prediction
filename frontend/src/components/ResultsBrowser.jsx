@@ -24,11 +24,11 @@ function formatCount(n) {
   return `${n.toLocaleString('ko-KR')}명`;
 }
 
-const PAGE_SIZES = [20, 50, 100];
+const PAGE_SIZES = [10, 20, 50, 100];
 
 export default function ResultsBrowser() {
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(10);
   const [data, setData] = useState({ total: 0, items: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
