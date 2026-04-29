@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import LottoBall from './LottoBall.jsx';
 
@@ -27,10 +28,11 @@ function formatCount(n) {
 const PAGE_SIZES = [10, 20, 50, 100];
 
 export default function ResultsBrowser() {
+  const [open, setOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [data, setData] = useState({ total: 0, items: [] });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const [searchInput, setSearchInput] = useState('');
@@ -38,16 +40,14 @@ export default function ResultsBrowser() {
 
   const tableTopRef = useRef(null);
 
-  // SEO: 검색 시 동적 타이틀/메타 업데이트
+  // SEO: 검색 시에만 동적 타이틀 업데이트 (펼치지 않은 상태에선 기본 유지)
   useEffect(() => {
     const baseTitle = '로또 당첨번호 조회 · 6/45 회차별 통계 대시보드';
-    if (searchedRound !== null) {
+    if (open && searchedRound !== null) {
       document.title = `로또 ${searchedRound}회 당첨번호 | 6/45 회차 조회`;
-    } else {
-      document.title = baseTitle;
+      return () => { document.title = baseTitle; };
     }
-    return () => { document.title = baseTitle; };
-  }, [searchedRound]);
+  }, [open, searchedRound]);
 
   const totalPages = useMemo(
     () => Math.max(1, Math.ceil(data.total / pageSize)),
@@ -68,8 +68,8 @@ export default function ResultsBrowser() {
   }, [page, pageSize]);
 
   useEffect(() => {
-    if (searchedRound === null) loadPage();
-  }, [loadPage, searchedRound]);
+    if (open && searchedRound === null) loadPage();
+  }, [open, loadPage, searchedRound]);
 
   const handleSearch = async (e) => {
     e?.preventDefault?.();
@@ -112,12 +112,35 @@ export default function ResultsBrowser() {
   };
 
   const items = data.items ?? [];
+  const panelId = 'results-browser-panel';
 
   return (
-    <section className="table-section" ref={tableTopRef}>
+    <section
+      className={`table-section browser-card${open ? ' open' : ''}`}
+      ref={tableTopRef}
+      aria-labelledby="results-browser-title"
+    >
+      <button
+        type="button"
+        className="browser-toggle"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={panelId}
+      >
+        <span className="browser-toggle-icon" aria-hidden>📋</span>
+        <span className="browser-toggle-text">
+          <h2 id="results-browser-title" className="browser-toggle-title">전체 회차 조회</h2>
+          <span className="browser-toggle-sub">
+            1 회부터 최신 회차까지 · 회차 번호로 바로 검색
+          </span>
+        </span>
+        <span className="browser-toggle-chevron" aria-hidden>{open ? '▴' : '▾'}</span>
+      </button>
+
+      {open && (
+        <div id={panelId} className="browser-body">
       <div className="table-head browser-head">
         <div className="browser-title">
-          <h2>전체 회차 조회</h2>
           {searchedRound === null ? (
             <span className="count">
               총 {data.total.toLocaleString('ko-KR')}건 · {page}/{totalPages}페이지
@@ -187,7 +210,13 @@ export default function ResultsBrowser() {
               items.map((r) => (
                 <tr key={r.round_no}>
                   <td className="round">
-                    <span aria-label={`${r.round_no}회차`}>{r.round_no}</span>
+                    <Link
+                      to={`/round/${r.round_no}`}
+                      className="round-link"
+                      aria-label={`${r.round_no}회차 상세 페이지로 이동`}
+                    >
+                      {r.round_no}
+                    </Link>
                   </td>
                   <td>
                     <time dateTime={r.draw_date}>{formatDate(r.draw_date)}</time>
@@ -230,6 +259,8 @@ export default function ResultsBrowser() {
           totalPages={totalPages}
           onChange={gotoPage}
         />
+      )}
+        </div>
       )}
     </section>
   );
@@ -321,9 +352,13 @@ function ResultCard({ item }) {
   return (
     <article className="result-card" role="listitem">
       <header className="result-card-head">
-        <span className="result-card-round" aria-label={`${item.round_no}회차`}>
+        <Link
+          to={`/round/${item.round_no}`}
+          className="result-card-round round-link"
+          aria-label={`${item.round_no}회차 상세 페이지로 이동`}
+        >
           {item.round_no}회
-        </span>
+        </Link>
         <time className="result-card-date" dateTime={item.draw_date}>
           {formatDate(item.draw_date)}
         </time>

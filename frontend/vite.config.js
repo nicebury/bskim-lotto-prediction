@@ -8,6 +8,8 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': 'http://localhost:8002',
+      '/sitemap.xml': 'http://localhost:8002',
+      '/robots.txt': 'http://localhost:8002',
     },
   },
 });

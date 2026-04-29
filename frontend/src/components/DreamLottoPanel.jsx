@@ -4,8 +4,18 @@ import { api } from '../api.js';
 import LottoBall from './LottoBall.jsx';
 import { ResultActions } from './PredictionPanel.jsx';
 
-const GUBUN_LABEL = { 1: '정확일치', 2: '포함', 3: '유사' };
+const GUBUN_LABEL = {
+  1: '⭐⭐⭐ 딱 맞아요',
+  2: '⭐⭐ 관련 있어요',
+  3: '⭐ 비슷한 느낌',
+};
 const GUBUN_COLOR = { 1: 'exact', 2: 'contain', 3: 'similar' };
+
+const TIER_META = [
+  { key: 'tier1', label: '🎯 꿈에 충실형', color: 'exact' },
+  { key: 'tier2', label: '⚖️ 균형형',     color: 'contain' },
+  { key: 'tier3', label: '🎲 확장형',     color: 'similar' },
+];
 
 const MAX_CHARS = 200;
 
@@ -18,6 +28,8 @@ export default function DreamLottoPanel() {
   const [tiers, setTiers] = useState(null);
   const [error, setError] = useState(null);
   const [toast, setToast] = useState(null);
+  const [mode, setMode] = useState('auto'); // 'auto' | 'manual'
+  const [expandedWords, setExpandedWords] = useState(new Set()); // Set<wi>
   const captureRef = useRef(null);
 
   const showToast = (msg) => {
@@ -65,26 +77,63 @@ export default function DreamLottoPanel() {
     setError(null);
     setAnalyzing(true);
     setTiers(null);
+    setExpandedWords(new Set());
     try {
       const res = await api.dreamAnalyze(text);
       setAnalyzed(res);
+
       // 기본: 모든 매칭 체크
       const initialChecked = new Set();
+      const payload = [];
       res.words.forEach((w, wi) => {
         w.results.forEach((r, ri) => {
           initialChecked.add(keyOf(wi, ri));
+          payload.push({ gubun: r.gubun, lotto_number: r.lotto_number });
         });
       });
       setChecked(initialChecked);
 
       if (!res.words.length) {
         setError('분석 가능한 단어를 찾지 못했습니다. 다른 단어로 다시 입력해 주세요.');
+        return;
+      }
+
+      // 자동 모드: 분석 직후 바로 번호 생성까지 체이닝
+      if (mode === 'auto') {
+        setGenerating(true);
+        try {
+          const tierRes = await api.dreamLotto({
+            selected: payload,
+            setsPerTier: 10,
+          });
+          setTiers(tierRes);
+        } finally {
+          setGenerating(false);
+        }
       }
     } catch (e) {
       setError(e.message);
     } finally {
       setAnalyzing(false);
     }
+  };
+
+  const switchToManual = () => {
+    setMode('manual');
+  };
+
+  const backToAuto = () => {
+    setMode('auto');
+    setExpandedWords(new Set());
+  };
+
+  const toggleExpanded = (wi) => {
+    setExpandedWords((prev) => {
+      const next = new Set(prev);
+      if (next.has(wi)) next.delete(wi);
+      else next.add(wi);
+      return next;
+    });
   };
 
   const toggle = (key) => {
@@ -146,6 +195,8 @@ export default function DreamLottoPanel() {
     setTiers(null);
     setChecked(new Set());
     setError(null);
+    setMode('auto');
+    setExpandedWords(new Set());
   };
 
   return (
@@ -154,8 +205,8 @@ export default function DreamLottoPanel() {
         <div>
           <h2 id="dream-title">💭 꿈 해몽 → 로또 추천</h2>
           <p className="muted-sm">
-            꿈 내용을 입력하면 형태소를 분석해 유사한 꿈 단어와 연관된 로또 번호를 찾아드립니다.
-            선택한 단어들로 3단계 풀(정확일치 / +포함 / +유사)에서 각 10조합을 생성합니다.
+            꿈 내용을 입력하면 중요 단어를 뽑아 비슷한 꿈 단어와 연결된 로또 번호를 찾아드립니다.
+            기본은 자동 추천이며, 원하시면 결과에서 "직접 골라보기" 로 세부 매칭을 고를 수 있습니다.
           </p>
           <DreamHowItWorks />
         </div>
@@ -181,9 +232,11 @@ export default function DreamLottoPanel() {
             <button
               className="btn btn-primary"
               onClick={handleAnalyze}
-              disabled={analyzing || !text.trim()}
+              disabled={analyzing || generating || !text.trim()}
             >
-              {analyzing ? (<><span className="spinner" /> 분석 중...</>) : '🔍 꿈 분석'}
+              {analyzing ? (<><span className="spinner" /> 분석 중...</>)
+                : generating ? (<><span className="spinner" /> 번호 생성 중...</>)
+                : '🔮 꿈 해몽 → 번호 추천'}
             </button>
           </div>
         </div>
@@ -191,7 +244,25 @@ export default function DreamLottoPanel() {
 
       {error && <div className="alert error" role="alert">⚠ {error}</div>}
 
-      {analyzed && analyzed.words.length > 0 && (
+      {mode === 'auto' && analyzed && analyzed.words.length > 0 && tiers && (
+        <div className="dream-auto-summary">
+          <div className="dream-auto-chips">
+            <span className="muted-sm">해몽된 키워드</span>
+            {analyzed.words.map((w) => (
+              <span key={w.dream_word} className="dream-keyword">🔑 {w.dream_word}</span>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="btn btn-text"
+            onClick={switchToManual}
+          >
+            🔧 직접 골라보기
+          </button>
+        </div>
+      )}
+
+      {mode === 'manual' && analyzed && analyzed.words.length > 0 && (
         <div className="dream-results">
           <div className="dream-results-head">
             <h3>분석된 키워드</h3>
@@ -206,58 +277,79 @@ export default function DreamLottoPanel() {
               <button className="btn btn-text" onClick={() => toggleAll(false)}>
                 전체해제
               </button>
+              <button className="btn btn-text" onClick={backToAuto}>
+                🔙 자동 추천으로
+              </button>
             </div>
           </div>
 
           <div className="dream-word-list">
-            {analyzed.words.map((w, wi) => (
-              <div key={w.dream_word + wi} className="dream-word-block">
-                <div className="dream-word-title">
-                  <span className="dream-keyword">🔑 {w.dream_word}</span>
-                  <span className="muted-sm">{w.results.length}개 매칭</span>
-                </div>
-                <div className="dream-match-grid">
-                  {w.results.map((r, ri) => {
-                    const k = keyOf(wi, ri);
-                    const isChecked = checked.has(k);
-                    return (
-                      <button
-                        type="button"
-                        key={k}
-                        className={`dream-match ${GUBUN_COLOR[r.gubun]}${isChecked ? ' checked' : ''}`}
-                        onClick={() => toggle(k)}
-                        aria-pressed={isChecked}
-                        title={`유사도 ${(r.score * 100).toFixed(1)}%`}
-                      >
-                        <span className="dream-match-check">{isChecked ? '✓' : ''}</span>
-                        <div className="dream-match-body">
-                          <div className="dream-match-top">
-                            <span className={`dream-gubun ${GUBUN_COLOR[r.gubun]}`}>
-                              {GUBUN_LABEL[r.gubun]}
-                            </span>
-                            <span className="dream-match-word">{r.word}</span>
-                            {r.importance > 0 && (
-                              <span className={`dream-importance i${Math.min(r.importance, 5)}`}>
-                                {importanceLabel(r.importance)}
+            {analyzed.words.map((w, wi) => {
+              const topIdx = topMatchIndex(w.results);
+              const isExpanded = expandedWords.has(wi);
+              const visible = isExpanded
+                ? w.results.map((r, i) => ({ r, i }))
+                : [{ r: w.results[topIdx], i: topIdx }];
+              const hiddenCount = w.results.length - 1;
+              return (
+                <div key={w.dream_word + wi} className="dream-word-block">
+                  <div className="dream-word-title">
+                    <span className="dream-keyword">🔑 {w.dream_word}</span>
+                    <span className="muted-sm">{w.results.length}개 매칭</span>
+                  </div>
+                  <div className="dream-match-grid">
+                    {visible.map(({ r, i: ri }) => {
+                      const k = keyOf(wi, ri);
+                      const isChecked = checked.has(k);
+                      return (
+                        <button
+                          type="button"
+                          key={k}
+                          className={`dream-match ${GUBUN_COLOR[r.gubun]}${isChecked ? ' checked' : ''}`}
+                          onClick={() => toggle(k)}
+                          aria-pressed={isChecked}
+                          title={`유사도 ${(r.score * 100).toFixed(1)}%`}
+                        >
+                          <span className="dream-match-check">{isChecked ? '✓' : ''}</span>
+                          <div className="dream-match-body">
+                            <div className="dream-match-top">
+                              <span className={`dream-gubun ${GUBUN_COLOR[r.gubun]}`}>
+                                {GUBUN_LABEL[r.gubun]}
                               </span>
-                            )}
+                              <span className="dream-match-word">{r.word}</span>
+                              {r.importance > 0 && (
+                                <span className={`dream-importance i${Math.min(r.importance, 5)}`}>
+                                  {importanceLabel(r.importance)}
+                                </span>
+                              )}
+                            </div>
+                            <div className="dream-match-nums">
+                              {r.lotto_number.length > 0 ? (
+                                r.lotto_number.map((n) => (
+                                  <span key={n} className="dream-num-chip">{n}</span>
+                                ))
+                              ) : (
+                                <span className="muted-sm">연결 번호 없음</span>
+                              )}
+                            </div>
                           </div>
-                          <div className="dream-match-nums">
-                            {r.lotto_number.length > 0 ? (
-                              r.lotto_number.map((n) => (
-                                <span key={n} className="dream-num-chip">{n}</span>
-                              ))
-                            ) : (
-                              <span className="muted-sm">연결 번호 없음</span>
-                            )}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {hiddenCount > 0 && (
+                    <button
+                      type="button"
+                      className="btn btn-text dream-more-btn"
+                      onClick={() => toggleExpanded(wi)}
+                      aria-expanded={isExpanded}
+                    >
+                      {isExpanded ? '▴ 접기' : `▾ 더보기 (${hiddenCount}개)`}
+                    </button>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="dream-generate-bar">
@@ -268,7 +360,7 @@ export default function DreamLottoPanel() {
             >
               {generating ? (<><span className="spinner" /> 생성 중...</>) : '🎱 번호 생성'}
             </button>
-            <span className="muted-sm">풀에서 고유한 10개 조합 생성, 부족분은 랜덤으로 채움</span>
+            <span className="muted-sm">추천 대상에서 고유한 10 개 조합을 만듭니다. 대상이 6 개 이하면 자동으로 번호가 추천됩니다.</span>
           </div>
         </div>
       )}
@@ -311,18 +403,18 @@ function DreamHowItWorks() {
       <div className="how-body">
         <p className="how-intro">
           오래된 <b>꿈해몽 사전</b>에는 단어마다 "이런 꿈을 꾸면 이런 숫자가 좋다"는
-          전통적 해몽 데이터가 있습니다. 이걸 AI 임베딩(벡터)으로 바꿔
-          여러분의 꿈 문장과 가장 비슷한 단어를 찾아줍니다.
+          전통적 해몽 데이터가 있습니다. 해몽 데이터를 AI 가 분석하여
+          여러분의 꿈 문장과 가장 비슷한 단어를 찾아드립니다.
         </p>
 
         <div className="how-steps">
           <div className="how-step">
             <div className="how-step-num">1</div>
             <div className="how-step-body">
-              <div className="how-step-title">✂️ 형태소 분석</div>
+              <div className="how-step-title">✂️ 꿈 분석 · 중요 단어 추출</div>
               <p>
-                입력한 꿈 문장을 <b>kiwipiepy</b> 로 쪼개서 명사·동사 등
-                의미 있는 키워드만 추립니다.
+                입력한 꿈 문장을 분석하여 의미 있는
+                <b> 중요 단어</b>만 추출합니다.
                 예) "호랑이가 물고기를 물었다" → <b>호랑이, 물고기</b>
               </p>
             </div>
@@ -333,9 +425,10 @@ function DreamHowItWorks() {
             <div className="how-step-body">
               <div className="how-step-title">🧠 꿈해몽 사전 검색</div>
               <p>
-                4,800여 개의 꿈 단어가 담긴 <b>ChromaDB 벡터 DB</b> 에서
-                각 키워드와 의미가 가장 비슷한 단어를 찾습니다.
-                단어별로 <b>정확일치 / 포함 / 유사</b> 3단계로 분류해요.
+                4,800여 개의 꿈 단어를 <b>AI 가 읽을 수 있는 데이터 형태</b>로
+                변환해 두었습니다. AI 가 꿈의 중요 단어와 일치하거나
+                의미가 유사한 단어를 찾아냅니다.
+                신뢰도는 별점으로 표시해요: <b>⭐⭐⭐ 딱 맞아요 / ⭐⭐ 관련 있어요 / ⭐ 비슷한 느낌</b>.
               </p>
             </div>
           </div>
@@ -347,7 +440,8 @@ function DreamHowItWorks() {
               <p>
                 꿈해몽 사전의 각 단어에는 전통적으로 연결된
                 <b> 로또 번호(1~45)</b>가 매핑되어 있습니다.
-                매칭된 단어들에서 번호를 모아 <b>풀(pool)</b> 을 만듭니다.
+                매칭된 단어들에서 번호를 모아 <b>추천 대상</b>을 선정합니다.
+                추천 대상이 6 개 이하면 자동으로 번호가 추천됩니다.
               </p>
             </div>
           </div>
@@ -357,15 +451,16 @@ function DreamHowItWorks() {
             <div className="how-step-body">
               <div className="how-step-title">🎱 3단계 조합 생성</div>
               <p>
-                사용자가 선택한 단어의 번호 풀에서 <b>6개 조합을 10세트</b> 만듭니다.
+                사용자가 선택한 단어의 추천 대상 번호에서
+                <b> 6 개 조합을 10 세트</b> 만듭니다.
               </p>
               <div className="how-facts">
-                <span className="how-fact">세트1 · 정확일치만</span>
-                <span className="how-fact">세트2 · 정확 + 포함</span>
-                <span className="how-fact">세트3 · 전체 풀</span>
+                <span className="how-fact">🎯 꿈에 충실형 · ⭐⭐⭐ 만</span>
+                <span className="how-fact">⚖️ 균형형 · ⭐⭐⭐ + ⭐⭐</span>
+                <span className="how-fact">🎲 확장형 · 전체 대상</span>
               </div>
               <p>
-                풀이 6개 미만이면 부족분은 랜덤으로 채웁니다.
+                추천 대상이 6 개 이하면 자동으로 번호가 추천됩니다.
               </p>
             </div>
           </div>
@@ -381,17 +476,13 @@ function buildDreamCopyText(query, tiers) {
     `꿈: ${query || '-'}`,
     '',
   ];
-  const meta = [
-    ['세트 1 · 정확일치 전용', tiers.tier1],
-    ['세트 2 · 정확 + 포함',  tiers.tier2],
-    ['세트 3 · 전체 풀',      tiers.tier3],
-  ];
+  const meta = TIER_META.map(({ key, label }) => [label, tiers[key]]);
   meta.forEach(([label, t]) => {
     if (!t) {
-      lines.push(`${label}: (해당 풀 없음)`);
+      lines.push(`${label}: (추천 대상 없음)`);
       return;
     }
-    lines.push(`${label} (풀 ${t.pool_size}개)`);
+    lines.push(`${label} (추천 대상 ${t.pool_size}개)`);
     t.combos.forEach((combo, i) => {
       const nums = combo.map((n) => String(n).padStart(2, '0')).join('  ');
       lines.push(`  ${i + 1}. ${nums}`);
@@ -405,6 +496,18 @@ function keyOf(wi, ri) {
   return `${wi}:${ri}`;
 }
 
+function topMatchIndex(results) {
+  let best = 0;
+  let bestScore = -1;
+  results.forEach((r, i) => {
+    if (r.score > bestScore) {
+      bestScore = r.score;
+      best = i;
+    }
+  });
+  return best;
+}
+
 function importanceLabel(n) {
   if (n >= 5) return '강력';
   if (n >= 3) return '매우';
@@ -413,20 +516,15 @@ function importanceLabel(n) {
 }
 
 function TierResults({ tiers }) {
-  const tierMeta = [
-    { key: 'tier1', label: '세트 1 · 정확일치 전용',   color: 'exact'   },
-    { key: 'tier2', label: '세트 2 · 정확 + 포함',    color: 'contain' },
-    { key: 'tier3', label: '세트 3 · 전체 풀',       color: 'similar' },
-  ];
   return (
     <div className="tier-results">
       <h3>🎯 추천 번호 세트</h3>
-      {tierMeta.map(({ key, label, color }) => {
+      {TIER_META.map(({ key, label, color }) => {
         const t = tiers[key];
         if (!t) return (
           <div key={key} className="tier-empty">
             <span className={`dream-gubun ${color}`}>{label}</span>
-            <span className="muted-sm">해당 풀이 없습니다</span>
+            <span className="muted-sm">추천 대상이 없습니다</span>
           </div>
         );
         return (
@@ -434,7 +532,7 @@ function TierResults({ tiers }) {
             <div className="tier-head">
               <span className={`dream-gubun ${color}`}>{label}</span>
               <span className="muted-sm">
-                풀 {t.pool_size}개 · 조합 {t.combos.length}개
+                추천 대상 {t.pool_size}개 · 조합 {t.combos.length}개
               </span>
             </div>
             <div className="tier-combos">

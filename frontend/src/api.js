@@ -18,8 +18,6 @@ async function request(path, options = {}) {
 
 export const api = {
   dashboard: () => request('/dashboard'),
-  startCrawl: () => request('/crawl', { method: 'POST' }),
-  crawlStatus: () => request('/crawl/status'),
   results: (page = 1, pageSize = 20) =>
     request(`/results?page=${page}&page_size=${pageSize}`),
   resultByRound: (round) => request(`/results/${round}`),

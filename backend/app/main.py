@@ -6,7 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .database import init_db
-from .routers import crawl, dashboard, dream, predict
+from .routers import crawl, dashboard, dream, predict, seo
+from .scheduler import shutdown_scheduler, start_scheduler
 
 logging.basicConfig(
     level=logging.INFO,
@@ -17,7 +18,11 @@ logging.basicConfig(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
-    yield
+    start_scheduler()
+    try:
+        yield
+    finally:
+        shutdown_scheduler()
 
 
 app = FastAPI(
@@ -38,6 +43,7 @@ app.include_router(dashboard.router)
 app.include_router(crawl.router)
 app.include_router(predict.router)
 app.include_router(dream.router)
+app.include_router(seo.router)
 
 
 @app.get("/health")

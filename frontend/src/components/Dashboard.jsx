@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api.js';
 import ResultsBrowser from './ResultsBrowser.jsx';
 import PredictionPanel from './PredictionPanel.jsx';
@@ -39,21 +39,11 @@ function formatNumber(n) {
   return n.toLocaleString('ko-KR');
 }
 
-const STATUS_LABEL = {
-  idle: '대기중',
-  running: '수집 중',
-  success: '완료',
-  failed: '실패',
-};
-
 export default function Dashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [crawlStatus, setCrawlStatus] = useState({ status: 'idle' });
-  const [busy, setBusy] = useState(false);
   const [recoMode, setRecoMode] = useState('predict');
-  const pollRef = useRef(null);
 
   const loadDashboard = useCallback(async () => {
     try {
@@ -67,58 +57,9 @@ export default function Dashboard() {
     }
   }, []);
 
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  }, []);
-
-  const startPolling = useCallback(() => {
-    stopPolling();
-    pollRef.current = setInterval(async () => {
-      try {
-        const s = await api.crawlStatus();
-        setCrawlStatus(s);
-        if (s.status !== 'running') {
-          stopPolling();
-          setBusy(false);
-          await loadDashboard();
-        }
-      } catch (e) {
-        stopPolling();
-        setBusy(false);
-        setError(e.message);
-      }
-    }, 1000);
-  }, [loadDashboard, stopPolling]);
-
   useEffect(() => {
     loadDashboard();
-    api.crawlStatus()
-      .then((s) => {
-        setCrawlStatus(s);
-        if (s.status === 'running') {
-          setBusy(true);
-          startPolling();
-        }
-      })
-      .catch(() => {});
-    return stopPolling;
-  }, [loadDashboard, startPolling, stopPolling]);
-
-  const handleCrawl = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await api.startCrawl();
-      setCrawlStatus({ status: 'running' });
-      startPolling();
-    } catch (e) {
-      setBusy(false);
-      setError(e.message);
-    }
-  };
+  }, [loadDashboard]);
 
   const summary = data?.summary;
 
@@ -161,31 +102,6 @@ export default function Dashboard() {
         />
       </section>
 
-      <section className="crawl-bar">
-        <div className="crawl-bar-top">
-          <button
-            className="btn btn-primary"
-            onClick={handleCrawl}
-            disabled={busy || crawlStatus.status === 'running'}
-          >
-            {busy || crawlStatus.status === 'running' ? (
-              <>
-                <span className="spinner" aria-hidden />
-                수집 중...
-              </>
-            ) : (
-              <>🔄 크롤링 실행</>
-            )}
-          </button>
-          <StatusPill status={crawlStatus.status} />
-          <CrawlMessage status={crawlStatus} />
-        </div>
-
-        {crawlStatus.status === 'running' && (
-          <CrawlProgress status={crawlStatus} />
-        )}
-      </section>
-
       {error && <div className="alert error" role="alert">⚠ {error}</div>}
 
       <section className="reco-zone" aria-labelledby="reco-zone-title">
@@ -216,10 +132,6 @@ export default function Dashboard() {
       <ResultsBrowser />
 
       <FaqSection />
-
-      <footer className="footer">
-        데이터: GitHub <code>happylie/lotto_data</code> 덤프 + 네이버 검색 위젯 증분
-      </footer>
     </main>
   );
 }
@@ -261,62 +173,6 @@ function SummaryCard({ icon, label, value, hint, loading }) {
         {loading ? '000,000건' : (value ?? '-')}
       </div>
       {hint && <div className="card-hint">{hint}</div>}
-    </div>
-  );
-}
-
-function StatusPill({ status }) {
-  const cls = `pill ${status ?? 'idle'}`;
-  return (
-    <span className={cls}>
-      <span className="dot" />
-      {STATUS_LABEL[status] ?? '대기중'}
-    </span>
-  );
-}
-
-function CrawlMessage({ status }) {
-  if (status.status === 'idle') return null;
-  if (status.status === 'running') {
-    const cur = status.current_round ?? '-';
-    return (
-      <span className="card-hint">
-        {cur}회차 진행 중 · {status.collected_count ?? 0}건 수집됨
-      </span>
-    );
-  }
-  if (status.status === 'success') {
-    return (
-      <span className="card-hint">
-        {status.collected_count ?? 0}건 수집 완료
-      </span>
-    );
-  }
-  if (status.status === 'failed') {
-    return (
-      <span className="card-hint" style={{ color: 'var(--danger)' }}>
-        실패: {status.error ?? '알 수 없는 오류'}
-      </span>
-    );
-  }
-  return null;
-}
-
-function CrawlProgress({ status }) {
-  const collected = status.collected_count ?? 0;
-  const indeterminate = collected < 1;
-  return (
-    <div className="progress">
-      <div className="progress-meta">
-        <span>{status.current_round ? `${status.current_round}회차 처리 중` : '준비 중...'}</span>
-        <span>{collected}건 수집</span>
-      </div>
-      <div className={`progress-bar${indeterminate ? ' indeterminate' : ''}`}>
-        <div
-          className="progress-fill"
-          style={{ width: indeterminate ? undefined : `${Math.min(100, collected * 2)}%` }}
-        />
-      </div>
     </div>
   );
 }
