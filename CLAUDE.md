@@ -83,6 +83,8 @@ frontend/
 │       ├── Dashboard.jsx      헤더/요약카드/크롤바/FAQ
 │       ├── ResultsBrowser.jsx 전체 회차 조회 + 회차 검색 + 페이징
 │       ├── PredictionPanel.jsx 7단계 예측 파이프라인 애니메이션 + 결과
+│       ├── DreamLottoPanel.jsx 꿈→로또 입력/단어선택/결과
+│       ├── AltStrategies.jsx  대체 전략 5종 패널
 │       └── LottoBall.jsx      3D 스타일 볼 (5구간 색상)
 ├── vite.config.js             포트 1989 (strictPort), /api → :8002 프록시
 └── package.json
@@ -106,7 +108,9 @@ work_order/
 | DB 저널 모드 | `DELETE` (WAL 아님) | `backend/app/database.py` |
 | 몬테카를로 기본값 | 50,000회 시뮬레이션, 5세트 | `backend/app/prediction/config.py` |
 | 앙상블 가중치 | freq 0.25 / delay 0.25 / hot_cold 0.30 / pattern 0.20 | `backend/app/prediction/config.py` |
-| ChromaDB 경로 | `/mnt/e/bskim_dev/bskim-money-tellme-lotto/chroma_words` | `backend/app/config.py` (외부 참조) |
+| ChromaDB 경로 | `backend/data/chroma_words` (로컬, `BASE_DIR/data/chroma_words`) | `backend/app/config.py` |
+| HTTP 타임아웃 / 재시도 딜레이 / 최대 재시도 | 10초 / 3초 / 3회 | `backend/app/config.py` |
+| hot_rounds / 최소 회차 | 최근 20회 / 50회 이상 필요 | `backend/app/prediction/config.py` |
 
 ---
 
@@ -200,7 +204,7 @@ CREATE TABLE crawl_logs (
 
 ### 꿈 → 로또 (reg_lotto 포팅)
 - 원본 `bskim-money-tellme-lotto` 에서 핵심 로직만 이식. **konlpy 대신 kiwipiepy 사용** (Java 불필요, 10배 빠름).
-- ChromaDB 는 원본 데이터(`chroma_words`, 4,802 단어 × 768-dim) 를 **외부 경로 참조** — 복사하지 않음.
+- ChromaDB 는 원본 데이터(`chroma_words`, 4,802 단어 × 768-dim) 를 `backend/data/chroma_words` 에 **로컬 보관** (reg_lotto 에서 이식). 경로는 `config.py` `CHROMA_DB_PATH` 단일 출처.
 - 모델(`upskyy/kf-deberta-multitask`) + Chroma 클라이언트는 **lazy 싱글톤**: 첫 요청 시 로딩 ~20초.
 - **번호 생성 로직은 백엔드로 이동** (원본 TS → Python numpy).
 - 거리(L2) → `1/(1+dist)` 점수로 정규화 (UI 표시용).

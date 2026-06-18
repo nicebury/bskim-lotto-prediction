@@ -3,6 +3,7 @@ __pycache__/
 .venv/
 venv/
 data/*.db
+!data/lotto.db
 data/*.db-shm
 data/*.db-wal
 .env
