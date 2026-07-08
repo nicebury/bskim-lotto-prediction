@@ -173,9 +173,9 @@ uv run python -m scripts.seed_from_github
 |------|------|------|
 | `DB_PATH` | `backend/data/lotto.db` | SQLite 파일 경로 |
 | `DHLOTTERY_API_URL` | `https://www.dhlottery.co.kr/common.do` | 동행복권 API |
-| `CRAWL_DELAY_SEC` | `0.3` | 요청 간 대기 시간 |
+| `CRAWL_DELAY_SEC` | `2.0` | 요청 간 대기 시간 (실제로는 + 0~0.8초 지터) |
 | `CRAWL_MAX_RETRY` | `3` | 네트워크 실패 시 재시도 횟수 |
-| `CRAWL_RETRY_DELAY_SEC` | `2.0` | 재시도 간격 |
+| `CRAWL_RETRY_DELAY_SEC` | `3.0` | 재시도 간격 |
 | `CRAWL_HTTP_TIMEOUT_SEC` | `10.0` | HTTP 타임아웃 |
 | `CORS_ORIGINS` | `localhost:1989` | CORS 허용 오리진 |
 | `HTTP_HEADERS` | UA/Accept | 동행복권 차단 회피용 헤더 |
@@ -276,7 +276,15 @@ Base URL: `http://localhost:8002`
 ```
 
 ### POST `/api/crawl`
-증분 크롤링 시작 (비동기).
+증분 크롤링 시작 (비동기). DB의 마지막 회차 다음부터 네이버 검색 위젯으로 수집.
+
+```bash
+# 증분 수집 시작
+curl -X POST http://localhost:8002/api/crawl
+
+# 진행 상태 폴링
+curl http://localhost:8002/api/crawl/status
+```
 
 - **202 Accepted** — 정상 시작
 - **409 Conflict** — 이미 실행 중

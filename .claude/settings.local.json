@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions",
+    "allow": [
+      "Bash(mkdir -p /mnt/d/bskim_dev/bskim-lotto-prediction/.claude/skills)",
+      "Bash(cp -r /mnt/d/bskim_dev/bskim-lotto-prediction__/.claude/skills/frontend-design /mnt/d/bskim_dev/bskim-lotto-prediction__/.claude/skills/senior-frontend /mnt/d/bskim_dev/bskim-lotto-prediction__/.claude/skills/ui-ux-pro-max /mnt/d/bskim_dev/bskim-lotto-prediction/.claude/skills/)",
+      "Bash(git check-ignore *)",
+      "Bash(command -v sqlite3)",
+      "Bash(sqlite3 --version)",
+      "Bash(python3 -)",
+      "Bash(uv run *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(npm install *)"
+    ]
+  }
+}
