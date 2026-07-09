@@ -91,7 +91,7 @@ PG_PASSWORD=                  # init_roles.sql 로 만든 비번
 
 # ── 잡 스케줄 (KST). APScheduler CronTrigger 문법 ──
 LOTTO_CRON=0 21 * * 6         # 매주 토 21:00 (추첨 20:45 직후)
-NEWS_CRON=0 6,12,18 * * *     # 매일 3회. 네이버 API 쿼터 확인 후 확정
+NEWS_CRON=0 * * * *           # 매시간. 쿼터 25,000 중 48회(0.2%)만 쓴다
 
 # lotto 잡 실패 시 재시도. 기본값이면 21:00·22:00·23:00
 LOTTO_RETRY_DELAY_MIN=60
@@ -105,7 +105,11 @@ WORKER_JOB_KEY=
 NAVER_CLIENT_ID=
 NAVER_CLIENT_SECRET=
 NAVER_NEWS_QUERY=로또,복권     # 쉼표 구분
-NAVER_NEWS_DISPLAY=50
+NAVER_NEWS_DISPLAY=50         # 최대 100
+
+# 발행일자(KST)가 실행일자와 다른 기사는 저장하지 않는다.
+# 대가: 마지막 실행~자정 발행분은 영영 안 들어온다. NEWS_CRON 으로 창을 좁힌다.
+NEWS_SAME_DAY_ONLY=true
 
 # ── 서버 ─────────────────────────────────────────
 WORKER_HOST=127.0.0.1      # 루프백 고정. 외부 노출 금지
@@ -214,7 +218,7 @@ NEXT_PUBLIC_ADSENSE_CLIENT=
 | `NEXT_PUBLIC_CONTACT_EMAIL` | frontend | **미정** | 애드센스 신청 (`/contact` · `/privacy`) |
 | `NEXT_PUBLIC_ADSENSE_CLIENT` | frontend | 승인 후 | 광고 게재 |
 
-**Phase 1(worker)·Phase 2(backend) 를 막는 항목은 더 이상 없다.** 네이버 API 키도 채워져 `news` 잡이 동작한다. **다만 일일 쿼터는 여전히 미확인**이라 `NEWS_CRON` 빈도는 잠정값이다 ([[naver-search-api]]).
+**Phase 1(worker)·Phase 2(backend) 를 막는 항목은 더 이상 없다.** 네이버 API 키가 채워졌고 일일 쿼터도 **25,000** 으로 확인되어 `NEWS_CRON` 이 확정됐다 ([[naver-search-api]]).
 
 `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` 중 하나라도 비면 워커는 **기동은 하되** `news` 잡을 크론에 등록하지 않는다. `lotto` 잡은 키와 무관하게 동작한다. 자세한 것은 [[worker-jobs]] 의 "`news` 잡" 절.
 

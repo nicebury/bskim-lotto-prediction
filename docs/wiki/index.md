@@ -77,7 +77,7 @@
 
 ## 90-external — 외부 의존
 
-- [naver-search-api](90-external/naver-search-api.md) — ⚠ **일일 쿼터·재배포 약관 미확인.** 사람이 확인해야 함
+- [naver-search-api](90-external/naver-search-api.md) — 일일 쿼터 **25,000**. 당일 필터와 3중 중복 제거. ⚠ 재배포 약관은 미확인
 - [dhlottery-blocked](90-external/dhlottery-blocked.md) — 공식 API 차단 이력과 네이버 위젯 대체 구현
 - [trademark-check](90-external/trademark-check.md) — ⚠ **KIPRIS 상표 검색·도메인 미확인**
 
@@ -89,12 +89,12 @@
 
 | 막는 것 | 필요한 것 | 페이지 |
 |--------|----------|-------|
-| `NEWS_CRON` 빈도 확정 | **일일 쿼터 확인** (키는 발급됨) | [naver-search-api](90-external/naver-search-api.md) |
+| 공개 (막지는 않음) | 네이버 뉴스 **재배포 약관·출처 표기** 확인 | [naver-search-api](90-external/naver-search-api.md) |
 | 도메인 구매 | KIPRIS 상표 검색 | [trademark-check](90-external/trademark-check.md) |
 | Phase 4 | GA4 · 네이버 애널리틱스 · 서치콘솔 계정 | [analytics](30-seo/analytics.md) |
 | Phase 5 | 배포 환경 결정 · ChromaDB 보관 방법 | [deployment](50-ops/deployment.md) |
 
-**Phase 1(worker) · Phase 2(backend) · Phase 3(frontend) 를 막는 것은 없다.** Postgres 롤과 `.env_*` 는 준비됐고(2026-07-09), 네이버 API 키도 채워져 `news` 잡이 동작한다. 남은 것은 쿼터 확인에 따른 크론 빈도 조정뿐이다.
+**Phase 1(worker) · Phase 2(backend) · Phase 3(frontend) 를 막는 것은 없다.** Postgres 롤과 `.env_*` 는 준비됐고(2026-07-09), 네이버 API 키와 일일 쿼터(25,000)도 확인되어 `news` 잡이 확정 크론으로 동작한다.
 
 **Phase 1(worker) 은 구현·검증 완료다** (2026-07-09). 스키마 적용, 1,231회차 이관, 두 잡의 수동 트리거가 백엔드 없이 단독 검증됐다.
 
