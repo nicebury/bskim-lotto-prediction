@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.combining import OrTrigger
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 
@@ -25,6 +26,68 @@ logger = logging.getLogger(__name__)
 KST = ZoneInfo(settings.TZ)
 
 _scheduler: AsyncIOScheduler | None = None
+
+
+def _warn_if_numeric_dow(expr: str) -> None:
+    """★ APScheduler 의 요일 숫자는 표준 크론과 다르다.
+
+        APScheduler:  0=월 1=화 2=수 3=목 4=금 5=토 6=일
+        표준 크론:    0=일 1=월 ...        5=금 6=토
+
+    즉 `0 21 * * 6` 은 표준 크론으로는 토요일이지만 APScheduler 에서는 **일요일**이다.
+    로또 추첨은 토요일이므로 이 한 글자가 잡을 하루 늦춘다. 그리고 조용히 그렇게 된다 —
+    에러도 경고도 없이 매주 하루 늦게 돈다.
+
+    그래서 요일은 `sat` 처럼 **이름으로 쓴다.** 숫자를 쓰면 경고한다.
+    """
+    fields = expr.split()
+    if len(fields) != 5:
+        return
+    dow = fields[4]
+    if dow != "*" and any(ch.isdigit() for ch in dow):
+        logger.warning(
+            "크론 %r 의 요일 필드가 숫자다(%r). APScheduler 는 0=월…6=일 로 읽어 "
+            "표준 크론(0=일…6=토)과 하루 어긋난다. `sat` 처럼 이름으로 쓴다.",
+            expr, dow,
+        )
+
+
+def _build_trigger(cron_spec: str) -> CronTrigger | OrTrigger:
+    """`;` 로 이어진 여러 크론 표현식을 하나의 트리거로 합친다.
+
+    표준 크론 한 줄로는 20:40·20:50·21:00 을 표현할 수 없다.
+    `40,50,0 20,21 * * sat` 은 분과 시의 곱집합이라 여섯 번 돈다.
+
+    잘못된 크론이면 from_crontab 이 ValueError 를 던져 기동이 멈춘다.
+    조용히 안 도는 것보다 낫다.
+    """
+    parts = [p.strip() for p in cron_spec.split(";") if p.strip()]
+    if not parts:
+        raise ValueError(f"크론 표현식이 비어 있다: {cron_spec!r}")
+
+    for p in parts:
+        _warn_if_numeric_dow(p)
+
+    triggers = [CronTrigger.from_crontab(p, timezone=KST) for p in parts]
+    # 표현식이 하나뿐이면 굳이 OrTrigger 로 감싸지 않는다.
+    return triggers[0] if len(triggers) == 1 else OrTrigger(triggers)
+
+
+def _cancel_pending_lotto_retries() -> None:
+    """예약된 lotto 재시도를 취소한다.
+
+    20:40 이 오류로 죽어 21:40 재시도가 걸렸는데 20:50 크론이 성공했다면,
+    그 재시도는 의미가 없다. 남겨 두면 21:40 에 0건 성공 한 줄이 이력에 더 쌓인다.
+    """
+    if _scheduler is None:
+        return
+    for attempt in range(2, settings.LOTTO_MAX_ATTEMPT + 1):
+        job_id = f"lotto_retry_{attempt}"
+        # 없는 잡을 지우려 하면 JobLookupError 다. 대부분의 경우 없는 게 정상이라
+        # 예외로 다루지 않는다.
+        if _scheduler.get_job(job_id) is not None:
+            _scheduler.remove_job(job_id)
+            logger.info("예약된 %s 를 취소했다 (다른 실행이 성공)", job_id)
 
 
 async def _run_lotto(attempt: int = 1) -> None:
@@ -45,6 +108,8 @@ async def _run_lotto(attempt: int = 1) -> None:
 
     ok = await runner.run_now("lotto", "cron")
     if ok:
+        # 성공했으니 앞선 실행이 걸어 둔 재시도 예약은 필요 없다.
+        _cancel_pending_lotto_retries()
         return
 
     if attempt >= settings.LOTTO_MAX_ATTEMPT:
@@ -120,7 +185,7 @@ def start() -> None:
     # 기동이 멈춘다 — 조용히 안 도는 것보다 낫다.
     sched.add_job(
         _run_lotto,
-        CronTrigger.from_crontab(settings.LOTTO_CRON, timezone=KST),
+        _build_trigger(settings.LOTTO_CRON),
         id="lotto_cron",
         name="lotto 주간 수집",
         replace_existing=True,
@@ -130,12 +195,12 @@ def start() -> None:
     )
     logger.info("lotto 잡 등록 — cron=%r", settings.LOTTO_CRON)
 
-    # 키가 없으면 크론에 올리지 않는다. 올려두면 하루 3번 failed 행만 쌓인다.
+    # 키가 없으면 크론에 올리지 않는다. 올려두면 매시간 failed 행만 쌓인다.
     # 수동 트리거는 여전히 가능하고, 그때는 '키가 없다' 는 이유가 이력에 남는다.
     if settings.naver_news_enabled:
         sched.add_job(
             _run_news,
-            CronTrigger.from_crontab(settings.NEWS_CRON, timezone=KST),
+            _build_trigger(settings.NEWS_CRON),
             id="news_cron",
             name="news 수집",
             replace_existing=True,

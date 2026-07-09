@@ -70,6 +70,35 @@ export default nextConfig
 
 `.gitignore` 는 `.env`, `.env_worker`, `.env_backend`, `.env_frontend`, `.env.local` 을 모두 무시한다.
 
+### 함정: pydantic 의 ValidationError 가 `.env` 를 로그에 쏟는다
+
+**증상.** `.env_backend` 에 `DATABASE_URL` 을 빠뜨린 채 백엔드를 띄웠더니 스택트레이스에 **다른 키의 비밀번호가 그대로 찍혔다.**
+
+```
+pydantic_core._pydantic_core.ValidationError: 1 validation error for Settings
+DATABASE_URL
+  Field required [type=missing, input_value={'CHROMA_DB_PATH': './dat...rd': 'app_writer!*…'}, ...]
+```
+
+**원인.** pydantic 은 검증 실패 시 `input_value` 에 **입력 dict 전체**를 실어 출력한다. pydantic-settings 에서 그 dict 는 곧 `.env` 파일의 내용이다. 필드 하나가 빠진 것만으로 나머지 전부가 노출된다.
+
+**Claude 가 `.env` 를 읽지 않는다는 규약을 지켜도 예외 처리가 그것을 무너뜨린다.** 그리고 이 트레이스는 터미널·CI 로그·대화 기록에 남는다.
+
+**해법.** 필수 환경변수를 pydantic 의 `required` 로 두지 않는다. 빈 기본값으로 검증을 통과시킨 뒤, **값을 담지 않은** 예외를 직접 던진다.
+
+```python
+PG_PASSWORD: str = ""          # required 가 아니라 빈 기본값
+
+def model_post_init(self, __context) -> None:
+    missing = [k for k in ("PG_DB", "PG_USER", "PG_PASSWORD") if not str(getattr(self, k)).strip()]
+    if missing:
+        raise RuntimeError(f"필수 환경변수가 비어 있습니다: {', '.join(missing)}.")
+```
+
+"없으면 기동 거부" 라는 동작은 그대로이고, 메시지에는 **키 이름만** 담긴다. 세 컴포넌트의 필수 변수(`WORKER_JOB_KEY`, `PG_PASSWORD`, `PG_USER`, `PG_DB`) 전부에 같은 방식을 쓴다.
+
+**같은 부류의 함정이 하루에 두 번 나왔다.** 워커에서는 Alembic 이 예외 메시지에 접속 URL 을 평문으로 실었다([[db-schema]] 의 "Alembic 이 `app_writer` 비밀번호를 평문으로 뱉는다"). 공통 원인은 **라이브러리가 실패를 설명하려고 입력값을 그대로 출력한다**는 것이다. 시크릿을 다루는 코드에서는 "어떤 값이 잘못됐나" 를 말하지 않고 "어느 키가 잘못됐나" 만 말해야 한다. 새 설정 로더를 붙일 때마다 **일부러 값을 비우고 실패시켜, 출력에 값이 섞이지 않는지 확인한다.**
+
 ### 가상환경은 uv 가 관리한다
 
 `python -m venv` 나 `pip install` 을 직접 쓰지 않는다. `uv sync` 가 `.venv` 를 만들고 `uv.lock` 대로 설치한다. 의존성은 `uv add` / `uv remove`, 실행은 `uv run`. `uv.lock` 을 커밋해 재현 가능하게 유지한다.
@@ -90,10 +119,13 @@ PG_USER=app_writer
 PG_PASSWORD=                  # init_roles.sql 로 만든 비번
 
 # ── 잡 스케줄 (KST). APScheduler CronTrigger 문법 ──
-LOTTO_CRON=0 21 * * 6         # 매주 토 21:00 (추첨 20:45 직후)
+# 여러 크론을 `;` 로 잇는다 → OrTrigger 로 합쳐진다. 잡은 여전히 하나다.
+# 추첨 방송은 20:35 시작이고 끝나는 시각이 회차마다 달라 세 번 시도한다.
+# ★ 요일은 이름으로 쓴다. APScheduler 는 0=월…6=일 이라 `6` 은 토요일이 아니라 일요일이다.
+LOTTO_CRON=40,50 20 * * sat;0 21 * * sat
 NEWS_CRON=0 * * * *           # 매시간. 쿼터 25,000 중 48회(0.2%)만 쓴다
 
-# lotto 잡 실패 시 재시도. 기본값이면 21:00·22:00·23:00
+# lotto 잡이 '오류로' 죽었을 때의 재시도. 위 크론 3회와는 별개다.
 LOTTO_RETRY_DELAY_MIN=60
 LOTTO_MAX_ATTEMPT=3
 
@@ -107,9 +139,9 @@ NAVER_CLIENT_SECRET=
 NAVER_NEWS_QUERY=로또,복권     # 쉼표 구분
 NAVER_NEWS_DISPLAY=50         # 최대 100
 
-# 발행일자(KST)가 실행일자와 다른 기사는 저장하지 않는다.
-# 대가: 마지막 실행~자정 발행분은 영영 안 들어온다. NEWS_CRON 으로 창을 좁힌다.
-NEWS_SAME_DAY_ONLY=true
+# 발행일(KST)이 실행일로부터 이 일수보다 오래된 기사는 저장하지 않는다.
+# 1 = 오늘과 어제. 0 이면 당일만이라 자정 직전 기사를 영영 놓친다.
+NEWS_MAX_AGE_DAYS=1
 
 # ── 서버 ─────────────────────────────────────────
 WORKER_HOST=127.0.0.1      # 루프백 고정. 외부 노출 금지
@@ -146,8 +178,12 @@ CATCH_UP_DAYS=7               # lotto 마지막 성공이 이보다 오래되면
 
 ```bash
 # ── Postgres (읽기 전용 롤) ───────────────────────
-# ⚠ URL 이므로 비밀번호의 특수문자를 퍼센트 인코딩한다: ! → %21, * → %2A
-DATABASE_URL=postgresql://app_reader:<인코딩된PW>@localhost:5179/prod_db
+# app_writer 가 아니라 app_reader 다. 쓰기 비밀번호를 여기에 두지 않는다.
+PG_HOST=localhost
+PG_PORT=5179                  # 컨테이너 5432 → 호스트 5179
+PG_DB=prod_db                 # 이미 존재하는 DB. 소유자는 prod_user
+PG_USER=app_reader
+PG_PASSWORD=
 
 # ── 꿈해몽 벡터 DB (읽기 전용) ─────────────────────
 CHROMA_DB_PATH=./data/chroma_words
@@ -158,6 +194,32 @@ TZ=Asia/Seoul
 ```
 
 백엔드에는 `WORKER_JOB_KEY` 가 **없다.** 백엔드는 워커를 부르지 않는다.
+
+### 왜 URL 한 줄이 아니라 조각인가
+
+이 페이지는 한때 백엔드에 `DATABASE_URL=postgresql://app_reader:<인코딩된PW>@...` 를 요구했다. **2026-07-09 에 워커와 같은 `PG_*` 조각 방식으로 통일했다.** URL 문자열은 세 가지를 요구한다.
+
+첫째, **사람이 퍼센트 인코딩을 해야 한다.** 비밀번호에 `!` 나 `*` 가 있으면 `%21`, `%2A` 로 바꿔 적어야 한다. 잊으면 접속이 엉뚱한 이유로 실패한다.
+
+둘째, **비밀번호가 통째로 든 문자열이 돌아다닌다.** 그 값이 예외 메시지에 실리는 순간 로그에 남는다. Alembic 이 실제로 그랬다 ([[db-schema]] 의 함정 절).
+
+셋째, **워커와 키 이름이 달라 대조가 안 된다.** 같은 DB 를 가리키는 두 파일이 다른 문법을 쓰면, 한쪽을 복사해 다른 쪽에 붙였을 때 무엇이 어긋났는지 눈으로 알기 어렵다.
+
+조각으로 받으면 조립은 라이브러리의 일이다. `psycopg.conninfo.make_conninfo(host=..., password=...)` 가 이스케이프를 처리하므로 비밀번호에 어떤 문자가 있어도 된다.
+
+`PG_DB` · `PG_USER` · `PG_PASSWORD` 중 하나라도 비면 백엔드는 **기동을 거부한다.**
+
+### 백엔드는 자기 롤을 스스로 검증한다
+
+`.env_backend` 에 실수로 `app_writer` 자격증명이 들어가도 서버는 잘 뜬다. 코드가 쓰기를 시도하지 않으니 아무 증상이 없다. 그런데 그 순간 이 프로젝트에서 유일하게 **권한으로 강제되던** 경계가 사라진다 ([[0003-worker-writes-backend-reads]]).
+
+그래서 백엔드는 기동 시 DB 에 직접 물어본다.
+
+```sql
+SELECT current_user, has_table_privilege(current_user, 'lotto_draw', 'INSERT');
+```
+
+`true` 면 기동을 거부한다. 설정 파일을 눈으로 검사하는 대신 붙어 보고 확인하는 것이고, **증상 없는 사고를 시끄러운 기동 실패로 바꾸는 것이다.** 테이블이 아직 없으면(워커의 마이그레이션 전) 판단을 보류하고 경고만 남긴다.
 
 ## `frontend/env.sample`
 
@@ -207,7 +269,7 @@ NEXT_PUBLIC_ADSENSE_CLIENT=
 | 키 | 컴포넌트 | 상태 | 막는 것 |
 |----|---------|------|--------|
 | `PG_HOST` `PG_PORT` `PG_DB` `PG_USER` `PG_PASSWORD` | worker | ✅ 채움 (`localhost:5179/prod_db`) | — |
-| `DATABASE_URL` | backend | ✅ 채움 (`app_reader`) | — |
+| `PG_HOST` `PG_PORT` `PG_DB` `PG_USER` `PG_PASSWORD` | backend | ✅ 채움 (`app_reader`, 기동 시 롤 검증 통과) | — |
 | `app_writer` / `app_reader` 롤 | Postgres | ✅ 생성·권한 테스트 통과 | — |
 | `WORKER_JOB_KEY` | worker | ✅ 채움 | — |
 | `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` | worker | ✅ 채움 (2026-07-09 확인) | — |
@@ -215,12 +277,30 @@ NEXT_PUBLIC_ADSENSE_CLIENT=
 | `NEXT_PUBLIC_NAVER_ANALYTICS_ID` | frontend | 미발급 | Phase 4 |
 | `GOOGLE_SITE_VERIFICATION` / `NAVER_SITE_VERIFICATION` | frontend | 미발급 | Phase 4 |
 | `NEXT_PUBLIC_SITE_URL` | frontend | **도메인 미확정** | Phase 4 |
-| `NEXT_PUBLIC_CONTACT_EMAIL` | frontend | **미정** | 애드센스 신청 (`/contact` · `/privacy`) |
+| `NEXT_PUBLIC_CONTACT_EMAIL` | frontend | ✅ 채움 (2026-07-09) | — |
 | `NEXT_PUBLIC_ADSENSE_CLIENT` | frontend | 승인 후 | 광고 게재 |
 
-**Phase 1(worker)·Phase 2(backend) 를 막는 항목은 더 이상 없다.** 네이버 API 키가 채워졌고 일일 쿼터도 **25,000** 으로 확인되어 `NEWS_CRON` 이 확정됐다 ([[naver-search-api]]).
+네이버 API 키가 채워졌고 일일 쿼터도 **25,000** 으로 확인되어 `NEWS_CRON` 이 확정됐다 ([[naver-search-api]]).
 
 `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` 중 하나라도 비면 워커는 **기동은 하되** `news` 잡을 크론에 등록하지 않는다. `lotto` 잡은 키와 무관하게 동작한다. 자세한 것은 [[worker-jobs]] 의 "`news` 잡" 절.
+
+### 해소됨 — `backend/.env_backend` 의 키 불일치 (2026-07-09)
+
+**증상.** 백엔드가 `RuntimeError: DATABASE_URL 이 비어 있습니다` 로 기동하지 못했다.
+
+**원인.** 이 계약이 `DATABASE_URL` 을 요구했는데 실제 `.env_backend` 에는 `PG_*` 조각이 들어 있었다. **자격증명 문제가 아니라 키 이름 문제였다.**
+
+**한때 이 자리에 "`app_writer` 자격증명이 들어 있다" 고 적혀 있었다. 그것은 틀린 추측이었다.** pydantic 의 `ValidationError` 가 뱉은 값에 `app_writer` 라는 문자열이 보였는데, 그것은 롤 이름이 아니라 `app_reader` 의 비밀번호에 우연히 들어 있던 부분 문자열이었다. **파일을 읽지 않은 채 유출된 파편으로 내용을 추론하면 이렇게 된다** — 규칙을 지키면서 추측까지 하려 들지 말고, 확인할 방법을 코드로 만든다.
+
+**확인할 방법.** 위의 [기동 시 롤 검증](#백엔드는-자기-롤을-스스로-검증한다)이 그것이다. 실제 접속 결과 `current_user = app_reader` 이고 `lotto_draw` 에 `INSERT` 권한이 없음이 확인됐다. 권한 경계는 처음부터 온전했다.
+
+**남은 일.** 노출된 것은 `app_reader` 의 비밀번호다(읽기 전용 롤). 위험도는 낮지만 터미널·대화 기록에 남았으므로 교체를 권한다.
+
+```sql
+ALTER ROLE app_reader PASSWORD '<새 비밀번호>';
+```
+
+교체 후 `backend/.env_backend` 의 `PG_PASSWORD` 를 갱신한다. 퍼센트 인코딩은 필요 없다.
 
 ### 감수한 위험 — `prod_db` / `prod_user`
 
@@ -236,7 +316,7 @@ NEXT_PUBLIC_ADSENSE_CLIENT=
 
 값이 없을 때의 동작을 명시한다. 세 종류가 있다.
 
-- **없으면 기동 거부**: `WORKER_JOB_KEY`, `DATABASE_URL`, `PG_PASSWORD`. 없는 채로 뜨면 나중에 더 나쁜 방식으로 실패한다.
+- **없으면 기동 거부**: `WORKER_JOB_KEY`, `PG_DB`, `PG_USER`, `PG_PASSWORD`. 없는 채로 뜨면 나중에 더 나쁜 방식으로 실패한다.
 - **없으면 기능 비활성**: `NEXT_PUBLIC_ADSENSE_CLIENT`, `NEXT_PUBLIC_GA_ID`. 없으면 그 컴포넌트가 조용히 아무것도 렌더링하지 않는다.
 - **없으면 기본값**: `LOTTO_CRON`, `WORKER_PORT`, `TZ`.
 

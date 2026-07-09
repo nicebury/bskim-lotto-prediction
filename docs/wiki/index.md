@@ -77,8 +77,8 @@
 
 ## 90-external — 외부 의존
 
-- [naver-search-api](90-external/naver-search-api.md) — 일일 쿼터 **25,000**. 당일 필터와 3중 중복 제거. ⚠ 재배포 약관은 미확인
-- [dhlottery-blocked](90-external/dhlottery-blocked.md) — 공식 API 차단 이력과 네이버 위젯 대체 구현
+- [naver-search-api](90-external/naver-search-api.md) — 일일 쿼터 **25,000**. 신선도 필터와 3중 중복 제거. ⚠ 재배포 약관은 미확인
+- [dhlottery-blocked](90-external/dhlottery-blocked.md) — ⚠ **수집 정책 미결.** 네이버 `robots.txt` 전면 금지 확인, 백필 중단. 위젯이 등위별·판매점까지 준다는 사실도 여기
 - [trademark-check](90-external/trademark-check.md) — ⚠ **KIPRIS 상표 검색·도메인 미확인**
 
 ---
@@ -89,14 +89,19 @@
 
 | 막는 것 | 필요한 것 | 페이지 |
 |--------|----------|-------|
+| **회차 백필 재개 · 등위별(`lotto_prize`) · 판매점 수집** | ⚠ **수집 정책·법적 검토.** 네이버 `robots.txt` 가 전면 금지(`Disallow: /`)임을 확인. 데이터베이스제작자 권리 검토 필요 | [dhlottery-blocked](90-external/dhlottery-blocked.md) |
 | 공개 (막지는 않음) | 네이버 뉴스 **재배포 약관·출처 표기** 확인 | [naver-search-api](90-external/naver-search-api.md) |
 | 도메인 구매 | KIPRIS 상표 검색 | [trademark-check](90-external/trademark-check.md) |
 | Phase 4 | GA4 · 네이버 애널리틱스 · 서치콘솔 계정 | [analytics](30-seo/analytics.md) |
 | Phase 5 | 배포 환경 결정 · ChromaDB 보관 방법 | [deployment](50-ops/deployment.md) |
 
-**Phase 1(worker) · Phase 2(backend) · Phase 3(frontend) 를 막는 것은 없다.** Postgres 롤과 `.env_*` 는 준비됐고(2026-07-09), 네이버 API 키와 일일 쿼터(25,000)도 확인되어 `news` 잡이 확정 크론으로 동작한다.
+Postgres 롤은 준비됐고(2026-07-09), 네이버 API 키와 일일 쿼터(25,000)도 확인되어 `news` 잡이 확정 크론으로 동작한다.
 
 **Phase 1(worker) 은 구현·검증 완료다** (2026-07-09). 스키마 적용, 1,231회차 이관, 두 잡의 수동 트리거가 백엔드 없이 단독 검증됐다.
+
+**Phase 2(backend) 는 구현·검증 완료다** (2026-07-09). [[api-contract]] 의 전 엔드포인트가 200 을 반환하고, `sets=3&seed=1` 두 호출이 바이트 단위로 같으며, `app_reader` 의 쓰기가 권한으로 거부된다. 단위 40 + 통합 27 테스트 통과. 개발 DB(1,231회차·뉴스 75건)에 직접 붙어 전 엔드포인트 200 을 확인했다. 기동 시 접속 롤이 `app_reader` 이고 쓰기 권한이 없음을 백엔드가 스스로 검증한다.
+
+**Phase 3(frontend) 는 구현 완료다** (2026-07-09). 초안 5.1 의 URL 22개, 애드센스 정책 페이지 4종, [[api-contract]] 정합. 백엔드가 없어도 빌드·렌더가 통과하고(조회 실패 시 폴백), 계약을 그대로 흉내낸 목 백엔드로 렌더링을 확인했다. **375px 가로 스크롤과 Lighthouse 는 실측하지 못했다** — 헤드리스 브라우저 의존 라이브러리 설치에 `sudo` 가 필요하다. 남은 것은 Phase 4 의 측정 ID·도메인이다.
 
 ---
 

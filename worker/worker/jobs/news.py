@@ -23,8 +23,10 @@ logger = logging.getLogger(__name__)
 KST = ZoneInfo("Asia/Seoul")
 
 
-def _is_same_day(published_dttm: datetime | None, today: date) -> bool:
-    """발행일자(KST)가 수집 실행일자와 같은가.
+def _is_fresh(published_dttm: datetime | None, today: date, max_age_days: int) -> bool:
+    """발행일(KST)이 수집 실행일로부터 max_age_days 일 이내인가.
+
+    max_age_days=1 이면 오늘과 어제를 통과시킨다. 0 이면 당일만이다.
 
     네이버는 pubDate 를 `+0900` 오프셋으로 주지만, 다른 오프셋이 올 가능성에
     대비해 항상 KST 로 변환한 뒤 날짜를 뗀다. UTC 로 비교하면 한국 시각 오전
@@ -32,10 +34,14 @@ def _is_same_day(published_dttm: datetime | None, today: date) -> bool:
 
     발행일을 모르는 기사(pubDate 파싱 실패)는 **버린다.** 날짜를 확인할 수
     없으면 필터를 통과시킬 근거가 없다. 실측상 이런 기사는 0건이다.
+
+    미래 날짜도 버린다. 나이가 음수가 되어 조건을 통과해 버리기 때문이다.
+    발행일이 실행일보다 뒤라면 소스가 이상한 것이지 신선한 것이 아니다.
     """
     if published_dttm is None:
         return False
-    return published_dttm.astimezone(KST).date() == today
+    age = (today - published_dttm.astimezone(KST).date()).days
+    return 0 <= age <= max_age_days
 
 
 async def _insert_news(conn, item: dict) -> int:
@@ -80,7 +86,10 @@ async def run(progress: JobProgress) -> None:
     # 부르면 자정을 넘기는 순간 기준이 바뀌어, 같은 실행에서 어제 기사와 오늘
     # 기사가 서로 다른 잣대로 걸러진다.
     today = datetime.now(KST).date()
-    logger.info("news 잡 시작 — 검색어 %s / 수집 기준일 %s", queries, today)
+    logger.info(
+        "news 잡 시작 — 검색어 %s / 기준일 %s / 최대 %d일 전까지",
+        queries, today, settings.NEWS_MAX_AGE_DAYS,
+    )
 
     # 검색어별 결과를 link_url 로 합친다. '로또' 와 '복권' 양쪽에 걸린 기사는
     # 같은 링크로 두 번 온다. 같은 실행 안에서 두 번 INSERT 하면 두 번째는
@@ -105,20 +114,20 @@ async def run(progress: JobProgress) -> None:
             for item in items:
                 merged.setdefault(item["link_url"], item)
 
-    # 발행일자가 실행일자와 다른 기사를 버린다. sort=date 로 요청해도 네이버는
-    # 며칠 전 기사를 함께 준다. DB 에 넣고 나중에 거르지 않고 여기서 버리는
-    # 이유는, 한 번 들어간 행은 link_url UNIQUE 때문에 다시 판단할 기회가
-    # 없기 때문이다.
+    # 오래된 기사를 버린다. sort=date 로 요청해도 네이버는 며칠 전 기사를 함께 준다.
+    # DB 에 넣고 나중에 거르지 않고 여기서 버리는 이유는, 한 번 들어간 행은
+    # link_url UNIQUE 때문에 다시 판단할 기회가 없기 때문이다.
     deduped = len(merged)
-    if settings.NEWS_SAME_DAY_ONLY:
-        merged = {
-            link: item
-            for link, item in merged.items()
-            if _is_same_day(item["published_dttm"], today)
-        }
-        logger.info(
-            "당일(%s) 필터 — %d건 중 %d건 제외", today, deduped, deduped - len(merged)
-        )
+    max_age = settings.NEWS_MAX_AGE_DAYS
+    merged = {
+        link: item
+        for link, item in merged.items()
+        if _is_fresh(item["published_dttm"], today, max_age)
+    }
+    logger.info(
+        "신선도 필터(%s 기준 %d일 이내) — %d건 중 %d건 제외",
+        today, max_age, deduped, deduped - len(merged),
+    )
 
     # 키워드는 합쳐진 뒤 전체 검색어 기준으로 다시 계산한다.
     for item in merged.values():
@@ -131,6 +140,6 @@ async def run(progress: JobProgress) -> None:
             progress.collected += await _insert_news(conn, item)
 
     logger.info(
-        "news 잡 완료 — 조회 %d건 → 링크 중복제거 %d건 → 당일 %d건 → 신규 %d건 저장",
+        "news 잡 완료 — 조회 %d건 → 링크 중복제거 %d건 → 신선 %d건 → 신규 %d건 저장",
         fetched, deduped, len(merged), progress.collected,
     )

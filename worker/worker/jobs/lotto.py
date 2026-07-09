@@ -12,6 +12,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -22,6 +24,12 @@ from .progress import JobProgress
 
 logger = logging.getLogger(__name__)
 
+KST = ZoneInfo("Asia/Seoul")
+
+# 주 1회 추첨이므로 최신 회차가 8일 이상 낡으면 한 회차를 확실히 놓친 것이다.
+# 7일이 아니라 8일인 이유: 토요일 밤 추첨 직전에는 정상적으로 7일이 된다.
+_STALE_DRAW_DAYS = 8
+
 
 async def _last_round() -> int:
     """수집된 마지막 회차. 빈 DB 면 0 → 1회차부터 시작한다."""
@@ -29,6 +37,14 @@ async def _last_round() -> int:
         cur = await conn.execute("SELECT max(round_no) AS m FROM lotto_draw")
         row = await cur.fetchone()
     return int(row["m"]) if row and row["m"] is not None else 0
+
+
+async def _last_draw_ymd() -> date | None:
+    """가장 최근 회차의 추첨일. 빈 DB 면 None."""
+    async with connect() as conn:
+        cur = await conn.execute("SELECT max(draw_ymd) AS d FROM lotto_draw")
+        row = await cur.fetchone()
+    return row["d"] if row else None
 
 
 async def _insert_draw(conn, data: dict) -> None:
@@ -134,3 +150,26 @@ async def run(progress: JobProgress) -> None:
             await asyncio.sleep(
                 settings.CRAWL_DELAY_SEC + random.uniform(0, settings.CRAWL_JITTER_SEC)
             )
+
+    # 0건 수집 자체는 정상이다(다음 회차가 아직 추첨 전). 다만 그것이 이어져
+    # 최신 회차가 오래 낡았다면 회차를 놓친 것이다. 잡을 실패시키지는 않는다 —
+    # 수집할 게 없는 것과 수집에 실패한 것은 다르고, failed 로 남기면 재시도가
+    # 매주 헛돈다. 사람이 볼 수 있게 경고만 남기고 수동 트리거에 맡긴다.
+    if progress.collected == 0:
+        await _warn_if_draw_data_is_stale()
+
+
+async def _warn_if_draw_data_is_stale() -> None:
+    """최신 회차가 8일 이상 낡았으면 경고한다."""
+    last_ymd = await _last_draw_ymd()
+    if last_ymd is None:
+        logger.warning("lotto_draw 가 비어 있는데 0건을 수집했다. 소스 파싱을 확인한다.")
+        return
+
+    age = (datetime.now(KST).date() - last_ymd).days
+    if age >= _STALE_DRAW_DAYS:
+        logger.warning(
+            "최신 회차(%s)가 %d일 지났는데 새 회차를 못 가져왔다. "
+            "회차를 놓쳤을 수 있다 — 위젯 파싱 규칙을 확인하고 수동 트리거로 재시도한다.",
+            last_ymd, age,
+        )

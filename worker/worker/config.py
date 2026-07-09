@@ -11,9 +11,9 @@ pydantic-settings 는 파일명을 명시하지 않으면 `.env` 만 찾으므�
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from psycopg.conninfo import make_conninfo
-from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # 이 파일 기준으로 worker/ 디렉토리. .env_worker 는 여기에 있다.
@@ -40,10 +40,19 @@ class Settings(BaseSettings):
     # ── 잡 스케줄 (KST) ───────────────────────────────────────────────
     # 크론 문자열을 코드에 박지 않는다. 추첨 시각이 바뀌거나 뉴스 API 쿼터가
     # 확인되면 재배포 없이 .env_worker 만 고쳐 조정할 수 있어야 한다.
-    LOTTO_CRON: str = "0 21 * * 6"
-    # 매시간. 네이버 검색 API 일일 쿼터가 25,000 이고 검색어 2개면 하루 48회 —
-    # 쿼터의 0.2% 다. 자주 도는 이유는 부하가 아니라 NEWS_SAME_DAY_ONLY 때문이다:
-    # 당일 기사만 담으므로, 실행 간격이 곧 놓치는 시간 창의 크기다.
+    # 여러 크론을 `;` 로 잇는다. 추첨 방송은 20:35 에 시작하지만 번호 추첨이
+    # 끝나는 시각은 회차마다 다르고, 결과가 네이버 위젯에 반영되기까지 또 몇 분이
+    # 걸린다. 20:40 · 20:50 · 21:00 세 번 시도해 가장 먼저 결과가 보이는 실행이
+    # 가져간다. 이미 수집된 뒤에 도는 실행은 0건 성공으로 끝나 무해하다.
+    #
+    # 표준 크론 한 줄로는 이 세 시각을 못 쓴다 — `40,50,0 20,21 * * sat` 은 분과 시의
+    # 곱집합이라 20:00·21:40·21:50 까지 여섯 번 돈다.
+    #
+    # ★ 요일은 반드시 이름(`sat`)으로 쓴다. APScheduler 는 요일 숫자를 0=월…6=일 로
+    #   읽어 표준 크론(0=일…6=토)과 하루 어긋난다. `* * 6` 은 토요일이 아니라 일요일이다.
+    LOTTO_CRON: str = "40,50 20 * * sat;0 21 * * sat"
+    # 매시간. 일일 쿼터 25,000 중 검색어 2개 × 24회 = 48회(0.2%)만 쓴다.
+    # 신선도를 위한 것이지 누락 방지가 아니다 — 누락은 NEWS_MAX_AGE_DAYS 가 막는다.
     NEWS_CRON: str = "0 * * * *"
 
     # lotto 잡 실패 시 재시도. 기본값 60분 × 최대 3회 시도 = 21:00·22:00·23:00.
@@ -63,16 +72,15 @@ class Settings(BaseSettings):
     NAVER_NEWS_QUERY: str = "로또,복권"
     NAVER_NEWS_DISPLAY: int = 50
 
-    # 발행일자(KST)가 수집 실행일자(KST)와 다른 기사는 저장하지 않는다.
-    # sort=date 로 요청해도 네이버는 며칠 전 기사를 함께 준다 — 실측상 94건 중
-    # 34건이 과거 기사였다. 오래된 기사가 계속 섞여 들어오면 '최신 뉴스' 목록이
-    # 며칠씩 밀린다.
+    # 발행일(KST)이 수집 실행일로부터 이 일수보다 오래된 기사는 저장하지 않는다.
+    # 1 = 오늘과 어제. sort=date 로 요청해도 네이버는 며칠 전 기사를 함께 준다 —
+    # 실측상 94건 중 34건이 3일치 과거 기사였다. 오래된 기사가 계속 섞이면
+    # '최신 뉴스' 목록이 며칠씩 밀린다.
     #
-    # 대가: 마지막 실행 시각과 자정 사이에 발행된 기사는 영영 들어오지 않는다.
-    # 다음날 검색되더라도 발행일자가 실행일자와 달라 걸러지기 때문이다.
-    # NEWS_CRON 을 촘촘히 두어 그 창을 좁힌다(매시간 → 최대 1시간).
-    # 과거 기사까지 담아야 하면 false 로 끈다.
-    NEWS_SAME_DAY_ONLY: bool = True
+    # 0(당일만)으로 두지 않는 이유: 마지막 실행 시각과 자정 사이에 발행된 기사가
+    # 영영 들어오지 않는다. 다음날 검색돼도 발행일이 실행일과 달라 걸러지기 때문이다.
+    # 하루치 여유를 두면 그 구멍이 닫힌다 — 자정 직전 기사를 다음날 실행이 받는다.
+    NEWS_MAX_AGE_DAYS: int = 1
 
     # ── 서버 ─────────────────────────────────────────────────────────
     WORKER_HOST: str = "127.0.0.1"
@@ -88,7 +96,7 @@ class Settings(BaseSettings):
     CRAWL_RETRY_DELAY_SEC: float = 3.0
     CRAWL_HTTP_TIMEOUT_SEC: float = 10.0
 
-    # 뉴스 API 쿼터 초과(429) 대응 백오프. 쿼터가 미확인이라 보수적으로 잡는다.
+    # 뉴스 API 쿼터 초과(429) 대응 지수 백오프. 일일 쿼터는 25,000 이다.
     NEWS_MAX_RETRY: int = 3
     NEWS_BACKOFF_BASE_SEC: float = 2.0
 
@@ -102,33 +110,39 @@ class Settings(BaseSettings):
     # 서버가 토요일 밤에 꺼져 있었으면 회차를 통째로 놓치기 때문이다.
     CATCH_UP_DAYS: int = 7
 
-    @field_validator("WORKER_JOB_KEY")
-    @classmethod
-    def _job_key_must_not_be_blank(cls, v: str) -> str:
-        """빈 키로 기동하지 않는다.
+    def model_post_init(self, __context: Any) -> None:
+        """필수 값 검증. **pydantic 의 검증 기능을 쓰지 않는다.**
 
-        빈 문자열끼리는 compare_digest 로 비교해도 '일치'한다. 즉 키가 비어 있으면
-        헤더를 비워 보낸 아무나 잡을 실행할 수 있다. 인증이 없는 것보다 나쁘다 —
-        인증이 있다고 착각하게 만들기 때문이다. 그래서 통과시키지 않고 기동을 막는다.
-        생성: openssl rand -hex 32
+        ★ field_validator 나 required 필드로 검증하면 실패 시 pydantic 이
+          ValidationError 의 `input_value` 에 **입력 dict 전체** — 즉 .env_worker
+          의 내용 전부 — 를 실어 출력한다. 키 하나가 비었을 뿐인데 PG_PASSWORD 가
+          스택트레이스에 찍히고, 그것이 터미널·CI 로그에 남는다.
+
+          Claude 가 .env 를 읽지 않는다는 규약을 지켜도 예외 처리가 그것을 무너뜨린다.
+          그래서 빈 기본값으로 검증을 통과시킨 뒤, **값을 담지 않은** 예외를 직접 던진다.
+          (docs/wiki/10-contracts/env-vars.md 의 함정 절)
+
+        "없으면 기동 거부" 라는 동작은 그대로이고 메시지만 안전해진다.
         """
-        if not v.strip():
-            raise ValueError(
+        # 빈 문자열끼리는 compare_digest 로 비교해도 '일치'한다. 키가 비면 헤더를
+        # 비워 보낸 아무나 잡을 실행할 수 있다 — 인증이 없는 것보다 나쁘다.
+        # 인증이 있다고 착각하게 만들기 때문이다.
+        if not self.WORKER_JOB_KEY.strip():
+            raise RuntimeError(
                 "WORKER_JOB_KEY 가 비어 있어 기동을 거부한다. "
-                "`openssl rand -hex 32` 로 생성해 .env_worker 에 채운다."
+                "`openssl rand -hex 32` 로 생성해 worker/.env_worker 에 채운다."
             )
-        return v
 
-    @field_validator("PG_PASSWORD")
-    @classmethod
-    def _pg_password_must_not_be_blank(cls, v: str) -> str:
-        """비번 없이 뜨면 첫 잡 실행 시점에야 실패한다. 그때는 크론 시각이다."""
-        if not v:
-            raise ValueError(
+        # 비번 없이 뜨면 첫 잡 실행 시점에야 실패한다. 그때는 크론 시각이고,
+        # 그 주 회차를 이미 놓친 뒤다.
+        if not self.PG_PASSWORD:
+            raise RuntimeError(
                 "PG_PASSWORD 가 비어 있어 기동을 거부한다. "
                 "worker/scripts/init_roles.sql 로 만든 app_writer 비번을 채운다."
             )
-        return v
+
+        if self.NEWS_MAX_AGE_DAYS < 0:
+            raise RuntimeError("NEWS_MAX_AGE_DAYS 는 0 이상이어야 한다.")
 
     @property
     def news_queries(self) -> list[str]:
