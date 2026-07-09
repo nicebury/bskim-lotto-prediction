@@ -35,8 +35,21 @@ _WS_RE = re.compile(r"\s+")
 # 볼 7개. 앞 6개가 당첨번호, 7번째가 보너스다.
 _BALL_RE = re.compile(r'class="ball\s+type\d"[^>]*>\s*(\d{1,2})')
 _WIN_AMT_RE = re.compile(r"1등\s*당첨금[^0-9]{0,10}([0-9,]+)\s*원")
+
+# ★ 위젯의 정본 표기는 `1등 당첨금 N원 (당첨게임 수 M개)` 다.
+#   1등 당첨금 바로 뒤에 붙는 괄호만 읽는다. 컨텍스트를 묶지 않으면 아래쪽
+#   "등수별 당첨금액" 표의 2~5등 당첨게임 수를 주워 담는다.
+#
+#   주의: "당첨게임 수" 는 엄밀히 "당첨자 수" 가 아니다. 한 사람이 여러 게임을
+#   살 수 있다. 동행복권도 이 용어를 쓰며, 우리는 first_winner_cnt 에 담는다.
+#   (docs/wiki/10-contracts/db-schema.md 의 용어 주의 참조)
+_GAME_CNT_RE = re.compile(
+    r"1등\s*당첨금[^0-9]{0,10}[0-9,]+\s*원\s*\(\s*당첨게임\s*수\s*([0-9,]+)\s*개"
+)
+
+# 아래 둘은 위젯이 문구를 바꿔 달던 시절의 패턴이다. 지금은 잡히지 않지만
+# 되돌아올 수 있어 남긴다. _GAME_CNT_RE 가 먼저 시도된다.
 _WINNERS_RE = re.compile(r"1등\s*당첨자는\s*(?:총|모두)?\s*([0-9,]+)\s*명")
-# 위젯이 문구를 바꿔 다는 경우가 있어 대체 패턴을 둔다.
 _WINNERS_ALT_RE = re.compile(r"당첨\s*복권수\s*([0-9,]+)\s*개")
 
 
@@ -72,14 +85,20 @@ def parse_html(round_no: int, html: str) -> dict | None:
 
     text = _clean(html)
 
-    # 3) 1등 당첨금(1인당). 위젯에 없을 수 있으므로 None 을 허용한다.
+    # 3) 1등 당첨금(1게임당). 위젯에 없을 수 있으므로 None 을 허용한다.
+    #    0 원은 유효한 값이다 — 1등 당첨자가 없어 이월된 회차가 실제로 있다(예: 1회차).
+    #    0 과 None(정보 없음)을 섞지 않는다.
     first_prize_amt: int | None = None
     if mw := _WIN_AMT_RE.search(text):
         first_prize_amt = int(mw.group(1).replace(",", ""))
 
-    # 4) 1등 당첨자 수.
+    # 4) 1등 당첨게임 수. 위젯의 정본 표기를 먼저 시도하고, 없으면 옛 문구를 본다.
     first_winner_cnt: int | None = None
-    if wc := (_WINNERS_RE.search(text) or _WINNERS_ALT_RE.search(text)):
+    if wc := (
+        _GAME_CNT_RE.search(text)
+        or _WINNERS_RE.search(text)
+        or _WINNERS_ALT_RE.search(text)
+    ):
         first_winner_cnt = int(wc.group(1).replace(",", ""))
 
     return {
