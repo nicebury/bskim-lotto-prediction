@@ -89,7 +89,7 @@
 
 | 막는 것 | 필요한 것 | 페이지 |
 |--------|----------|-------|
-| **회차 백필 재개 · 등위별(`lotto_prize`) · 판매점 수집** | ⚠ **수집 정책·법적 검토.** 네이버 `robots.txt` 가 전면 금지(`Disallow: /`)임을 확인. 데이터베이스제작자 권리 검토 필요 | [dhlottery-blocked](90-external/dhlottery-blocked.md) |
+| **등위별(`lotto_prize`) · 판매점 수집** | ⚠ **수집 정책·법적 검토.** 네이버 `robots.txt` 가 전면 금지(`Disallow: /`)임을 확인. 데이터베이스제작자 권리 검토 필요. (1등 정보 백필은 완료) | [dhlottery-blocked](90-external/dhlottery-blocked.md) |
 | 공개 (막지는 않음) | 네이버 뉴스 **재배포 약관·출처 표기** 확인 | [naver-search-api](90-external/naver-search-api.md) |
 | 도메인 구매 | KIPRIS 상표 검색 | [trademark-check](90-external/trademark-check.md) |
 | Phase 4 | GA4 · 네이버 애널리틱스 · 서치콘솔 계정 | [analytics](30-seo/analytics.md) |
