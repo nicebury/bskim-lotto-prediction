@@ -1,0 +1,39 @@
+[project]
+name = "worker"
+version = "0.1.0"
+description = "행운상자 워커 — 외부 수집 → Postgres 쓰기. 배치·스케줄"
+readme = "README.md"
+
+# 상한을 함께 건다. 상한이 없으면 uv sync 가 최신 인터프리터를 집어
+# 과거 사고(torch 가 지원하지 않는 파이썬으로 올라가 import 실패)가 재발한다.
+# 워커는 ML 의존이 없지만, 세 컴포넌트의 인터프리터 정책을 일치시켜 둔다.
+# 근거: docs/wiki/00-decisions/0008-python-313-torch-pin.md
+requires-python = ">=3.13,<3.14"
+
+dependencies = [
+    # 내부 트리거 API(/internal/*). 루프백에만 바인딩한다.
+    "fastapi>=0.115",
+    "uvicorn>=0.34",
+    # 네이버 검색 위젯 / 검색 API 호출
+    "httpx>=0.28",
+    # 잡 크론 스케줄. 4.x 는 API 가 달라 3.x 계열로 고정한다.
+    "apscheduler>=3.10,<4",
+    # Postgres 드라이버(v3, async). binary 로 libpq 빌드를 피한다.
+    "psycopg[binary]>=3.2",
+    # 스키마 마이그레이션. worker 가 유일한 소유자다.
+    "alembic>=1.14",
+    # .env_worker 로드. CLAUDE.md 가 SettingsConfigDict 사용을 명시하므로 필수다.
+    # torch·transformers 와 달리 의존성이 가볍고 ML 스택을 끌어오지 않는다.
+    "pydantic-settings>=2.7",
+]
+
+# torch·transformers 를 추가하지 않는다.
+# 이것이 워커를 backend 에서 분리한 실질적 이득이다 — 무거운 의존성의 위험이
+# backend 하나로 격리된다. 추가가 필요해 보이면 그 계산은 backend 의 일이다.
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["worker"]
