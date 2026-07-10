@@ -42,17 +42,19 @@ updated: 2026-07-09
 {
   "numbers": [3, 12, 19, 27, 33, 41],
   "traits": {
-    "odd_even": "3:3",
-    "high_low": "2:4",
+    "odd_even": "5:1",
+    "high_low": "3:3",
     "sum": 135,
     "range_distribution": { "1-15": 2, "16-30": 2, "31-45": 2 },
     "hot_count": 2,
     "cold_count": 1,
     "has_consecutive": false,
-    "tail_variety": 5
+    "tail_variety": 6
   }
 }
 ```
+
+위 값들은 `[3, 12, 19, 27, 33, 41]` 을 실제로 센 결과다. 홀수 다섯 개(3·19·27·33·41), 23 이상 세 개(27·33·41), 끝자리 여섯 종류. **예시의 숫자를 눈대중으로 적지 않는다** — 프론트가 이것을 테스트 픽스처로 쓴다.
 
 `hot_count` 는 "최근 N회 HOT 번호가 몇 개 포함됐는가" 라는 **사실**이다. `probability` 는 **주장**이다. 사실만 반환한다.
 
@@ -116,15 +118,17 @@ GET /api/lotto/rounds/{round_no}              # 없으면 404
   "...": "위 회차 객체와 동일",
   "prize_tiers": [],
   "traits": {
-    "odd_even": "3:3",
+    "odd_even": "4:2",
     "high_low": "3:3",
     "sum": 136,
     "range_distribution": { "1-15": 2, "16-30": 2, "31-45": 2 },
     "has_consecutive": false,
-    "tail_variety": 5
+    "tail_variety": 6
   }
 }
 ```
+
+(위 회차 객체의 `numbers` 인 `[5, 11, 18, 27, 33, 42]` 를 실제로 센 값이다.)
 
 `prize_tiers` 는 **현재 항상 빈 배열**이다. 소스가 확보되면 `[{ "rank": 1, "winner_count": 10, "prize_per_game": 2457819200 }, ...]` 형태로 채워진다. 프론트는 빈 배열일 때 해당 섹션을 렌더링하지 않는다.
 

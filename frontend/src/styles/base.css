@@ -1,0 +1,375 @@
+/*
+ * 기본 스타일 — 리셋, 타이포, 접근성, 레이아웃 프리미티브.
+ * mobile-first: 여기 있는 규칙이 모바일 기본값이고, min-width 로 위 단계를 덧입힌다.
+ * 정본: docs/wiki/20-design/responsive-rules.md · accessibility.md
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+/* body 는 절대 가로로 스크롤되지 않는다. 넓은 표·차트·캐러셀은 각자의
+   overflow-x: auto 컨테이너 안에서만 스크롤한다. 이건 안전망이다. */
+html,
+body {
+  overflow-x: clip;
+}
+
+body {
+  min-height: 100dvh;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  /* D-day·통계 회수·회차 번호·당첨금이 모두 자리 정렬을 요구한다. */
+  font-variant-numeric: tabular-nums;
+  background: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+img,
+picture,
+svg,
+video {
+  display: block;
+  max-width: 100%;
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--color-primary-hover);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  line-height: var(--lh-tight);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-title);
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-black);
+}
+h2 {
+  font-size: var(--fs-h2);
+}
+h3 {
+  font-size: var(--fs-h3);
+}
+
+p {
+  text-wrap: pretty;
+}
+
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+
+/* 포커스 링을 outline: none 으로 지우지 않는다. 키보드 사용자가 길을 잃는다. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* 스크린리더 전용. 헤딩 계층을 비우지 않으려고 시각적으로만 숨길 때 쓴다. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 키보드 사용자가 헤더 내비게이션을 건너뛰고 본문으로 갈 수 있게 한다. */
+.skip-link {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: 100;
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  transform: translateY(-200%);
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+/*
+ * 모션을 껐을 때 정보가 사라지면 안 된다. 애니메이션은 장식이지 정보 전달 수단이 아니다.
+ * JS 애니메이션(캐러셀 자동재생 등)도 matchMedia 로 같은 신호를 읽는다.
+ */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── 레이아웃 프리미티브 ──────────────────────────── */
+
+.container {
+  width: 100%;
+  max-width: var(--container-max);
+  margin-inline: auto;
+  padding-inline: var(--space-4);
+}
+
+@media (min-width: 640px) {
+  .container {
+    padding-inline: var(--space-6);
+  }
+}
+
+/*
+ * 페이지 구획. 각 section 은 제목을 갖는다(시각적으로 숨겨도 계층은 유지).
+ *
+ * 인접 형제의 margin 은 상쇄되므로 위아래 같은 값을 주면 섹션 사이가 두 배가 되지 않는다.
+ * 데스크톱에서도 48px 을 넘기지 않는다 — 시안의 리듬이 그렇고, 더 벌리면 카드들이 서로
+ * 무관한 것처럼 보인다.
+ */
+.section {
+  margin-block: var(--space-8);
+}
+
+@media (min-width: 1024px) {
+  .section {
+    margin-block: var(--space-12);
+  }
+}
+
+/* 제목과 그 아래 내용은 한 덩어리로 읽혀야 한다. 제목 아래 여백을 섹션 간격보다 훨씬 작게. */
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.section-head h2 {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* 제목 옆 보조 설명. 제목과 같은 줄에 있지만 위계는 분명히 낮다. */
+.section-head .section-note {
+  font-size: 0.9rem;
+  font-weight: var(--fw-regular);
+  letter-spacing: 0;
+  color: var(--color-text-muted);
+}
+
+/* 보조 설명 안의 숫자(관찰 구간 등). 아래 카드 전부의 전제이므로 눈에 걸리게 한다. */
+.section-head .section-note strong {
+  font-weight: var(--fw-bold);
+  color: var(--color-accent-num);
+}
+
+/* "더보기 >" 링크. 44px 히트 영역을 확보한다. */
+.more-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 44px;
+  padding-inline: var(--space-2);
+  margin-right: calc(var(--space-2) * -1);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+.more-link:hover {
+  color: var(--color-primary);
+}
+
+/*
+ * 단별 표시 전환.
+ * 45개 막대차트처럼 모바일에서 가독성이 없는 요소는 요약본으로 갈아끼운다. 같은 데이터의
+ * 두 표현이므로 DOM 이 두 벌이 되지만, 어느 쪽도 화면에 동시에 보이지 않는다.
+ * display:none 이므로 스크린리더도 하나만 읽는다.
+ */
+.only-desktop {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .only-desktop {
+    display: revert;
+  }
+  .only-mobile {
+    display: none;
+  }
+}
+
+/* ── 텍스트 유틸 ──────────────────────────────────── */
+
+.muted {
+  color: var(--color-text-muted);
+}
+
+.prose p {
+  margin-bottom: var(--space-4);
+  color: var(--color-text-muted);
+}
+
+.prose h2 {
+  margin-top: var(--space-8);
+  margin-bottom: var(--space-3);
+}
+
+.prose h3 {
+  margin-top: var(--space-6);
+  margin-bottom: var(--space-2);
+}
+
+.prose ul {
+  margin-bottom: var(--space-4);
+  padding-left: var(--space-5);
+  list-style: disc;
+  color: var(--color-text-muted);
+}
+
+.prose ol {
+  margin-bottom: var(--space-4);
+  padding-left: var(--space-5);
+  list-style: decimal;
+  color: var(--color-text-muted);
+}
+
+.prose li {
+  margin-bottom: var(--space-2);
+}
+
+.prose strong {
+  color: var(--color-text);
+  font-weight: var(--fw-semibold);
+}
+
+/* ── 버튼 ─────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  /* 터치 타겟 최소 44×44px */
+  min-height: 44px;
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  transition: background var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out);
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: #fff;
+}
+.btn-primary:hover {
+  background: var(--color-primary-hover);
+  color: #fff;
+}
+
+.btn-secondary {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-strong);
+}
+.btn-secondary:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── 폼 ───────────────────────────────────────────── */
+
+.input {
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+}
+
+.input::placeholder {
+  color: var(--color-text-subtle);
+}
+
+.input:focus-visible {
+  border-color: var(--color-primary);
+}
+
+/* ── 빈 상태 · 오류 상태 ───────────────────────────
+ * 백엔드가 아직 없거나 응답하지 않을 때 쓰는 폴백. 화면이 비어 보이지 않게 하고,
+ * 사용자에게 "데이터가 없다"와 "오류가 났다"를 구분해 알린다. */
+
+.empty-state {
+  display: grid;
+  place-items: center;
+  gap: var(--space-2);
+  /* CLS 방지: 데이터가 늦게 도착해도 자리가 미리 잡혀 있다. */
+  min-height: 120px;
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+}

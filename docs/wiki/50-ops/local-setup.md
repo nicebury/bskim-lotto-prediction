@@ -77,7 +77,7 @@ uv run python -c "import torch; print(torch.__version__)"   # 스모크: torch i
 
 backend 는 `torch` / `sentence-transformers` 를 쓰므로 첫 `uv sync` 직후 위 import 스모크를 **반드시** 통과시킨다. 실패하면 backend 만 Python 3.12 로 내린다(worker·frontend 는 영향 없음). ChromaDB(`backend/data/chroma_words`)는 읽기 전용으로 그대로 쓴다 — Postgres 로 이관하지 않는다(`[[0006-keep-chromadb-not-pgvector]]`).
 
-`DATABASE_URL` 은 `app_reader`(읽기 전용) 롤을 가리킨다. backend 가 실수로 쓰기를 시도하면 코드리뷰가 아니라 DB 권한이 막는다.
+backend 의 `PG_USER` 는 `app_reader`(읽기 전용) 롤이다. 실수로 쓰기를 시도하면 코드리뷰가 아니라 DB 권한이 막는다. 게다가 backend 는 기동 시 접속 롤이 정말 쓰기 권한이 없는지 DB 에 물어보고, 있으면 뜨지 않는다 ([[env-vars]]).
 
 ## 4. frontend (Node.js, 포트 3000)
 

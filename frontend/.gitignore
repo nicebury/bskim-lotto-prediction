@@ -1,0 +1,15 @@
+/node_modules
+/.next/
+/out/
+/build
+
+# 환경변수 실제 파일 — 커밋하지 않는다. 템플릿은 env.sample.
+.env
+.env_frontend
+.env.local
+.env*.local
+
+*.tsbuildinfo
+next-env.d.ts.bak
+.DS_Store
+npm-debug.log*

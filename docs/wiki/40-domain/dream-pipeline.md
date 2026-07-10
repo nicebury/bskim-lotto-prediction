@@ -145,6 +145,10 @@ lazy 를 eager 로 바꾸면 **꿈해몽을 안 쓰는 배포에서도** 20초�
 
 ## 임베딩 데이터
 
-기존 `CLAUDE.md` 는 `chroma_words` 가 "4,802 단어 × 768-dim" 이라고 적었다. **이 숫자는 코드에서 확인되지 않았다.** 문서의 주장이다. 이관이나 재생성이 필요해지면 먼저 실측한다.
+기존 `CLAUDE.md` 는 `chroma_words` 가 "4,802 단어 × 768-dim" 이라고 적었다. **2026-07-09 실측 결과 단어 수는 맞다** — `lotto_word` 컬렉션의 `count()` 가 정확히 4,802 다. 차원 수는 아직 확인하지 않았다.
+
+컬렉션의 각 문서는 단어 자체이고(`ids` 와 `documents` 가 같다), 메타데이터는 `lotto_number`(`"[5, 33, 39]"` 형태의 **문자열**)와 `importance`(문자열 숫자)다. `searcher.py` 의 `_parse_lotto_number` 가 그 문자열을 파싱하는 이유가 이것이다.
+
+**단어 목록만 필요하면 `DreamSearcher` 를 거치지 않는다.** `chromadb.PersistentClient(...).get_collection(...).get()` 은 임베딩을 만들지 않으므로 SentenceTransformer 를 로드하지 않는다. `/api/dream/keywords` 가 20초 함정을 피하는 방법이다 (`backend/app/dream/keywords.py`).
 
 관련: [[forbidden-expressions]] · [[api-contract]] · [[prediction-algorithm]] · [[0006-keep-chromadb-not-pgvector]] · [[0008-python-313-torch-pin]]

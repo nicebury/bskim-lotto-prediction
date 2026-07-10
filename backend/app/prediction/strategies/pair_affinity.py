@@ -29,7 +29,7 @@ def top_pair(mat: np.ndarray) -> tuple:
 
 def generate(
     num_rows: Sequence[tuple], *, sets: int, seed: Optional[int] = None
-) -> List[dict]:
+) -> dict:  # 다른 전략과 같은 `{"sets": [...], "meta": {...}}` 를 돌려준다
     rng = np.random.default_rng(seed)
     mat = _build_matrix(num_rows)
 

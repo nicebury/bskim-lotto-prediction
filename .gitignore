@@ -4,6 +4,9 @@ __pycache__/
 .venv/
 venv/
 .env
+.env_worker
+.env_backend
+.env_frontend
 
 # SQLite
 backend/data/*.db

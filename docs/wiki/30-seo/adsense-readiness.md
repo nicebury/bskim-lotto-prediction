@@ -141,9 +141,13 @@ export function AdSlot({ slot }: { slot: string }) {
 
 애드센스 로더 스크립트도 `next/script` 의 `strategy="afterInteractive"` 로 로드한다([[analytics]] 와 같은 원칙 — `beforeInteractive` 는 LCP 를 해친다). 로더 역시 `NEXT_PUBLIC_ADSENSE_CLIENT` 가 있을 때만 렌더링한다.
 
-### 5.2 CLS 방지 슬롯 예약
+### 5.2 CLS 방지 슬롯 예약 — **승인 후에만**
 
 광고 슬롯은 `min-height`(또는 `aspect-ratio`)를 예약해 광고가 늦게 로드돼도 레이아웃이 밀리지 않게 한다(보완판 5.3·6.5). CLS 는 Core Web Vitals 이자 SEO 요소다.
+
+> **정정 (2026-07-09).** 이 예약을 **미승인 상태에도 적용하지 않는다.** 광고가 없으면 늦게 도착할 것도 없어 CLS 가 발생하지 않는다. 남는 것은 콘텐츠 사이의 200px 짜리 빈 구멍뿐이고, 승인은 몇 달 뒤일 수 있다. 승인 시점에는 어차피 `NEXT_PUBLIC_ADSENSE_CLIENT` 를 넣고 다시 빌드하므로 그때 자리가 생긴다. 실제로 이 예약이 홈의 "주요 통계 ↔ 오늘의 추천 번호" 사이를 벌려 놓았다.
+>
+> 즉 `AdSlot` 은 미승인 시 `null` 을 반환한다. 빈 `<div class="ad-slot">` 도 남기지 않는다 ([[components]]).
 
 ### 5.3 "준비 중" 페이지 광고 금지
 

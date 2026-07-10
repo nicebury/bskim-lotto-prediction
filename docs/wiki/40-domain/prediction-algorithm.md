@@ -200,7 +200,7 @@ avg_number_hits = int(sum(number_counts[n] for n in combo) / 6)
 
 ## 이식할 때 지킬 것
 
-1. **모듈을 재작성하지 않는다.** SQLite 접근부만 psycopg 로 바꾼다. `predictor.py` 는 `sqlite3` 표준 라이브러리를 직접 쓰고 있다.
+1. **모듈을 재작성하지 않는다.** SQLite 접근부만 걷어낸다. ~~`predictor.py` 는 `sqlite3` 표준 라이브러리를 직접 쓰고 있다.~~ **완료(2026-07-09)**: `predict()` 가 `db_path` 대신 `Sequence[Draw]` 를 받는다. 데이터를 여는 쪽은 호출자다 — 백엔드의 Postgres 접근은 async 라 동기 함수인 여기서 부를 수 없다. 알고리즘은 한 줄도 바뀌지 않았다.
 2. `predictor.predict()` 는 동기 함수로 유지하고, 라우터에서 `asyncio.to_thread` 로 감싼다.
 3. `window` 파라미터를 일반화한다. 지금은 `hot_rounds=20` 고정이지만 API 는 20/50/100/all 을 요구한다.
 4. `avg_number_hits`, `hit_count`, `valid_combos_count` 를 API 응답에서 뺀다.

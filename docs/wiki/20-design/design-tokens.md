@@ -28,7 +28,7 @@ updated: 2026-07-09
 
 - `--color-*` — 색. `--color-{역할}[-{변형}]`. 변형은 `hover` / `soft` / `strong` / `muted` / `subtle`.
 - `--ball-*` — 번호 볼 5구간 색. `--ball-{하한}-{상한}`.
-- `--svc-*` — 홈 6타일 서비스별 고정 색. `--svc-{서비스}` (글리프) / `--svc-{서비스}-bg` (파스텔 배경).
+- `--svc-*` — 서비스별 고정 색. `--svc-{서비스}` (**진한 색**) / `--svc-{서비스}-bg` (파스텔 배경) / `--svc-fg` (진한 색 위 글자).
 - `--font-*`, `--fs-*`, `--fw-*` — 폰트 패밀리 / 글자 크기 / 굵기.
 - `--space-*` — 간격 스케일. 4px 배수.
 - `--radius-*` — 모서리. `sm` / `card` / `pill`.
@@ -82,26 +82,44 @@ updated: 2026-07-09
   --ball-fg:       #FFFFFF; /* 진한 볼(파랑·빨강·회색) 위 숫자 */
   --ball-fg-dark:  #1A1D2E; /* 밝은 볼(노랑·초록) 위 숫자 — 대비 확보 */
 
-  /* ── Service · 홈 6타일 고정 색 ────────────────── */
+  /* ── Service · 서비스별 고정 색 ─────────────────
+   * 두 용도를 구분한다.
+   *   --svc-{s}     6타일 아이콘의 **진한 배경**. 그 위 글리프는 --svc-fg(흰색).
+   *   --svc-{s}-bg  가이드 카드의 **파스텔 배경**. 그 위 텍스트는 --color-text.
+   * 시안의 6타일은 파스텔 배경이 아니라 진한 그라디언트 위 흰 글리프다. 그라디언트는
+   * 새 hex 를 만들지 않고 color-mix 로 --svc-{s} 에서 유도한다. */
   --svc-lotto:      #22A968;  --svc-lotto-bg:   #DFF5EA;  /* 로또 6/45 = 그린 */
   --svc-stats:      #7C5CFC;  --svc-stats-bg:   #ECE7FE;  /* 번호 통계 = 퍼플 */
   --svc-reco:       #F59E0B;  --svc-reco-bg:    #FEF0D6;  /* 번호 추천 = 오렌지 */
   --svc-dream:      #EC4899;  --svc-dream-bg:   #FCE3EF;  /* 꿈해몽 = 핑크 */
   --svc-news:       #3B82F6;  --svc-news-bg:    #E1ECFE;  /* 복권 뉴스 = 블루 */
   --svc-pension:    #9AA4B2;  --svc-pension-bg: #EDEFF3;  /* 연금복권 = 그레이(준비중) */
+  --svc-fg:         #FFFFFF;  /* 진한 타일 위 글리프. 다크에서도 바뀌지 않는다 */
 
-  /* ── Typography ───────────────────────────────── */
+  /* ── Typography ─────────────────────────────────
+   * --font-pretendard 는 next/font/local 이 주입한다(→ frontend/src/lib/fonts.ts).
+   * 폴백 스택을 여기 한 번 더 적어야 변수가 비었을 때도 레이아웃이 선다. */
   --font-sans:
-    'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont,
-    'Segoe UI', 'Noto Sans KR', Roboto, system-ui, sans-serif;
+    var(--font-pretendard), -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'Noto Sans KR', 'Malgun Gothic', 'Apple SD Gothic Neo', system-ui, sans-serif;
 
-  --fs-hero: clamp(1.75rem, 1.1rem + 3.2vw, 2.5rem); /* 히어로 헤드라인 */
-  --fs-h1:   1.6rem;
-  --fs-h2:   1.15rem;
-  --fs-h3:   1rem;
+  /* 히어로만 뷰포트에 반응한다. 본문 크기가 화면마다 달라지면 읽는 리듬이 흔들린다. */
+  --fs-hero: clamp(1.9rem, 1.05rem + 3.6vw, 2.6rem);
+  --fs-h1:   1.75rem;
+  --fs-h2:   1.25rem;
+  --fs-h3:   0.98rem;
   --fs-body: 0.95rem;
   --fs-sm:   0.85rem;
   --fs-xs:   0.78rem;
+
+  /* 자간 — 한글은 자소가 조밀해 큰 글자에서 조여야 덩어리로 읽힌다.
+     본문 크기에서는 조이지 않는다(가독성이 떨어진다). */
+  --ls-hero:  -0.03em;
+  --ls-title: -0.015em;
+
+  /* 행간 — 제목은 좁게, 본문은 넉넉히. 한글은 라틴보다 행간이 넓어야 읽힌다. */
+  --lh-tight: 1.28;
+  --lh-body:  1.65;
 
   --fw-regular:  400;
   --fw-medium:   500;
@@ -149,6 +167,14 @@ body {
 ```
 
 Pretendard 는 웹폰트 서브셋으로 자체 호스팅한다(5.1). CDN 의존을 피하고, 한글 글리프만 서브셋해 로드를 줄인다. 시스템 폰트 폴백 스택을 반드시 남겨 폰트 로딩 전에도 레이아웃이 서게 한다(CLS 방지 — [[responsive-rules]]).
+
+**실제 구현** (`frontend/src/lib/fonts.ts`, `frontend/src/fonts/pretendard.woff2`):
+
+원본 가변 폰트는 2MB 다. 그대로 쓰면 LCP 를 그만큼 늦춘다. **KS X 1001 상용 한글 2,350자 + 라틴·숫자·문장부호**로 서브셋하고 가변 축을 `wght 400~800` 으로 좁혀 **304KB** 로 줄였다. 소스의 UI 문구 677자가 전부 이 범위 안에 있음을 확인했다. 사용자가 입력한 희귀 음절(꿈 텍스트 등)은 시스템 폰트로 폴백된다 — 화면이 깨지지 않고 글꼴만 달라진다.
+
+`next/font/local` 을 쓰면 폰트 preload 와 **폴백 메트릭 오버라이드**(`size-adjust`·`ascent-override`)를 자동으로 얻는다. 후자가 CLS 방지의 핵심이다 — 웹폰트가 늦게 도착해도 글자 크기가 튀지 않는다. 파일은 `public/` 이 아니라 `src/fonts/` 에 둔다(번들러가 해석하는 경로여야 한다).
+
+라이선스는 SIL Open Font License 1.1 이고 `src/fonts/LICENSE.txt` 에 동봉했다. 재배포 시 함께 배포해야 한다.
 
 ---
 

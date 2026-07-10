@@ -1,0 +1,1694 @@
+/*
+ * 컴포넌트 스타일.
+ * 정본: docs/wiki/20-design/components.md · responsive-rules.md
+ * 원시 hex/px 를 쓰지 않는다 — 토큰만 참조한다(간격은 --space-* 스케일에서만 고른다).
+ */
+
+/* ────────────────────────────────────────────────────────────
+ * LottoBall — 번호 볼
+ *
+ * 시각 크기와 히트 영역을 **분리**한다. 볼 지름은 36px 이지만 손가락이 누르는 영역은
+ * 44px 다(터치 타겟 최소치). 이걸 합치면 볼이 우스꽝스럽게 커진다.
+ * ──────────────────────────────────────────────────────────── */
+
+.ball-hit {
+  display: inline-grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* 표·목록 안에서 44px 히트 영역이 과하면 시각 크기만큼만 차지하게 한다.
+   (누를 수 없는 순수 표시용 볼) */
+.ball-hit.is-static {
+  min-width: 0;
+  min-height: 0;
+}
+
+.ball {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-pill);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-body);
+  line-height: 1;
+  /* 데이터가 늦게 와도 자리가 밀리지 않게 고정 크기를 준다(CLS). */
+  flex: 0 0 auto;
+}
+
+.ball-sm {
+  width: 28px;
+  height: 28px;
+  font-size: var(--fs-xs);
+}
+
+.ball-lg {
+  width: 44px;
+  height: 44px;
+  font-size: var(--fs-h3);
+}
+
+@media (min-width: 640px) {
+  .ball-lg {
+    width: 52px;
+    height: 52px;
+    font-size: var(--fs-h2);
+  }
+}
+
+/* 구간 색. 밝은 볼(노랑·초록) 위 숫자는 어두운 글자를 써 대비를 확보한다. */
+.ball-range-1 {
+  background: var(--ball-1-10);
+  color: var(--ball-fg-dark);
+}
+.ball-range-2 {
+  background: var(--ball-11-20);
+  color: var(--ball-fg);
+}
+.ball-range-3 {
+  background: var(--ball-21-30);
+  color: var(--ball-fg);
+}
+.ball-range-4 {
+  background: var(--ball-31-40);
+  color: var(--ball-fg);
+}
+.ball-range-5 {
+  background: var(--ball-41-45);
+  color: var(--ball-fg-dark);
+}
+
+/* 보너스 배지. 색이 아니라 '+' 기호가 정보를 전달한다. */
+.ball-wrap {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+
+.ball-bonus-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-pill);
+  background: var(--color-text);
+  color: var(--color-surface);
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  line-height: 1;
+}
+
+/* 당첨번호 6개 + 보너스 나열 */
+.ball-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.ball-plus {
+  color: var(--color-text-subtle);
+  font-weight: var(--fw-bold);
+  padding-inline: var(--space-1);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * Card
+ * ──────────────────────────────────────────────────────────── */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-5);
+}
+
+.card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.card-head h2,
+.card-head h3 {
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-bold);
+}
+
+.card-link {
+  transition: box-shadow var(--dur) var(--ease-out), transform var(--dur) var(--ease-out);
+}
+
+.card-link:hover {
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-2px);
+}
+
+/* 모션을 끈 사용자에게는 카드가 튀어오르지 않는다. */
+@media (prefers-reduced-motion: reduce) {
+  .card-link:hover {
+    transform: none;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+ * Header
+ * 데스크톱: 가로 nav + 검색 + 테마 토글
+ * 모바일:   햄버거 드로어 + 전체화면 검색 오버레이
+ * ──────────────────────────────────────────────────────────── */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: color-mix(in oklab, var(--color-surface) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.header-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: var(--header-height);
+}
+
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-black);
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.logo:hover {
+  color: var(--color-text);
+}
+
+.logo-mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  color: #fff;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-black);
+}
+
+/* 데스크톱 nav 는 모바일에서 감춘다(드로어가 대신한다). */
+.header-nav {
+  display: none;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+
+/* 아이콘 전용 버튼 — aria-label 로 이름을 준다. */
+.icon-btn {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+}
+
+.icon-btn:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+
+/* 데스크톱 검색 입력은 모바일에서 숨기고 아이콘으로 대체한다. */
+.header-search {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .header-nav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-left: var(--space-6);
+  }
+
+  .header-nav a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding-inline: var(--space-3);
+    border-radius: var(--radius-sm);
+    font-size: var(--fs-body);
+    font-weight: var(--fw-medium);
+    color: var(--color-text-muted);
+  }
+
+  .header-nav a:hover {
+    background: var(--color-surface-2);
+    color: var(--color-text);
+  }
+
+  /* 현재 페이지는 색만이 아니라 굵기로도 구분한다. */
+  .header-nav a[aria-current='page'] {
+    color: var(--color-primary);
+    font-weight: var(--fw-semibold);
+  }
+
+  .header-search {
+    display: block;
+    position: relative;
+    width: 200px;
+  }
+
+  .header-search .input {
+    padding-right: var(--space-8);
+    font-size: var(--fs-sm);
+    background: var(--color-surface-2);
+  }
+
+  .header-search .icon-btn {
+    position: absolute;
+    top: 0;
+    right: 0;
+    min-width: 40px;
+  }
+
+  .header-search-toggle {
+    display: none;
+  }
+
+  .header-menu-toggle {
+    display: none;
+  }
+}
+
+/* 모바일 드로어 */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgb(0 0 0 / 0.4);
+}
+
+.drawer {
+  position: fixed;
+  inset-block: 0;
+  right: 0;
+  z-index: 61;
+  width: min(320px, 86vw);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-border);
+  box-shadow: var(--shadow-pop);
+  overflow-y: auto;
+}
+
+.drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  margin-bottom: var(--space-2);
+}
+
+.drawer a {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-weight: var(--fw-medium);
+}
+
+.drawer a:hover {
+  background: var(--color-surface-2);
+}
+
+.drawer a[aria-current='page'] {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-weight: var(--fw-semibold);
+}
+
+/* 모바일 전체화면 검색 오버레이 */
+.search-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: var(--color-bg);
+}
+
+.search-overlay-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.search-overlay form {
+  display: flex;
+  gap: var(--space-2);
+  flex: 1;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * Hero — 좌 텍스트 / 우 일러스트. 모바일은 텍스트만 전폭.
+ * ──────────────────────────────────────────────────────────── */
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  background: linear-gradient(135deg, var(--color-primary-soft), var(--color-primary-soft2));
+  padding: var(--space-6) var(--space-5);
+  margin-top: var(--space-5);
+}
+
+.hero-eyebrow {
+  font-size: 1.1rem;
+  font-weight: var(--fw-semibold);
+  /* 헤드라인보다 한 단계 물러서되 읽히긴 해야 한다. subtle 은 너무 옅다. */
+  color: var(--color-text-muted);
+  letter-spacing: var(--ls-title);
+  margin-bottom: var(--space-3);
+}
+
+.hero h1 {
+  font-size: var(--fs-hero);
+  font-weight: var(--fw-black);
+  letter-spacing: var(--ls-hero);
+  line-height: 1.3;
+  /* 절 단위로 끊기게 했으므로 브라우저의 자동 균형 잡기를 끈다. */
+  text-wrap: initial;
+}
+
+/*
+ * 헤드라인의 한 절. inline-block 이라 절 안에서는 줄이 끊기지 않고, 폭이 모자라면
+ * 두 절 사이에서 끊긴다 — "로또의 모든 정보," / "여기서 확인하세요".
+ */
+.hero-line {
+  display: inline-block;
+}
+
+/* 강조 어절만 브랜드 색으로. 문장 전체를 칠하면 강조가 사라진다. */
+.hero h1 em {
+  font-style: normal;
+  color: var(--color-primary);
+}
+
+.hero p {
+  margin-top: var(--space-4);
+  color: var(--color-text-muted);
+  max-width: 42ch;
+  word-break: keep-all;
+}
+
+/* CTA 는 모바일에서 세로로 쌓고 각 버튼을 전폭으로 만든다. */
+.hero-cta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+.hero-cta .btn {
+  width: 100%;
+}
+
+/*
+ * 히어로 일러스트.
+ *
+ * 모바일에서는 숨긴다 — 첫 화면의 세로 공간은 헤드라인과 CTA 의 것이다. 태블릿부터
+ * 텍스트 아래에 넓게 깔고, 데스크톱에서 우측 열로 옮긴다.
+ * CLS 방지: 어느 단에서도 `aspect-ratio` 로 높이를 미리 예약한다.
+ */
+.hero-art {
+  display: none;
+}
+
+.hero-img {
+  width: 100%;
+  height: auto;
+  /* 원본 비율. 로드 전에도 자리가 잡힌다(CLS). */
+  aspect-ratio: 840 / 742;
+}
+
+@media (min-width: 640px) {
+  .hero-cta {
+    flex-direction: row;
+  }
+  .hero-cta .btn {
+    width: auto;
+  }
+
+  .hero-art {
+    display: grid;
+    place-items: center;
+    margin-top: var(--space-6);
+  }
+  .hero-img {
+    max-width: 320px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .hero {
+    display: grid;
+    grid-template-columns: 1.05fr 0.95fr;
+    align-items: center;
+    gap: var(--space-8);
+    /* 히어로가 첫 화면을 다 먹지 않게 한다. 아래 타일이 스크롤 없이 보이는 편이 낫다. */
+    padding: var(--space-12) var(--space-12);
+  }
+
+  .hero-art {
+    margin-top: 0;
+  }
+  /* 헤드라인이 작아진 만큼 일러스트도 줄여 두 열의 무게를 맞춘다. */
+  .hero-img {
+    max-width: 340px;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 서비스 6타일 — 모바일·태블릿 3×2, 데스크톱 6열
+ * ──────────────────────────────────────────────────────────── */
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+@media (min-width: 1024px) {
+  .tiles {
+    grid-template-columns: repeat(6, 1fr);
+    gap: 0;
+  }
+
+  /*
+   * 시안의 세로 구분선. 첫 타일을 뺀 나머지의 왼쪽에 얇은 선을 긋는다.
+   * gap 을 0 으로 두고 선을 경계에 놓아야 여섯 칸이 균등하게 나뉜다.
+   * 모바일(3×2)에서는 선을 긋지 않는다 — 2행 구조라 선이 격자처럼 보인다.
+   */
+  .tiles > li + li {
+    border-left: 1px solid var(--color-border);
+  }
+}
+
+/*
+ * 타일 하나가 `--svc` 라는 지역 변수를 정하고, 글리프·그림자가 그것을 읽는다.
+ * 색을 한 곳에서만 고르므로 배경과 그림자가 어긋날 수 없다.
+ */
+.tile[data-accent='lotto'] {
+  --svc: var(--svc-lotto);
+}
+.tile[data-accent='stats'] {
+  --svc: var(--svc-stats);
+}
+.tile[data-accent='reco'] {
+  --svc: var(--svc-reco);
+}
+.tile[data-accent='dream'] {
+  --svc: var(--svc-dream);
+}
+.tile[data-accent='news'] {
+  --svc: var(--svc-news);
+}
+.tile[data-accent='pension'] {
+  --svc: var(--svc-pension);
+}
+
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-2) var(--space-4);
+  border-radius: var(--radius-card);
+  text-align: center;
+  color: var(--color-text);
+  transition: transform var(--dur) var(--ease-out);
+}
+
+/* 호버 시 배경을 칠하는 대신 타일 전체를 살짝 들어올린다. 아이콘이 이미 색을 갖고 있어
+   배경까지 바뀌면 시끄럽다. */
+a.tile:hover {
+  color: var(--color-text);
+  transform: translateY(-3px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  a.tile:hover {
+    transform: none;
+  }
+}
+
+/*
+ * 진한 컬러 그라디언트 + 흰 글리프. 시안의 6타일이 그렇다(파스텔 배경이 아니다).
+ * 그라디언트는 새 hex 를 만들지 않고 color-mix 로 --svc 에서 유도한다.
+ * 그림자도 같은 색에서 뽑아 아이콘이 자기 색의 빛을 아래로 흘리는 것처럼 보이게 한다.
+ */
+.tile-glyph {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  /* 52px 의 27% — iOS 앱 아이콘에 가까운 곡률. --radius-card(16px) 보다 부드럽다. */
+  border-radius: 14px;
+  background: linear-gradient(
+    155deg,
+    color-mix(in oklab, var(--svc) 76%, white),
+    var(--svc) 72%
+  );
+  color: var(--svc-fg);
+  box-shadow: 0 8px 16px -6px color-mix(in oklab, var(--svc) 58%, transparent);
+  transition: box-shadow var(--dur) var(--ease-out);
+}
+
+a.tile:hover .tile-glyph {
+  box-shadow: 0 12px 22px -6px color-mix(in oklab, var(--svc) 68%, transparent);
+}
+
+.tile-title {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-title);
+  margin-top: var(--space-1);
+}
+
+.tile-summary {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+  word-break: keep-all;
+}
+
+/*
+ * '준비중' 배지 — 색이 아니라 텍스트가 상태를 전달한다.
+ * 타일 우상단에 고정한다. 아이콘 기준으로 픽셀 오프셋을 주면 3열(모바일)에서 타일 밖으로
+ * 밀려난다 — 타일 폭이 단마다 다르기 때문이다.
+ */
+.tile-badge {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-text);
+  color: var(--color-surface);
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+
+.tile.is-disabled {
+  cursor: default;
+}
+
+/* 준비 중 타일은 채도를 낮춰 살아 있는 타일과 구분한다. 배지가 말로도 알린다. */
+.tile.is-disabled .tile-glyph {
+  opacity: 0.9;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 3분할 (최신 회차 · D-day · 뉴스)
+ * 모바일 세로 스택 → 태블릿 [결과 전폭 / D-day | 뉴스] → 데스크톱 3열
+ * ──────────────────────────────────────────────────────────── */
+
+.split-3 {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/*
+ * 3분할 카드(최신 회차 · D-day · 뉴스)는 나란히 서므로 셋의 키가 비슷해야 한다.
+ * 전역 카드보다 패딩과 제목 여백을 한 단계씩 조여 세로 길이를 약 20% 줄인다.
+ * 카드 안 요소(볼 크기·지표 상자·카운트다운)도 각자 한 단계씩 줄어 있다.
+ */
+.split-3 > .card,
+.split-3 > article.card {
+  padding: var(--space-4);
+}
+
+.split-3 > .card > .card-head {
+  margin-bottom: var(--space-3);
+}
+
+@media (min-width: 640px) {
+  .split-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .split-3 > :first-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 1024px) {
+  .split-3 {
+    grid-template-columns: 1.4fr 0.9fr 1fr;
+  }
+  .split-3 > :first-child {
+    grid-column: auto;
+  }
+}
+
+/*
+ * 최신 회차 카드.
+ * 칸 수는 데이터에 따라 2개 또는 3개다(값이 없는 지표는 그리지 않는다).
+ * `data-count` 로 열 수를 맞춰 두 칸일 때 빈 자리가 생기지 않게 한다.
+ */
+.latest-meta {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+@media (min-width: 640px) {
+  .latest-meta[data-count='3'] {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.meta-box {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  text-align: center;
+}
+
+.meta-box dt {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  margin-bottom: 2px;
+}
+
+.meta-box dd {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  word-break: keep-all;
+}
+
+/*
+ * 볼 그룹 + 그 아래 라벨.
+ * 라벨을 한 줄에 두고 space-between 으로 밀면 볼과 어긋난다(볼 개수·크기가 바뀌므로).
+ * 그룹과 라벨을 같은 컬럼에 묶어 라벨이 언제나 자기 볼 아래 온다.
+ */
+.ball-groups {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center; /* 당첨번호 + 보너스를 카드 중앙에 놓는다 */
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
+.ball-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* '+' 는 볼과 같은 높이에 있어야 한다. 라벨 높이만큼 아래로 밀리지 않게 한다. */
+.ball-groups > .ball-plus {
+  align-self: flex-start;
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+}
+
+.ball-caption {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* D-day 카드 */
+.next-round {
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.next-round strong {
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-bold);
+  color: var(--color-primary);
+}
+
+.dday-value {
+  font-size: clamp(2rem, 1.3rem + 3.2vw, 2.75rem);
+  font-weight: var(--fw-black);
+  color: var(--color-primary);
+  line-height: 1.15;
+  letter-spacing: var(--ls-hero);
+}
+
+/* 추첨 일시와 카운트다운 사이를 벌려 두 정보가 붙어 보이지 않게 한다. */
+.countdown {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+.countdown-value {
+  /* 숫자가 매초 바뀌어도 자리가 흔들리지 않게 tabular-nums + 고정 높이 */
+  display: block;
+  min-height: 1.9rem;
+  margin-top: 2px;
+  font-size: 1.4rem;
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-title);
+  color: var(--color-text);
+}
+
+/* 뉴스 카드 목록 */
+.news-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.news-item {
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.news-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+/* 썸네일 + 본문 가로 배치 */
+.news-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.news-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0; /* 긴 제목이 flex 항목을 밀어내지 않게 한다 */
+}
+
+/*
+ * 기사 이미지가 없어 글리프로 채운 썸네일.
+ * 크기를 고정해 이미지 유무와 무관하게 자리가 잡힌다(CLS).
+ * 색은 사이트가 이미 쓰는 --svc-* 팔레트에서 고르고, 기사마다 다르게 배정한다.
+ */
+.news-thumb {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  color: var(--svc-fg);
+  background: linear-gradient(150deg, color-mix(in oklab, var(--svc) 74%, white), var(--svc) 78%);
+}
+
+.news-thumb[data-accent='lotto'] {
+  --svc: var(--svc-lotto);
+}
+.news-thumb[data-accent='stats'] {
+  --svc: var(--svc-stats);
+}
+.news-thumb[data-accent='reco'] {
+  --svc: var(--svc-reco);
+}
+.news-thumb[data-accent='dream'] {
+  --svc: var(--svc-dream);
+}
+.news-thumb[data-accent='news'] {
+  --svc: var(--svc-news);
+}
+
+/* 홈 3분할 카드는 폭이 좁다. 썸네일과 간격을 함께 줄여 세 카드의 키를 맞춘다. */
+.news-list.is-compact {
+  gap: var(--space-2);
+}
+.news-list.is-compact .news-item {
+  padding-bottom: var(--space-2);
+}
+.news-list.is-compact .news-thumb {
+  width: 40px;
+  height: 40px;
+}
+.news-list.is-compact .news-row {
+  gap: var(--space-2);
+}
+
+.news-item h3 {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  line-height: 1.45;
+  letter-spacing: 0;
+}
+
+.news-item a {
+  color: var(--color-text);
+}
+.news-item a:hover {
+  color: var(--color-primary);
+}
+
+.news-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+.news-summary {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.keyword-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.chip {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 통계 카드 4종 — 모바일 1열 → 태블릿 2열 → 데스크톱 4열
+ * ──────────────────────────────────────────────────────────── */
+
+/*
+ * 통계 카드 그리드.
+ *
+ * 네 카드는 나란히 서므로 **키가 같아야** 한다(grid 기본값 stretch). 다만 내용량이 달라
+ * 짧은 카드 아래가 비는데, 카드 하단 설명(.card-note)을 `margin-top: auto` 로 바닥에
+ * 붙여 네 카드의 설명 줄이 한 선에 정렬되게 한다. 빈 공간이 설명 위로 모여 덜 어색하다.
+ */
+.stat-grid {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/* 4열로 좁아지는 자리라 전역 카드보다 패딩을 한 단계 조인다. */
+.stat-grid > .card {
+  padding: var(--space-4);
+}
+
+.stat-grid > .card > .card-head {
+  margin-bottom: var(--space-3);
+}
+
+/* 카드 하단 설명. .card 가 flex column 이므로 auto 마진이 바닥으로 민다. */
+.card-note {
+  margin-top: auto;
+  padding-top: var(--space-3);
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+@media (min-width: 640px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .stat-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* 순위 + 볼 + 회수 막대 */
+.rank-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.rank-row {
+  display: grid;
+  grid-template-columns: 16px 36px 1fr auto;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+}
+
+.rank-no {
+  color: var(--color-text-subtle);
+  font-size: var(--fs-xs);
+}
+
+/*
+ * 순위 막대.
+ *
+ * ⚠ 둘 다 <span> 이다. `display: block` 을 빠뜨리면 인라인 요소가 되어 width·height 가
+ *   **무시된다.** `.rank-bar` 는 grid 자식이라 자동으로 blockify 되지만 그 안의 fill 은
+ *   아니어서, 회색 트랙만 보이고 채워진 막대가 그려지지 않았다.
+ */
+.rank-bar {
+  display: block;
+  width: 100%;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--color-border);
+  overflow: hidden;
+}
+
+.rank-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+}
+
+/* 오래 안 나온 번호는 '많이 나온' 것과 반대 방향의 사실이다. 색으로도 구분하되,
+   회수 숫자가 옆에 함께 있으므로 색이 유일한 전달자는 아니다(WCAG 1.4.1). */
+.rank-bar-fill.is-cold {
+  background: var(--color-text-subtle);
+}
+
+.rank-count {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* 45개 막대차트.
+   모바일에서는 컴포넌트가 상위 5개로 축약해 렌더링하므로, 이 차트는 데스크톱과
+   통계 상세 페이지(가로 스크롤 컨테이너)에서만 쓰인다. */
+.bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  /* CLS 방지: 데이터가 없어도 높이를 예약한다. */
+  min-height: 96px;
+  height: 96px;
+}
+
+.bar-chart-scroll {
+  overflow-x: auto;
+  padding-bottom: var(--space-2);
+}
+
+.bar-chart-scroll .bar-chart {
+  min-width: 640px;
+}
+
+.bar {
+  flex: 1 1 0;
+  min-width: 3px;
+  border-radius: 2px 2px 0 0;
+  background: color-mix(in oklab, var(--color-primary) 45%, transparent);
+}
+
+.bar.is-peak {
+  background: var(--color-primary);
+}
+
+.chart-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--space-1);
+  font-size: var(--fs-xs);
+  color: var(--color-text-subtle);
+}
+
+/* 패턴 요약 행 */
+.kv-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.kv-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--fs-sm);
+}
+
+.kv-row dt {
+  color: var(--color-text-muted);
+}
+
+.kv-row dd {
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+
+/* 라벨이 곧 정보인 목록(패턴 분석). 라벨을 본문색 굵은 글씨로 올린다. */
+.kv-list.has-strong-labels .kv-row dt {
+  color: var(--color-text);
+  font-weight: var(--fw-bold);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 추천 캐러셀 — 모바일 scroll-snap 스와이프, 데스크톱 여러 장 + 화살표
+ * ──────────────────────────────────────────────────────────── */
+
+.carousel {
+  position: relative;
+}
+
+.carousel-track {
+  display: flex;
+  gap: var(--space-4);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding-bottom: var(--space-2);
+  /* 스크롤바를 숨기되 스크롤 자체는 남긴다(키보드·트랙패드 접근성). */
+  scrollbar-width: thin;
+}
+
+.carousel-item {
+  scroll-snap-align: start;
+  flex: 0 0 min(280px, 82%);
+}
+
+@media (min-width: 640px) {
+  .carousel-item {
+    flex-basis: 260px;
+  }
+}
+
+.carousel-arrow {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .carousel-arrow {
+    display: grid;
+    place-items: center;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 2;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: var(--radius-pill);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    box-shadow: var(--shadow-card);
+    color: var(--color-text-muted);
+  }
+
+  .carousel-arrow:hover {
+    color: var(--color-primary);
+  }
+
+  .carousel-arrow:disabled {
+    opacity: 0.4;
+  }
+
+  .carousel-arrow.is-prev {
+    left: calc(var(--space-6) * -1);
+  }
+  .carousel-arrow.is-next {
+    right: calc(var(--space-6) * -1);
+  }
+}
+
+.reco-card {
+  gap: var(--space-3);
+  /* 번호가 6개든 재생성 중이든 카드 높이가 변하지 않게 최소 높이를 잡는다. */
+  min-height: 168px;
+}
+
+.reco-label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+}
+
+.reco-numbers {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-1);
+  min-height: 44px;
+  align-items: center;
+}
+
+.reco-skeleton {
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+  color: var(--color-text-subtle);
+  font-size: var(--fs-xs);
+}
+
+.reco-traits {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+/*
+ * '조합 성향' 라벨. 없으면 그 아래 숫자가 생성 **조건**처럼 읽힌다 —
+ * "완전 랜덤" 카드에서 특히 그렇다. 실제로는 뽑은 뒤에 센 결과다.
+ */
+.reco-traits-label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.04em;
+  color: var(--color-text-subtle);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 설명 버튼 (제목 옆 ⓘ)
+ * ──────────────────────────────────────────────────────────── */
+
+.info-btn {
+  display: inline-grid;
+  place-items: center;
+  /* 제목 줄에 끼어들되 44px 히트 영역은 확보한다. */
+  width: 44px;
+  height: 44px;
+  margin: -12px 0 -12px -6px;
+  border-radius: var(--radius-pill);
+  color: var(--color-text-subtle);
+  vertical-align: middle;
+}
+
+.info-btn:hover {
+  color: var(--color-primary);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 대화상자
+ * ──────────────────────────────────────────────────────────── */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgb(0 0 0 / 0.5);
+}
+
+.modal-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 81;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  /* 내용이 길면 대화상자 바깥이 아니라 안쪽에서 스크롤한다. */
+  pointer-events: none;
+}
+
+.modal {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 100%);
+  max-height: min(80vh, 720px);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-pop);
+  animation: modal-in var(--dur) var(--ease-out);
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-5) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modal-head h2 {
+  font-size: var(--fs-h2);
+}
+
+.modal-body {
+  padding: var(--space-5);
+  overflow-y: auto;
+}
+
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-3) var(--space-5) var(--space-5);
+}
+
+/* 대화상자 안의 본문은 카드 본문보다 조금 작게 — 읽을 양이 많다. */
+.modal-prose p {
+  font-size: var(--fs-sm);
+  margin-bottom: var(--space-3);
+}
+
+.modal-prose h3 {
+  margin-top: var(--space-5);
+  margin-bottom: var(--space-2);
+  font-size: var(--fs-h3);
+}
+
+.modal-prose code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 다섯 가지 방식 목록. 번호가 순서를 뜻하지 않고 그냥 다섯 갈래다 — 그래서 마커를 뺀다. */
+.how-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.how-steps li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+
+.how-steps strong {
+  font-size: var(--fs-sm);
+  color: var(--color-text);
+}
+
+.how-steps span {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  line-height: 1.55;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 생성 진행 대화상자
+ * ──────────────────────────────────────────────────────────── */
+
+.generate-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  /* 문구 길이가 달라져도 대화상자 크기가 튀지 않게 한다. */
+  min-height: 88px;
+  justify-content: center;
+}
+
+.progress-track {
+  width: 100%;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-border);
+  overflow: hidden;
+}
+
+.progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  transition: width 400ms var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-fill {
+    transition: none;
+  }
+  .modal {
+    animation: none;
+  }
+}
+
+.generate-step {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-medium);
+  text-align: center;
+}
+
+.generate-check {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-pill);
+  background: var(--color-success);
+  color: #fff;
+  font-size: 13px;
+  font-weight: var(--fw-bold);
+}
+
+.generate-error {
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 가이드 카드 — 파스텔 배경
+ * ──────────────────────────────────────────────────────────── */
+
+.guide-grid {
+  display: grid;
+  gap: var(--space-4);
+}
+
+@media (min-width: 640px) {
+  .guide-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .guide-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+.guide-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  min-height: 140px;
+  transition: box-shadow var(--dur) var(--ease-out), transform var(--dur) var(--ease-out);
+}
+
+.guide-card:hover {
+  color: var(--color-text);
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guide-card:hover {
+    transform: none;
+  }
+}
+
+.guide-card[data-accent='lotto'] {
+  background: var(--svc-lotto-bg);
+}
+.guide-card[data-accent='stats'] {
+  background: var(--svc-stats-bg);
+}
+.guide-card[data-accent='reco'] {
+  background: var(--svc-reco-bg);
+}
+.guide-card[data-accent='dream'] {
+  background: var(--svc-dream-bg);
+}
+.guide-card[data-accent='news'] {
+  background: var(--svc-news-bg);
+}
+
+.guide-card h3 {
+  font-size: var(--fs-h3);
+}
+
+.guide-card p {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+  flex: 1;
+}
+
+.guide-card .more-link {
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 면책 고지 · 안내 배너
+ * 색만으로 상태를 전달하지 않는다 — 아이콘과 텍스트를 함께 둔다.
+ * ──────────────────────────────────────────────────────────── */
+
+.disclaimer {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+
+.disclaimer.is-center {
+  justify-content: center;
+  text-align: center;
+  background: none;
+  border: none;
+}
+
+.disclaimer-icon {
+  flex: 0 0 auto;
+  font-weight: var(--fw-bold);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 광고 슬롯
+ * 승인 전에는 아무것도 렌더링하지 않지만, 자리는 예약해 CLS 를 막는다.
+ * 빈 상자에 '광고' 라벨을 붙이지 않는다.
+ * ──────────────────────────────────────────────────────────── */
+
+.ad-slot {
+  min-height: 100px;
+  margin-block: var(--space-6);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * Breadcrumb — 화면의 항목과 JSON-LD BreadcrumbList 가 일치해야 한다.
+ * ──────────────────────────────────────────────────────────── */
+
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-4);
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+.breadcrumb li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.breadcrumb a {
+  color: var(--color-text-muted);
+}
+.breadcrumb a:hover {
+  color: var(--color-primary);
+}
+
+.breadcrumb-sep {
+  color: var(--color-text-subtle);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 표 — body 를 넘치게 하지 않는다. 자기 컨테이너 안에서만 스크롤한다.
+ * ──────────────────────────────────────────────────────────── */
+
+.table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+  min-width: 480px;
+}
+
+.data-table th,
+.data-table td {
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.data-table thead th {
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+}
+
+.data-table tbody tr {
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.data-table .align-right {
+  text-align: right;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 탭 (통계 window 전환)
+ * ──────────────────────────────────────────────────────────── */
+
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  overflow-x: auto;
+}
+
+.tab {
+  flex: 1 0 auto;
+  min-height: 40px;
+  padding-inline: var(--space-4);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.tab[aria-selected='true'],
+.tab[data-active='true'] {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  font-weight: var(--fw-semibold);
+  box-shadow: var(--shadow-card);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * Footer
+ * ──────────────────────────────────────────────────────────── */
+
+.site-footer {
+  margin-top: var(--space-16);
+  padding-block: var(--space-8);
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+}
+
+.footer-grid {
+  display: grid;
+  gap: var(--space-6);
+}
+
+@media (min-width: 640px) {
+  .footer-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .footer-grid {
+    grid-template-columns: 1.4fr repeat(3, 1fr);
+    gap: var(--space-8);
+  }
+}
+
+.footer-brand p {
+  margin-top: var(--space-3);
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  line-height: 1.6;
+  max-width: 34ch;
+}
+
+.footer-col h2 {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  margin-bottom: var(--space-3);
+}
+
+.footer-col li {
+  margin-bottom: var(--space-2);
+}
+
+.footer-col a {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+.footer-col a:hover {
+  color: var(--color-primary);
+}
+
+.footer-disclaimer {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+
+.footer-bottom {
+  margin-top: var(--space-8);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--fs-xs);
+  color: var(--color-text-subtle);
+}

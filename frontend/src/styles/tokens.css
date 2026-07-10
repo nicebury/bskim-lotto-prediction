@@ -1,0 +1,230 @@
+/*
+ * 디자인 토큰 — 행운상자 UI 가 쓰는 모든 디자인 값의 단일 출처.
+ * 정본: docs/wiki/20-design/design-tokens.md
+ *
+ * 컴포넌트 CSS 는 여기 선언된 변수만 참조하고 원시 hex/px 를 직접 박지 않는다.
+ * 새 값이 필요하면 여기서 토큰을 먼저 만든다. 반투명 파생색은 color-mix() 로 유도한다.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* ── Color · Surface ──────────────────────────── */
+  --color-bg: #f7f8fc;
+  --color-surface: #ffffff;
+  --color-surface-2: #fafbfd;
+  --color-border: #eaecf0;
+  --color-border-strong: #d0d5dd;
+
+  /* ── Color · Text ─────────────────────────────── */
+  --color-text: #1a1d2e;
+  --color-text-muted: #6b7280;
+  --color-text-subtle: #98a2b3;
+
+  /* ── Color · Brand ────────────────────────────── */
+  --color-primary: #3b4fd8;
+  --color-primary-hover: #2e40be;
+  --color-primary-soft: #eef0fb;
+  --color-primary-soft2: #f5f0fc;
+
+  /* 보조 설명 안의 숫자를 짚는 색(갈색). 상태색이 아니므로 semantic 과 섞지 않는다.
+     예: "주요 통계 (최근 **20**회 기준)" 의 20. */
+  --color-accent-num: #a2622c;
+
+  /* ── Color · Semantic (상태 표시 전용) ─────────── */
+  --color-success: #16a34a;
+  --color-success-soft: #dcfce7;
+  --color-warning: #d97706;
+  --color-warning-soft: #fef3c7;
+  --color-danger: #dc2626;
+  --color-danger-soft: #fee2e2;
+  --color-info: #0284c7;
+  --color-info-soft: #e0f2fe;
+
+  /* ── Ball · 동행복권 공식 5구간 ─────────────────
+   * 시안 색이 아니라 공식 규칙이다. 다른 로또 사이트도 전부 이 규칙을 쓰므로
+   * 사용자는 색만 보고 구간을 안다. 근거: 00-decisions/0009-official-ball-colors-over-mockup.md
+   * 다크 모드에서도 바꾸지 않는다 — 학습된 색-구간 매핑이 깨진다. */
+  --ball-1-10: #fbc400;
+  --ball-11-20: #69c8f2;
+  --ball-21-30: #ff7272;
+  --ball-31-40: #aaaaaa;
+  --ball-41-45: #b0d840;
+  --ball-fg: #ffffff; /* 진한 볼(파랑·빨강·회색) 위 숫자 */
+  --ball-fg-dark: #1a1d2e; /* 밝은 볼(노랑·초록) 위 숫자 — 흰 글자는 AA 미달 */
+
+  /* ── Service · 홈 6타일 고정 색 ───────────────────
+   * 두 가지 용도를 구분한다.
+   *   --svc-{s}      아이콘 타일의 **진한 배경**. 그 위 글리프는 흰색(--svc-fg).
+   *   --svc-{s}-bg   가이드 카드의 **파스텔 배경**. 그 위 텍스트는 --color-text.
+   * 시안(메인샘플.png)의 6타일은 파스텔 배경이 아니라 진한 컬러 그라디언트 위에 흰 글리프다. */
+  --svc-lotto: #22a968;
+  --svc-lotto-bg: #dff5ea;
+  --svc-stats: #7c5cfc;
+  --svc-stats-bg: #ece7fe;
+  --svc-reco: #f59e0b;
+  --svc-reco-bg: #fef0d6;
+  --svc-dream: #ec4899;
+  --svc-dream-bg: #fce3ef;
+  --svc-news: #3b82f6;
+  --svc-news-bg: #e1ecfe;
+  --svc-pension: #9aa4b2;
+  --svc-pension-bg: #edeff3;
+  /* 진한 타일 위 글리프. 라이트·다크 공통 — 배경색이 다크에서 바뀌지 않기 때문이다. */
+  --svc-fg: #ffffff;
+
+  /* ── Typography ───────────────────────────────────
+   * Pretendard Variable 을 서브셋해 자체 호스팅한다(→ src/lib/fonts.ts).
+   * `--font-pretendard` 는 next/font 가 주입하는 변수이고, 웹폰트가 실패하면 그 안의
+   * 폴백 스택으로 떨어진다. 폴백을 여기 한 번 더 적어 두어야 변수가 비었을 때도
+   * 레이아웃이 선다(CLS 방지). */
+  --font-sans:
+    var(--font-pretendard), -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR',
+    'Malgun Gothic', 'Apple SD Gothic Neo', system-ui, sans-serif;
+
+  /* 시안 기준 스케일. 히어로만 뷰포트에 반응하고 나머지는 고정이다 —
+     본문 크기가 화면마다 달라지면 읽는 리듬이 흔들린다.
+     히어로 헤드라인은 eyebrow 와의 대비가 과해 한 단계 낮췄다. */
+  --fs-hero: clamp(1.35rem, 0.85rem + 2.4vw, 1.85rem);
+  --fs-h1: 1.75rem;
+  --fs-h2: 1.25rem;
+  --fs-h3: 0.98rem;
+  --fs-body: 0.95rem;
+  --fs-sm: 0.85rem;
+  --fs-xs: 0.78rem;
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+  --fw-black: 800;
+
+  /* 자간. 한글은 자소가 조밀해 큰 글자에서 자간을 조여야 덩어리로 읽힌다.
+     본문 크기에서는 조이지 않는다 — 가독성이 떨어진다. */
+  --ls-hero: -0.03em;
+  --ls-title: -0.015em;
+
+  /* 행간. 제목은 좁게, 본문은 넉넉히. 한글은 라틴보다 행간이 넓어야 읽힌다. */
+  --lh-tight: 1.28;
+  --lh-body: 1.65;
+
+  /* ── Spacing (4px 배수) ───────────────────────── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ── Radius ───────────────────────────────────── */
+  --radius-sm: 8px;
+  --radius-card: 16px;
+  --radius-pill: 999px;
+
+  /* ── Shadow ───────────────────────────────────── */
+  --shadow-card: 0 1px 3px rgb(26 29 46 / 0.06), 0 1px 2px rgb(26 29 46 / 0.04);
+  --shadow-card-hover: 0 4px 12px -2px rgb(26 29 46 / 0.1), 0 2px 6px -2px rgb(26 29 46 / 0.05);
+  --shadow-pop: 0 12px 28px -8px rgb(26 29 46 / 0.14);
+
+  /* ── Motion ───────────────────────────────────── */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 120ms;
+  --dur: 200ms;
+
+  /* ── Layout ───────────────────────────────────── */
+  --container-max: 1120px;
+  --header-height: 60px;
+}
+
+/*
+ * 다크 세트.
+ * prefers-color-scheme 을 기본 신호로 쓰고, 헤더의 수동 토글(data-theme)이 이를 덮는다.
+ * 두 선택자에 같은 오버라이드를 걸어 자동/수동 양쪽이 동작하게 한다.
+ *
+ * ⚠ --ball-* 와 --svc-* 글리프 색은 다크에서 바꾸지 않는다. 볼 색은 학습된 색-구간
+ *   매핑이고, 서비스 색은 파스텔 배경(-bg)만 어둡게 낮춘다.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --color-bg: #0b0d12;
+    --color-surface: #121620;
+    --color-surface-2: #161b27;
+    --color-border: #232a3a;
+    --color-border-strong: #2f3849;
+
+    --color-text: #e6e9ef;
+    --color-text-muted: #9aa4b2;
+    --color-text-subtle: #6b7280;
+
+    --color-primary: #7c8cff;
+    --color-primary-hover: #9aa8ff;
+    --color-primary-soft: #1e1b4b;
+    --color-primary-soft2: #241c4e;
+
+    /* 어두운 배경에서 갈색은 탁해진다. 명도를 올려 대비를 확보한다. */
+    --color-accent-num: #d69a63;
+
+    --color-success-soft: #052e16;
+    --color-warning-soft: #451a03;
+    --color-danger-soft: #450a0a;
+    --color-info-soft: #0c2a3a;
+
+    --svc-lotto-bg: #10281d;
+    --svc-stats-bg: #1f1a3a;
+    --svc-reco-bg: #33240a;
+    --svc-dream-bg: #331226;
+    --svc-news-bg: #10203c;
+    --svc-pension-bg: #1c212b;
+
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.5);
+    --shadow-card-hover: 0 4px 12px rgb(0 0 0 / 0.45);
+    --shadow-pop: 0 12px 28px rgb(0 0 0 / 0.5);
+  }
+}
+
+/* 수동 토글: 자동값을 덮어쓴다 */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-bg: #0b0d12;
+  --color-surface: #121620;
+  --color-surface-2: #161b27;
+  --color-border: #232a3a;
+  --color-border-strong: #2f3849;
+
+  --color-text: #e6e9ef;
+  --color-text-muted: #9aa4b2;
+  --color-text-subtle: #6b7280;
+
+  --color-primary: #7c8cff;
+  --color-primary-hover: #9aa8ff;
+  --color-primary-soft: #1e1b4b;
+  --color-primary-soft2: #241c4e;
+
+  --color-accent-num: #d69a63;
+
+  --color-success-soft: #052e16;
+  --color-warning-soft: #451a03;
+  --color-danger-soft: #450a0a;
+  --color-info-soft: #0c2a3a;
+
+  --svc-lotto-bg: #10281d;
+  --svc-stats-bg: #1f1a3a;
+  --svc-reco-bg: #33240a;
+  --svc-dream-bg: #331226;
+  --svc-news-bg: #10203c;
+  --svc-pension-bg: #1c212b;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.5);
+  --shadow-card-hover: 0 4px 12px rgb(0 0 0 / 0.45);
+  --shadow-pop: 0 12px 28px rgb(0 0 0 / 0.5);
+}
+
+/* 라이트 강제: 위 @media 블록이 :not([data-theme='light']) 로 이미 비켜서지만,
+   color-scheme 은 명시해야 폼 컨트롤·스크롤바가 라이트로 그려진다. */
+:root[data-theme='light'] {
+  color-scheme: light;
+}

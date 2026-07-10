@@ -1,115 +1,54 @@
-"""꿈 분석 → 로또 번호 추천 라우터.
+"""꿈해몽 → 번호.
 
-엔드포인트:
-  POST /api/dream/analyze  — 꿈 텍스트 → 형태소 추출 + 각 단어별 유사 매칭
-  POST /api/dream/lotto    — 선택된 매칭 → 3-세트 번호 생성
-  POST /api/dream/predict  — 한 방에 (analyze + 모든 매칭 lotto 생성)
+`/keywords` 는 즉시 응답한다. `/recommend` 의 **첫 요청만** 임베딩 모델 로딩으로 약
+20초 걸리고 이후는 즉시다. lazy 를 eager 로 바꾸면 꿈해몽을 쓰지 않는 배포에서도
+기동 때마다 20초와 수백 MB 를 낸다 (docs/wiki/40-domain/dream-pipeline.md).
 """
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
 
 from ..config import settings
-from ..dream import generator
-from ..dream.state import get_analyzer, get_searcher
+from ..dream import keywords as keywords_mod
+from ..dream import service
+from ..schemas import DreamKeywordsResponse, DreamRecommendResponse, DreamRequest
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/dream", tags=["dream"])
 
 
-class DreamTextRequest(BaseModel):
-    text: str = Field(..., min_length=1, max_length=500)
-
-
-class SelectedItem(BaseModel):
-    gubun: int = Field(..., ge=1, le=3)
-    lotto_number: list[int]
-
-
-class LottoRequest(BaseModel):
-    selected: List[SelectedItem]
-    sets_per_tier: int = Field(10, ge=1, le=30)
-    seed: Optional[int] = None
-
-
-class PredictRequest(BaseModel):
-    text: str = Field(..., min_length=1, max_length=500)
-    sets_per_tier: int = Field(10, ge=1, le=30)
-    seed: Optional[int] = None
-
-
-def _analyze_impl(text: str) -> dict:
-    analyzer = get_analyzer()
-    searcher = get_searcher(settings.CHROMA_DB_PATH)
-
-    words = analyzer.analyze(text)
-    if not words:
-        return {"query": text, "words": []}
-
-    payload: list[dict] = []
-    for w in words:
-        exact, containing, similar = searcher.search(w)
-        results = [m.to_dict() for m in (*exact, *containing, *similar)]
-        if not results:
-            continue
-        payload.append({"dream_word": w, "results": results})
-
-    return {"query": text, "words": payload}
-
-
-def _build_lotto_impl(selected: list[dict], sets_per_tier: int, seed: Optional[int]) -> dict:
-    return generator.build_tier_sets(
-        selected, sets_per_tier=sets_per_tier, seed=seed
-    )
-
-
-def _predict_impl(text: str, sets_per_tier: int, seed: Optional[int]) -> dict:
-    analyzed = _analyze_impl(text)
-    flat: list[dict] = []
-    for w in analyzed["words"]:
-        for r in w["results"]:
-            flat.append({"gubun": r["gubun"], "lotto_number": r["lotto_number"]})
-    tiers = _build_lotto_impl(flat, sets_per_tier, seed)
-    return {**analyzed, "tiers": tiers}
-
-
-@router.post("/analyze")
-async def analyze(req: DreamTextRequest) -> dict:
+@router.get("/keywords", response_model=DreamKeywordsResponse)
+async def list_keywords() -> dict:
     try:
-        return await asyncio.to_thread(_analyze_impl, req.text)
+        # 파일 읽기라 첫 호출만 잠깐 걸린다. 그래도 이벤트 루프를 막지 않는다.
+        words = await asyncio.to_thread(keywords_mod.get_keywords, settings.chroma_path)
     except FileNotFoundError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("dream analyze failed")
-        raise HTTPException(status_code=500, detail=f"분석 실패: {exc}") from exc
+        # 설정이 잘못된 것이지 사용자 요청이 잘못된 게 아니다. 조용히 빈 목록을 주면
+        # 프론트의 정적 페이지가 통째로 사라지고 며칠 뒤에야 발견된다.
+        logger.error("ChromaDB 를 찾을 수 없습니다: %s", exc)
+        raise HTTPException(
+            status_code=503, detail="꿈해몽 사전을 사용할 수 없습니다."
+        ) from exc
+
+    return {"total": len(words), "keywords": words}
 
 
-@router.post("/lotto")
-async def make_lotto(req: LottoRequest) -> dict:
-    try:
-        items = [s.model_dump() for s in req.selected]
-        return await asyncio.to_thread(
-            _build_lotto_impl, items, req.sets_per_tier, req.seed
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("dream lotto failed")
-        raise HTTPException(status_code=500, detail=f"번호 생성 실패: {exc}") from exc
-
-
-@router.post("/predict")
-async def predict(req: PredictRequest) -> dict:
+@router.post("/recommend", response_model=DreamRecommendResponse)
+async def recommend(req: DreamRequest) -> dict:
     try:
         return await asyncio.to_thread(
-            _predict_impl, req.text, req.sets_per_tier, req.seed
+            service.recommend,
+            req.text,
+            chroma_path=settings.chroma_path,
+            sets_per_tier=req.sets_per_tier,
+            seed=req.seed,
         )
     except FileNotFoundError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("dream predict failed")
-        raise HTTPException(status_code=500, detail=f"예측 실패: {exc}") from exc
+        logger.error("ChromaDB 를 찾을 수 없습니다: %s", exc)
+        raise HTTPException(
+            status_code=503, detail="꿈해몽 사전을 사용할 수 없습니다."
+        ) from exc

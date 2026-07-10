@@ -2,14 +2,21 @@
 
 사용 예:
     from app.prediction import predictor
-    result = predictor.predict(db_path="data/lotto.db")
+    result = predictor.predict(draws)      # draws: Sequence[Draw], round_no 오름차순
+
+**동기 함수다.** numpy 로 5만 회를 돌리는 동안 이벤트 루프가 멈추면 안 되므로,
+라우터가 `asyncio.to_thread` 로 감싼다. 이 분리를 유지한다
+(docs/wiki/40-domain/prediction-algorithm.md).
+
+과거에는 이 모듈이 `sqlite3` 로 DB 를 직접 열었다. 이제 데이터는 호출자가 넘긴다 —
+백엔드의 저장소는 Postgres 이고, 그 접근은 async 라 여기서 부를 수 없다. 알고리즘은
+한 줄도 바뀌지 않았다.
 """
 from __future__ import annotations
 
-import sqlite3
-from pathlib import Path
-from typing import Optional
+from typing import Optional, Sequence
 
+from ..domain.draw import Draw
 from .analyzer import delay, frequency, hot_cold, pattern
 from . import ensemble, montecarlo
 from .config import (
@@ -21,31 +28,13 @@ from .config import (
 )
 
 
-def _load_data(db_path: Path):
-    conn = sqlite3.connect(str(db_path))
-    try:
-        rows = conn.execute(
-            """
-            SELECT round_no, num1, num2, num3, num4, num5, num6, bonus
-              FROM lotto_results
-             ORDER BY round_no ASC
-            """
-        ).fetchall()
-    finally:
-        conn.close()
-    round_numbers = [r[0] for r in rows]
-    num_rows = [tuple(r[1:7]) for r in rows]
-    bonuses = [r[7] for r in rows]
-    return round_numbers, num_rows, bonuses
-
-
 def _top_n(scores: dict, n: int) -> list[dict]:
     items = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:n]
     return [{"number": k, "score": round(float(v), 4)} for k, v in items]
 
 
 def predict(
-    db_path: str | Path,
+    draws: Sequence[Draw],
     *,
     sets: int = RECOMMEND_SETS,
     simulations: int = MONTE_CARLO_SIMULATIONS,
@@ -54,11 +43,11 @@ def predict(
     seed: Optional[int] = None,
 ) -> dict:
     weights = weights or WEIGHTS
-    db_path = Path(db_path)
-    if not db_path.exists():
-        raise FileNotFoundError(f"DB 파일이 없습니다: {db_path}")
 
-    round_numbers, num_rows, bonuses = _load_data(db_path)
+    round_numbers = [d.round_no for d in draws]
+    num_rows = [d.numbers for d in draws]
+    bonuses = [d.bonus for d in draws]
+
     if len(num_rows) < MIN_REQUIRED_ROUNDS:
         raise ValueError(
             f"데이터가 부족합니다. 최소 {MIN_REQUIRED_ROUNDS}회차 필요, "

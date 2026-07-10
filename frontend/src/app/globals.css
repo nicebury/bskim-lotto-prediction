@@ -1,0 +1,8 @@
+/*
+ * 전역 스타일 진입점. 순서가 의미를 갖는다:
+ *   tokens → base → components
+ * 토큰이 먼저 선언돼야 base 와 components 가 var() 로 참조할 수 있다.
+ */
+@import '../styles/tokens.css';
+@import '../styles/base.css';
+@import '../styles/components.css';

@@ -1,21 +1,41 @@
 [project]
 name = "bskim-lotto-backend"
-version = "0.1.0"
-description = "로또 당첨번호 수집 시스템 백엔드 (FastAPI + aiosqlite)"
-requires-python = ">=3.10"
+version = "0.2.0"
+description = "행운상자 백엔드 — Postgres 를 읽어 계산하고 JSON 으로 제공하는 REST API"
+
+# 상한(<3.14)이 없으면 uv 가 늘 최신 인터프리터를 집어 torch import 가 깨진다.
+# 과거 사고의 원인이 정확히 이것이었다. docs/wiki/00-decisions/0008-python-313-torch-pin.md
+requires-python = ">=3.13,<3.14"
+
 dependencies = [
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.27.0",
-    "aiosqlite>=0.20.0",
-    "httpx>=0.27.0",
     "pydantic>=2.0.0",
+    "pydantic-settings>=2.2.0",
+    # Postgres. app_reader 롤로만 접속한다 — 쓰기는 권한이 막는다.
+    "psycopg[binary]>=3.2",
+    "psycopg-pool>=3.2",
     "numpy>=1.26.0",
-    "apscheduler>=3.10",
-    # Dream → Lotto pipeline
+    # 꿈해몽 파이프라인. torch 는 sentence-transformers → transformers 를 타고 딸려온다.
     "kiwipiepy>=0.17",
     "sentence-transformers>=2.7",
     "chromadb>=0.5",
+    # torch 2.11 은 Python 3.13 에서 import 시 IndentationError 로 죽는다. 2.13 이 3.13 을 공식 지원한다.
+    "torch>=2.13",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
 ]
 
 [tool.uv]
 package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+# DB 가 아직 없어도 순수 로직 테스트는 돌아야 한다. 통합 테스트는 스스로 skip 한다.
+markers = ["integration: 실제 Postgres 연결이 필요한 테스트"]
