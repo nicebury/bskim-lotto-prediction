@@ -122,64 +122,20 @@ export const SERVICE_ICONS = {
 
 export type ServiceIconKey = keyof typeof SERVICE_ICONS
 
-/* ────────────────────────────────────────────────────────────
- * 뉴스 썸네일용 아이콘.
- *
- * 백엔드가 기사 이미지를 주지 않는다([[api-contract]] 의 기사 객체에 이미지 필드가 없다).
- * 빈 회색 사각형을 두는 대신 복권 소재의 글리프로 채운다. 순수 장식이므로 제목이 정보를
- * 전달한다 — 아이콘이 기사 내용을 뜻하지 않는다.
- * ──────────────────────────────────────────────────────────── */
-
-/** 트로피 — 당첨 소식. */
-export function TrophyIcon(props: IconProps) {
-  return (
-    <svg {...BASE} {...props}>
-      <path d="M6 4h12v2h3v2.5A4.5 4.5 0 0 1 16.9 13a5.02 5.02 0 0 1-3.9 2.9V18h3a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2h3v-2.1A5.02 5.02 0 0 1 7.1 13 4.5 4.5 0 0 1 3 8.5V6h3V4Zm0 4H5v.5A2.5 2.5 0 0 0 6.6 10.8 6.9 6.9 0 0 1 6 8Zm12 0a6.9 6.9 0 0 1-.6 2.8A2.5 2.5 0 0 0 19 8.5V8h-1Z" />
-    </svg>
-  )
-}
-
-/** 복권 용지 — 발권·판매점 소식. */
-export function TicketIcon(props: IconProps) {
-  return (
-    <svg {...BASE} {...props}>
-      <path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2.2a2.8 2.8 0 0 0 0 5.6V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2.2a2.8 2.8 0 0 0 0-5.6V7Zm6.5 1.6a1 1 0 0 0 0 2h5a1 1 0 1 0 0-2h-5Zm0 4.8a1 1 0 1 0 0 2h5a1 1 0 1 0 0-2h-5Z"
-      />
-    </svg>
-  )
-}
-
-/** 확성기 — 공지·발표. */
-export function MegaphoneIcon(props: IconProps) {
-  return (
-    <svg {...BASE} {...props}>
-      <path d="M19.5 3.3c.9-.5 2 .2 2 1.2v15c0 1-1.1 1.7-2 1.2L14 17.6V6.4l5.5-3.1ZM12 7v10H8.3l1 3.4a1.4 1.4 0 0 1-1.35 1.8H6.6a1.4 1.4 0 0 1-1.34-1L3.9 17H3.6A2.6 2.6 0 0 1 1 14.4V9.6A2.6 2.6 0 0 1 3.6 7H12Z" />
-    </svg>
-  )
-}
-
-/** 상승 그래프 — 판매액·기금 소식. */
-export function TrendIcon(props: IconProps) {
-  return (
-    <svg {...BASE} {...props}>
-      <path d="M3.7 16.3a1.2 1.2 0 0 0 1.7 1.7l4.4-4.4 2.8 2.8c.5.5 1.2.5 1.7 0l5.4-5.4V14a1.2 1.2 0 1 0 2.4 0V8.2c0-.66-.54-1.2-1.2-1.2H15a1.2 1.2 0 1 0 0 2.4h2.9l-4.4 4.4-2.8-2.8a1.2 1.2 0 0 0-1.7 0l-5.3 5.3Z" />
-    </svg>
-  )
-}
-
 /**
- * 뉴스 썸네일 팔레트. 아이콘과 색을 짝지어 둔다.
- * `accent` 는 `--svc-*` 토큰 접미어다 — 사이트가 이미 쓰는 색에서만 고른다.
+ * 뉴스 썸네일 팔레트 (002 R13/R32).
+ *
+ * **모양은 뉴스(신문) 아이콘 하나로 통일하고 색만 바꾼다.** 종전에는 5종 아이콘(신문·
+ * 트로피·티켓·그래프·확성기)이 모양·색 모두 달라 제각각으로 보였다. 이제 아이콘은 항상
+ * `NewsIcon` 이고 `accent`(색)만 기사마다 다르게 배정한다. `accent` 는 `--svc-*` 토큰
+ * 접미어다 — 사이트가 이미 쓰는 색에서만 고른다.
  */
 export const NEWS_THUMBS = [
   { accent: 'news', Icon: NewsIcon },
-  { accent: 'lotto', Icon: TrophyIcon },
-  { accent: 'reco', Icon: TicketIcon },
-  { accent: 'stats', Icon: TrendIcon },
-  { accent: 'dream', Icon: MegaphoneIcon },
+  { accent: 'lotto', Icon: NewsIcon },
+  { accent: 'reco', Icon: NewsIcon },
+  { accent: 'stats', Icon: NewsIcon },
+  { accent: 'dream', Icon: NewsIcon },
 ] as const
 
 /** 문자열 해시. 같은 기사는 언제나 같은 값을 낸다. */

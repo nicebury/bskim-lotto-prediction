@@ -84,49 +84,6 @@ export function OverdueList({ items }: { items: { number: number; rounds_since: 
  * 넣어 body 가 넘치지 않게 한다(→ responsive-rules.md 차트 축약·가로 스크롤 금지).
  * 홈의 요약 카드는 상위 5개만 RankList 로 보여주고 전체는 통계 상세로 보낸다.
  */
-export function FrequencyChart({
-  counts,
-  scroll = false,
-}: {
-  /** 번호(문자열) → 출현 횟수. 서버가 준 그대로. */
-  counts: Record<string, number>
-  scroll?: boolean
-}) {
-  const numbers = Array.from({ length: 45 }, (_, i) => i + 1)
-  const values = numbers.map((n) => counts[String(n)] ?? 0)
-  const peak = Math.max(1, ...values)
-
-  const chart = (
-    <>
-      <div className="bar-chart">
-        {numbers.map((n, index) => {
-          const value = values[index]
-          return (
-            <span
-              key={n}
-              className={`bar${value === peak ? ' is-peak' : ''}`}
-              // 막대 하나하나에 접근 가능한 이름을 준다. 시각 정보를 말로 대체한다.
-              role="img"
-              aria-label={`${n}번 ${value}회`}
-              style={{ height: `${Math.max(4, (value / peak) * 100)}%` }}
-            />
-          )
-        })}
-      </div>
-      <p className="chart-axis" aria-hidden="true">
-        <span>1</span>
-        <span>10</span>
-        <span>20</span>
-        <span>30</span>
-        <span>40</span>
-        <span>45</span>
-      </p>
-    </>
-  )
-
-  return scroll ? <div className="bar-chart-scroll">{chart}</div> : chart
-}
-
 /**
  * 라벨-값 쌍 목록. 패턴 요약·조합 성향이 공유한다.
  *

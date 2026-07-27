@@ -5,9 +5,9 @@ description: "컴포넌트별 env.sample 명세, .env 열람 금지 규칙, 사�
 tags: [contract, security, ops, tbd]
 owner: shared
 status: stable
-sources: ["env.sample", "raw:작업지시서초안_보완.md#9"]
+sources: ["env.sample", "raw:작업지시서초안_보완.md#9", "raw:002-작업지시서_두번째_보완.md#7"]
 created: 2026-07-09
-updated: 2026-07-09
+updated: 2026-07-15
 ---
 
 # 환경변수 계약과 시크릿 취급 규약
@@ -248,6 +248,12 @@ NAVER_SITE_VERIFICATION=
 
 # ── 애드센스 (승인 후. 비어 있으면 광고 미렌더링) ──
 NEXT_PUBLIC_ADSENSE_CLIENT=
+
+# ── 무료 이미지 (Pexels) ─────────────────────────
+# 상세페이지 이미지를 빌드/개발 시점에 골라 public 에 내려받는 큐레이션용.
+# ★ NEXT_PUBLIC_ 을 붙이지 않는다 — API 키는 서버(빌드 스크립트/서버 컴포넌트)에서만
+#   읽고 브라우저 번들에 노출하지 않는다. 사용 방식·저작권: [[pexels-image-usage]]
+PEXELS_API_KEY=
 ```
 
 ### `NEXT_PUBLIC_` 접두어의 의미
@@ -279,6 +285,7 @@ NEXT_PUBLIC_ADSENSE_CLIENT=
 | `NEXT_PUBLIC_SITE_URL` | frontend | **도메인 미확정** | Phase 4 |
 | `NEXT_PUBLIC_CONTACT_EMAIL` | frontend | ✅ 채움 (2026-07-09) | — |
 | `NEXT_PUBLIC_ADSENSE_CLIENT` | frontend | 승인 후 | 광고 게재 |
+| `PEXELS_API_KEY` | frontend | ✅ 채움 (2026-07-15, `.env_frontend`) | — (서버 전용 키. 브라우저 노출 금지) |
 
 네이버 API 키가 채워졌고 일일 쿼터도 **25,000** 으로 확인되어 `NEWS_CRON` 이 확정됐다 ([[naver-search-api]]).
 

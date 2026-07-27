@@ -11,13 +11,13 @@ import { NextDrawCard } from '@/components/NextDrawCard'
 import { RecommendCarousel } from '@/components/RecommendCarousel'
 import { ServiceTiles } from '@/components/ServiceTiles'
 import { HeroArt } from '@/components/HeroArt'
-import { ColdCard, FrequencyCard, HotCard, PatternCard } from '@/components/StatCards'
+import { StatBoard } from '@/components/StatBoard'
 import {
   getFrequency,
   getHotCold,
   getLatestRound,
   getNews,
-  getPattern,
+  getPairs,
   serverRecommend,
 } from '@/lib/api'
 import { DISCLAIMER, GUIDES } from '@/lib/site'
@@ -31,11 +31,11 @@ const HOME_WINDOW = 20
 
 export default async function HomePage() {
   // 서로 의존하지 않는 요청이므로 병렬로 던진다. 하나가 실패해도 나머지는 그려진다.
-  const [latest, hotCold, frequency, pattern, newsPage, ...recommends] = await Promise.all([
+  const [latest, hotCold, frequency, pairs, newsPage, ...recommends] = await Promise.all([
     getLatestRound(),
     getHotCold(HOME_WINDOW),
     getFrequency(HOME_WINDOW),
-    getPattern(HOME_WINDOW),
+    getPairs(HOME_WINDOW), // 동반 출현 탭. 백엔드가 아직 안 주면 null → 탭이 "준비 중".
     getNews(1, 3),
     ...HOME_STRATEGIES.map((strategy) => serverRecommend(strategy, 1)),
   ])
@@ -70,12 +70,17 @@ export default async function HomePage() {
             최신 당첨결과, 번호 통계, 복권 뉴스, 재미있는 번호 추천까지 한 곳에서 쉽고 빠르게
             확인할 수 있습니다.
           </p>
+          {/*
+            히어로 CTA 2버튼(002 R7). 'AI' 는 예측이 아니라 '조합' 언어에 정합하게
+            "AI 번호 조합 추천" 으로 쓴다([[forbidden-expressions]] AI 라벨 규칙).
+            최신 회차는 네비·하단 결과 카드로 접근 가능해 히어로에서 뺀다.
+          */}
           <div className="hero-cta">
-            <Link className="btn btn-primary" href="/lotto/latest">
-              최신 로또 결과 보기
+            <Link className="btn btn-primary" href="/lotto/recommend">
+              AI 번호 조합 추천
             </Link>
-            <Link className="btn btn-secondary" href="/lotto/recommend">
-              번호 추천 시뮬레이션
+            <Link className="btn btn-secondary" href="/dream">
+              꿈으로 번호찾기
             </Link>
           </div>
         </div>
@@ -123,12 +128,7 @@ export default async function HomePage() {
           </h2>
           <MoreLink href="/lotto/stat" />
         </div>
-        <div className="stat-grid">
-          <HotCard data={hotCold} />
-          <ColdCard data={hotCold} />
-          <FrequencyCard data={frequency} />
-          <PatternCard data={pattern} />
-        </div>
+        <StatBoard hotCold={hotCold} frequency={frequency} pairs={pairs} window={HOME_WINDOW} />
         <Disclaimer spaced>{DISCLAIMER.stats}</Disclaimer>
       </section>
 

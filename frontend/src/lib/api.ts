@@ -25,7 +25,9 @@ import type {
   FrequencyResult,
   HotColdResult,
   NewsItem,
+  NewsPeriod,
   Paged,
+  PairsResult,
   PatternResult,
   RecommendResult,
   RecommendStrategy,
@@ -37,6 +39,18 @@ import type {
 
 /** 백엔드가 응답하지 않을 때 페이지 렌더를 더 기다리지 않는다. 빌드가 멈추면 안 된다. */
 const TIMEOUT_MS = 5_000
+
+/**
+ * 번호 추천은 **계산**이라 조회보다 오래 걸린다. `ensemble` 은 몬테카를로 50,000회
+ * 시뮬레이션이다. 단독으로는 2.6초지만 동시에 두 개가 겹치면 16.4초가 걸린다(실측).
+ * 정적 생성 시점에는 홈(전략 5개)과 추천 페이지가 함께 요청하고, 그 옆에서 회차 상세가
+ * 백엔드를 두드린다. 5초로는 부족해 실제로 타임아웃이 났고 추천 페이지가 "데이터가
+ * 부족합니다" 폴백으로 구워졌다.
+ *
+ * 이 호출은 빌드와 ISR 재검증 때만 일어난다. 빌드가 조금 느려지더라도 페이지에 번호가
+ * 담기는 편이 낫다.
+ */
+const RECOMMEND_TIMEOUT_MS = 45_000
 
 /** ISR 재검증 주기(초). 정본은 docs/wiki/30-seo/metadata-strategy.md 의 렌더링 전략표. */
 export const REVALIDATE = {
@@ -129,15 +143,43 @@ export function getPattern(window: StatWindow = 20): Promise<PatternResult | nul
   return getJson<PatternResult>(`/api/lotto/stats/pattern?window=${window}`, REVALIDATE.stat)
 }
 
+/**
+ * 동반 출현(002 개편). `number` 를 주면 그 번호와 함께 나온 상대, 없으면 전체 상위쌍.
+ * 백엔드가 아직 이 엔드포인트를 구현하지 않았으면 404 → null 을 반환하고, 화면은 그 탭을
+ * "준비 중" 으로 그린다.
+ */
+export function getPairs(
+  window: StatWindow = 20,
+  options: { number?: number; top?: number } = {},
+): Promise<PairsResult | null> {
+  const query = new URLSearchParams({ window: String(window) })
+  if (options.number !== undefined) query.set('number', String(options.number))
+  if (options.top !== undefined) query.set('top', String(options.top))
+  return getJson<PairsResult>(`/api/lotto/stats/pairs?${query.toString()}`, REVALIDATE.stat)
+}
+
 /* ────────────────────────────────────────────────────────────
  * 뉴스
  * ──────────────────────────────────────────────────────────── */
 
-export async function getNews(page = 1, size = 20): Promise<Paged<NewsItem>> {
-  const payload = await getJson<Paged<NewsItem>>(
-    `/api/news?page=${page}&size=${size}`,
-    REVALIDATE.news,
-  )
+/**
+ * 뉴스 목록.
+ *
+ * `keyword`·`period` 는 002 개편으로 추가된 조회 조건이다(하위호환 — 생략하면 종전과 동일).
+ * ⚠ **API 기본값은 `period=all`** 이지만, 뉴스 페이지 화면은 `1w`(최근 1주)를 명시적으로
+ *   넘긴다. "API 기본값" 과 "화면 기본값" 을 구분한다([[api-contract]] 뉴스 절).
+ */
+export async function getNews(
+  page = 1,
+  size = 20,
+  options: { keyword?: string; period?: NewsPeriod } = {},
+): Promise<Paged<NewsItem>> {
+  const query = new URLSearchParams({ page: String(page), size: String(size) })
+  const keyword = options.keyword?.trim()
+  if (keyword) query.set('keyword', keyword)
+  if (options.period) query.set('period', options.period)
+
+  const payload = await getJson<Paged<NewsItem>>(`/api/news?${query.toString()}`, REVALIDATE.news)
   return payload ?? { total: 0, page, size, items: [] }
 }
 
@@ -191,7 +233,7 @@ export async function serverRecommend(
       //   캐시 대상이 아니므로, 재검증 힌트만 남기고 no-store 를 쓰지 않는다. 이 호출은
       //   ISR 페이지가 재생성될 때만 일어나고, 그 주기가 곧 추천 갱신 주기가 된다.
       next: { revalidate: REVALIDATE.home },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(RECOMMEND_TIMEOUT_MS),
     })
     if (!res.ok) {
       // 422 = 회차 부족. 정상 흐름이므로 조용히 null.
@@ -213,8 +255,8 @@ export async function serverRecommend(
  * → docs/wiki/30-seo/metadata-strategy.md 렌더링 전략
  * ──────────────────────────────────────────────────────────── */
 
-/** 사용자가 버튼을 눌러 기다리는 요청이라 서버 렌더보다 넉넉히 준다. */
-const BROWSER_TIMEOUT_MS = 15_000
+/** 사용자가 버튼을 눌러 기다리는 요청이라 넉넉히 준다(몬테카를로 계산). */
+const BROWSER_TIMEOUT_MS = 20_000
 /** 꿈해몽 첫 요청은 임베딩 모델 lazy 로드로 20초가 걸린다(dream-pipeline.md). */
 const DREAM_TIMEOUT_MS = 40_000
 

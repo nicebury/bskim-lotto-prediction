@@ -3,14 +3,13 @@ import type { Metadata } from 'next'
 
 import { AdSlot } from '@/components/AdSlot'
 import { Breadcrumb } from '@/components/Breadcrumb'
-import { Card, EmptyState, MoreLink } from '@/components/Card'
+import { Card, MoreLink } from '@/components/Card'
 import { Disclaimer } from '@/components/Disclaimer'
 import { LatestRoundCard } from '@/components/LatestRoundCard'
 import { NewsList } from '@/components/NewsList'
 import { NextDrawCard } from '@/components/NextDrawCard'
-import { ColdCard, FrequencyCard, HotCard, PatternCard } from '@/components/StatCards'
-import { OverdueList } from '@/components/stats'
-import { getFrequency, getHotCold, getLatestRound, getNews, getPattern } from '@/lib/api'
+import { StatBoard } from '@/components/StatBoard'
+import { getFrequency, getHotCold, getLatestRound, getNews, getPairs } from '@/lib/api'
 import { DISCLAIMER } from '@/lib/site'
 
 export const revalidate = 3600
@@ -18,14 +17,14 @@ export const revalidate = 3600
 export const metadata: Metadata = {
   title: '로또 6/45 대시보드 — 최신 당첨결과와 번호 통계',
   description:
-    '최신 회차 당첨번호, 최근 20회 HOT·COLD 번호, 출현 빈도, 패턴 요약을 한눈에 봅니다.',
+    '최신 회차 당첨번호, 최근 20회 많이 나온 번호와 안 나오던 번호, 출현 빈도, 패턴 요약을 한눈에 봅니다.',
   alternates: { canonical: '/lotto' },
   openGraph: {
     type: 'website',
     url: '/lotto',
     title: '로또 6/45 대시보드 — 최신 당첨결과와 번호 통계',
     description:
-      '최신 회차 당첨번호, 최근 20회 HOT·COLD 번호, 출현 빈도, 패턴 요약을 한눈에 봅니다.',
+      '최신 회차 당첨번호, 최근 20회 많이 나온 번호와 안 나오던 번호, 출현 빈도, 패턴 요약을 한눈에 봅니다.',
   },
 }
 
@@ -37,11 +36,11 @@ const WINDOW = 20
  * → docs/raw/작업지시초안.md 7장
  */
 export default async function LottoDashboardPage() {
-  const [latest, hotCold, frequency, pattern, newsPage] = await Promise.all([
+  const [latest, hotCold, frequency, pairs, newsPage] = await Promise.all([
     getLatestRound(),
     getHotCold(WINDOW),
     getFrequency(WINDOW),
-    getPattern(WINDOW),
+    getPairs(WINDOW),
     getNews(1, 4),
   ])
 
@@ -77,41 +76,19 @@ export default async function LottoDashboardPage() {
         </div>
       </section>
 
-      {/* 중단: 통계 4카드 + 오래 안 나온 번호 */}
+      {/* 중단: 주요 통계 (홈과 같은 StatBoard) */}
       <section className="section" aria-labelledby="stat-title">
         <div className="section-head">
           <h2 id="stat-title">
             번호 통계
-            <span className="section-note">(최근 {WINDOW}회 기준)</span>
+            <span className="section-note">
+              (최근 <strong>{WINDOW}</strong>회 기준)
+            </span>
           </h2>
           <MoreLink href="/lotto/stat" />
         </div>
 
-        <div className="stat-grid">
-          <HotCard data={hotCold} />
-          <ColdCard data={hotCold} />
-          <FrequencyCard data={frequency} />
-          <PatternCard data={pattern} />
-        </div>
-
-        <div style={{ marginTop: 'var(--space-4)' }}>
-          <Card
-            as="article"
-            title="오래 안 나온 번호"
-            titleAs="h3"
-            action={<MoreLink href="/lotto/stat/hot-cold" />}
-          >
-            {hotCold && hotCold.overdue.length > 0 ? (
-              <OverdueList items={hotCold.overdue.slice(0, 5)} />
-            ) : (
-              <EmptyState>통계를 불러오지 못했습니다.</EmptyState>
-            )}
-            <p className="muted" style={{ fontSize: 'var(--fs-xs)', marginTop: 'var(--space-3)' }}>
-              마지막 출현 이후 지난 회차 수입니다. 오래 나오지 않았다고 해서 나올 차례가 된 것은
-              아닙니다.
-            </p>
-          </Card>
-        </div>
+        <StatBoard hotCold={hotCold} frequency={frequency} pairs={pairs} window={WINDOW} />
 
         <Disclaimer spaced>{DISCLAIMER.stats}</Disclaimer>
       </section>
@@ -161,7 +138,7 @@ export default async function LottoDashboardPage() {
         </p>
         <p>
           이 페이지의 통계는 과거 회차에서 각 번호가 몇 번 나왔는지를 세어 정리한 것입니다.
-          최근에 자주 나온 번호를 HOT, 적게 나온 번호를 COLD라고 부르지만 이는 지난 회차를 요약한
+          최근에 자주 나온 번호를 HOT, 적게 나온 번호를 안 나오던 번호라고 부르지만 이는 지난 회차를 요약한
           이름일 뿐입니다. 추첨은 매 회차 독립적으로 이루어지므로, 특정 번호가 최근에 자주
           나왔거나 오래 나오지 않았다는 사실은 다음 회차의 결과에 아무런 영향을 주지 않습니다.
         </p>

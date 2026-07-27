@@ -5,9 +5,9 @@ description: "게임 규칙, 등위 판정, 추첨 시각, 번호 볼 5구간 �
 tags: [domain]
 owner: shared
 status: stable
-sources: ["backend/app/scheduler.py:71", "frontend/src/components/LottoBall.jsx:1-7"]
+sources: ["backend/app/scheduler.py:71", "frontend/src/components/LottoBall.jsx:1-7", "raw:002-작업지시서_두번째_보완.md#3.8"]
 created: 2026-07-09
-updated: 2026-07-09
+updated: 2026-07-15
 ---
 
 # 로또 6/45 규칙과 추첨 일정
@@ -33,6 +33,8 @@ updated: 2026-07-09
 ## 추첨 일정
 
 **매주 토요일 20:35~20:45 KST** 에 추첨한다. 워커의 `lotto` 잡이 21:00 에 도는 이유다 — 결과가 소스에 반영될 시간을 준다 ([[worker-jobs]]).
+
+**사용자 노출 문구 (002 R22).** 가이드 등 화면에서는 "매주 토요일 **오후 8시 35분경**에 추첨" 으로 쓴다(방송 시작 시각 기준). "OO시 OO분" 자리표시자나 "20:45" 같은 24시간 표기를 그대로 노출하지 않는다 — 40대+ 가독성을 위해 "오후 8시 35분경" 을 표준으로 한다. 추첨 종료 시각은 회차마다 달라 "경" 을 붙인다.
 
 코드상 크론: `CronTrigger(day_of_week="sat", hour=21, minute=0, timezone=KST)` (`backend/app/scheduler.py:71`)
 

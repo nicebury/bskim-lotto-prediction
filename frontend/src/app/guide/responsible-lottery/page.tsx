@@ -3,6 +3,8 @@ import type { Metadata } from 'next'
 
 import { Breadcrumb } from '@/components/Breadcrumb'
 import { Disclaimer } from '@/components/Disclaimer'
+import { GuideHeroImage } from '@/components/GuideHeroImage'
+import { GuideNav } from '@/components/GuideNav'
 import { JsonLd, articleLd } from '@/components/JsonLd'
 import { SITE_NAME, SITE_URL } from '@/lib/env'
 
@@ -36,6 +38,7 @@ export default function ResponsibleLotteryPage() {
           <p className="muted" style={{ marginTop: 'var(--space-2)' }}>
             복권은 투자가 아니라 오락입니다. 즐길 수 있는 범위 안에서 이용하세요.
           </p>
+          <GuideHeroImage slug="responsible-lottery" alt="균형 저울과 하트, 달력이 어우러진 건전한 이용 일러스트" />
         </section>
 
         <section className="section prose">
@@ -75,8 +78,12 @@ export default function ResponsibleLotteryPage() {
           </ul>
           <p>
             이런 신호가 반복된다면 혼자 해결하려 하지 말고 전문 상담기관의 도움을 받으시기
-            바랍니다. 도박 문제는 의지의 문제가 아니라 도움을 받아 다룰 수 있는 문제입니다. 국내에는
-            도박 문제를 무료로 상담해 주는 공공기관이 있습니다.
+            바랍니다. 도박 문제는 의지의 문제가 아니라 도움을 받아 다룰 수 있는 문제입니다.
+          </p>
+          <p>
+            <strong>한국도박문제예방치유원</strong>이 도박 문제를 무료로 상담해 줍니다. 전국
+            어디서나 <strong>국번 없이 1336</strong>으로 전화하면 24시간 상담받을 수 있고, 본인은
+            물론 가족도 상담을 신청할 수 있습니다. 비밀은 보장됩니다.
           </p>
 
           <h2>19세 미만은 구매할 수 없다</h2>
@@ -111,6 +118,8 @@ export default function ResponsibleLotteryPage() {
         </section>
       </article>
 
+      <GuideNav current="responsible-lottery" />
+
       <JsonLd
         data={articleLd({
           headline: '건전한 복권 이용 안내',
@@ -118,6 +127,7 @@ export default function ResponsibleLotteryPage() {
           siteName: SITE_NAME,
           siteUrl: SITE_URL,
           datePublished: '2026-07-09',
+          dateModified: '2026-07-15',
         })}
       />
     </div>

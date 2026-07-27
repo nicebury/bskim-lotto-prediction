@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     type: 'website',
     url: '/lotto/stat',
     title: '로또 번호 통계',
-    description: '번호별 출현 빈도, HOT·COLD 번호, 홀짝·고저·합계 패턴 통계.',
+    description: '번호별 출현 빈도, 많이 나온 번호와 안 나오던 번호, 홀짝·고저·합계 패턴 통계.',
   },
 }
 

@@ -154,28 +154,81 @@ async def all_draws(pool: AsyncConnectionPool) -> list[Draw]:
 # ── 뉴스 ────────────────────────────────────────────────────────────────
 
 
-async def count_news(pool: AsyncConnectionPool) -> int:
-    row = await _fetchone(pool, "SELECT count(*) AS c FROM lotto_news")
+def _like_escape(term: str) -> str:
+    """ILIKE 패턴에 넣을 사용자 입력을 리터럴로 만든다.
+
+    이스케이프하지 않으면 사용자가 넣은 `%` 나 `_` 가 와일드카드로 해석돼, `%` 하나가
+    전체 기사와 매치하는 등 검색 의미가 왜곡된다. 기본 ESCAPE 문자인 백슬래시를 먼저
+    이스케이프하고 두 와일드카드를 막는다.
+    """
+    return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _news_where(keyword: Optional[str], since_days: Optional[int]) -> tuple[str, list]:
+    """뉴스 조회 필터를 count 와 list 가 공유한다.
+
+    total 이 '필터 적용 후' 건수여야 하므로(페이지네이션 봉투 규약), 두 쿼리가 반드시
+    같은 WHERE 를 써야 한다. 한 곳에서 만들어 양쪽에 넘긴다.
+    """
+    clauses: list[str] = []
+    params: list = []
+
+    if keyword:
+        # title·summary·keyword_list 중 하나라도 대소문자 무시 포함. keyword_list 는
+        # text[] 라 unnest 해 각 원소를 검사한다.
+        pattern = f"%{_like_escape(keyword)}%"
+        clauses.append(
+            "(title_nm ILIKE %s OR summary_desc ILIKE %s "
+            "OR EXISTS (SELECT 1 FROM unnest(keyword_list) k WHERE k ILIKE %s))"
+        )
+        params += [pattern, pattern, pattern]
+
+    if since_days is not None:
+        # published_dttm 이 NULL 인 기사는 이 비교에서 자연히 빠진다 — 발행일을 모르는
+        # 기사를 '최근 1주일' 에 넣을 근거가 없다.
+        clauses.append("published_dttm >= now() - make_interval(days => %s)")
+        params.append(since_days)
+
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    return where, params
+
+
+async def count_news(
+    pool: AsyncConnectionPool,
+    *,
+    keyword: Optional[str] = None,
+    since_days: Optional[int] = None,
+) -> int:
+    where, params = _news_where(keyword, since_days)
+    row = await _fetchone(pool, f"SELECT count(*) AS c FROM lotto_news{where}", tuple(params))
     return int(row["c"]) if row else 0
 
 
-async def list_news(pool: AsyncConnectionPool, *, page: int, size: int) -> list[dict]:
+async def list_news(
+    pool: AsyncConnectionPool,
+    *,
+    page: int,
+    size: int,
+    keyword: Optional[str] = None,
+    since_days: Optional[int] = None,
+) -> list[dict]:
     """최신 기사가 먼저.
 
     `published_dttm` 이 NULL 인 기사를 뒤로 보내고(`NULLS LAST`), 같은 시각이면
     `news_id` 로 순서를 확정한다. 정렬이 불안정하면 페이지 경계에서 같은 기사가 두 번
     보이거나 아예 빠진다.
     """
+    where, params = _news_where(keyword, since_days)
     rows = await _fetchall(
         pool,
-        """
+        f"""
         SELECT news_id, title_nm, summary_desc, link_url, orig_link_url,
                provider_nm, published_dttm, keyword_list
-          FROM lotto_news
+          FROM lotto_news{where}
          ORDER BY published_dttm DESC NULLS LAST, news_id DESC
          LIMIT %s OFFSET %s
         """,
-        (size, (page - 1) * size),
+        (*params, size, (page - 1) * size),
     )
     return [
         {

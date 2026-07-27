@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useId, useRef, useState } from 'react'
 
 import { NAV_ITEMS } from '@/lib/site'
+import { LogoMark } from './LogoMark'
 import { useModalBehavior } from './useModalBehavior'
 
 /**
@@ -34,9 +35,7 @@ export function Header({ siteName }: { siteName: string }) {
     <header className="site-header">
       <div className="container header-inner">
         <Link className="logo" href="/">
-          <span className="logo-mark" aria-hidden="true">
-            행
-          </span>
+          <LogoMark />
           {siteName}
         </Link>
 

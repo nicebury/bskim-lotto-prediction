@@ -8,6 +8,7 @@ import { strategyMeta } from '@/lib/strategies'
 import { traitSummaryLine } from '@/lib/traits'
 import { CLOSE_DELAY_MS, GENERATE_STEPS, GenerateProgress, STEP_AT_MS } from './GenerateProgress'
 import { LottoBall } from './LottoBall'
+import { NumberActions } from './NumberActions'
 
 export interface CarouselItem {
   strategy: RecommendStrategy
@@ -154,9 +155,20 @@ function RecommendCard({ item }: { item: CarouselItem }) {
         <p className="reco-traits">{meta.short}</p>
       )}
 
-      <button type="button" className="btn btn-secondary" onClick={regenerate} disabled={busy}>
-        다시 생성
-      </button>
+      {/* '다시 생성'이 주 동작이라 전폭으로 두고, 내보내기 셋을 그 아래 3열로 눕힌다. */}
+      <div className="reco-actions">
+        <button type="button" className="btn btn-secondary" onClick={regenerate} disabled={busy}>
+          다시 생성
+        </button>
+        {set && (
+          <NumberActions
+            numbers={set.numbers}
+            strategyLabel={meta.label}
+            subtitle={traitSummaryLine(set.traits)}
+            compact
+          />
+        )}
+      </div>
 
       {busy && (
         <GenerateProgress

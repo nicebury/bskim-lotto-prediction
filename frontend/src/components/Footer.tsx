@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import { GUIDES, NAV_ITEMS, POLICY_PAGES } from '@/lib/site'
+import { LogoMark } from './LogoMark'
 
 /**
  * 푸터. 정책 페이지 4종으로 가는 링크가 여기 있다 — 애드센스 심사자가 가장 먼저 찾는
@@ -18,9 +19,7 @@ export function Footer({ siteName }: { siteName: string }) {
         <div className="footer-grid">
           <div className="footer-brand">
             <Link className="logo" href="/">
-              <span className="logo-mark" aria-hidden="true">
-                행
-              </span>
+              <LogoMark />
               {siteName}
             </Link>
             <p>
@@ -70,11 +69,19 @@ export function Footer({ siteName }: { siteName: string }) {
           면책 고지는 푸터에도 상시 노출한다. 사용자가 어느 페이지에 있든 이 서비스가
           복권을 판매하지 않고 당첨을 보장하지 않는다는 사실을 볼 수 있어야 한다.
         */}
+        {/*
+          면책 문구를 의미 단위로 분할한다(002 R1~R4). 절제 원칙: 색은 한 곳(참고용·재미용),
+          볼드는 한 곳(당첨 미보장). 과하면 불안감을 준다. 19세 미만 안내는 별도 줄로 내린다.
+        */}
         <div className="footer-bottom">
           <p className="footer-disclaimer">
-            본 사이트는 복권 관련 정보와 통계를 제공하는 서비스이며, 추천번호는 참고용·재미용
-            시뮬레이션입니다. 당첨을 보장하지 않으며, 실제 복권 구매 여부와 책임은 이용자 본인에게
-            있습니다. 19세 미만은 복권을 구매할 수 없습니다.
+            본 사이트는 복권 관련 정보와 통계를 제공하는 서비스이며,{' '}
+            <span className="footer-disclaimer-accent">추천번호는 참고용·재미용 시뮬레이션입니다.</span>{' '}
+            <strong>
+              당첨을 보장하지 않으며, 실제 복권 구매 여부와 책임은 이용자 본인에게 있습니다.
+            </strong>
+            <br />
+            19세 미만은 복권을 구매할 수 없습니다.
           </p>
           <p style={{ marginTop: 'var(--space-3)' }}>
             © {year} {siteName}. All rights reserved.

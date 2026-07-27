@@ -5,14 +5,16 @@ description: "프론트엔드가 의존하는 백엔드 엔드포인트·응답 
 tags: [contract, api, policy]
 owner: backend
 status: stable
-sources: ["backend/app/routers/", "raw:작업지시서초안_보완.md#8.2", "raw:작업지시초안.md#13.3"]
+sources: ["backend/app/routers/", "raw:작업지시서초안_보완.md#8.2", "raw:작업지시초안.md#13.3", "raw:002-작업지시서_두번째_보완.md#4.2"]
 created: 2026-07-09
-updated: 2026-07-09
+updated: 2026-07-15
 ---
 
 # 백엔드 REST API 계약
 
 > 2026-07-09 보강: 응답 스키마가 비어 있던 여섯 곳(페이지네이션 봉투, 회차 `traits`, `stats/pattern`, `hot-cold`, `dream/*`, `news`)을 확정했다. 엔드포인트·필드명·표현 규약은 바뀌지 않았다. 경위는 [[log|log.md]].
+>
+> **2026-07-15 계약 변경 (002 개편)**: 세 가지를 더했다 — ① `hot-cold` 응답의 `hot`·`cold` 항목에 `appearance_rate`·`last_seen_round`·`trend` 를 추가, ② 신규 엔드포인트 `GET /api/lotto/stats/pairs`(동반 출현), ③ `GET /api/news` 에 `keyword`·`period` 파라미터 추가. **기존 필드·엔드포인트는 그대로**라 하위호환이며, 근거는 [`002-작업지시서_두번째_보완.md`](../../raw/002-작업지시서_두번째_보완.md) 4·5장, 경위는 [[log|log.md]].
 
 이 페이지는 **계약**이다. 프론트엔드는 이 문서만 읽고 개발한다 — 백엔드 코드를 읽지 않는다. 백엔드는 이 문서를 구현한다. 어긋나면 코드가 틀린 것이다.
 
@@ -142,6 +144,7 @@ GET /api/lotto/rounds/{round_no}              # 없으면 404
 GET /api/lotto/stats/frequency?window=20|50|100|all&include_bonus=false
 GET /api/lotto/stats/hot-cold?window=20|50|100|all
 GET /api/lotto/stats/pattern?window=20|50|100|all
+GET /api/lotto/stats/pairs?window=20|50|100|all&number=&top=10    # 동반 출현 (2026-07-15)
 ```
 
 `window` 는 최근 몇 회차를 볼지다. 초안 8.2 가 20/50/100 을 모두 요구한다. 기존 구현은 `hot_rounds=20` 으로 고정돼 있었다 (`backend/app/prediction/config.py:5`) — 신규 API 는 이를 일반화한다. `all` 은 역대 전체.
@@ -158,13 +161,46 @@ hot-cold 응답은 `hot`, `cold`, `overdue` 세 배열이다. `hot` 과 `cold` �
 {
   "window": 20,
   "rounds_analyzed": 20,
-  "hot":  [{ "number": 12, "count": 6 }],
-  "cold": [{ "number": 9,  "count": 0 }],
-  "overdue": [{ "number": 4, "rounds_since": 37 }]
+  "hot":  [{ "number": 33, "count": 13, "appearance_rate": 0.65, "last_seen_round": 1182, "trend": "up" }],
+  "cold": [{ "number": 9,  "count": 0,  "appearance_rate": 0.0,  "last_seen_round": null, "trend": "flat" }],
+  "overdue": [{ "number": 4, "rounds_since": 37, "last_seen_round": 1147 }]
 }
 ```
 
 `rounds_since` 는 최신 회차 기준이다. 최신 회차에 나온 번호는 `0` 이다. 역대 한 번도 나오지 않은 번호는 (실데이터에는 없지만) 전체 회차 수를 반환한다.
+
+**002 개편으로 `hot`·`cold` 항목에 세 필드를 더한다** (주요통계 샘플의 표 열 — 출현 횟수·출현 비율·최근 출현·추세):
+
+- **`appearance_rate`** — `count / rounds_analyzed`. `0.0~1.0` 의 **과거 출현 비율**이다. 프론트는 `65%` 처럼 표시하되 "지난 N회 중 나온 비율" 임이 드러나게 라벨한다. **이것은 다음 회차 확률이 아니다** — `probability` 로 이름 짓지 않고 `appearance_rate` 로 두는 이유이자, [[forbidden-expressions]] 가 요구하는 "사실만 반환" 이다.
+- **`last_seen_round`** — 그 번호가 **마지막으로 나온 회차 번호**(절대값, 예 `1182`). window 밖이어도 역대 전체에서 찾는다. window 안에서 한 번도 안 나왔고 역대로도 없으면 `null`.
+- **`trend`** — `"up" | "down" | "flat"`. `window` 를 회차 기준 **최근 절반 vs 이전 절반**으로 나눠 출현 횟수를 비교한다. 최근 절반이 더 많으면 `up`, 적으면 `down`, 같으면 `flat`. 홀수 window 는 가운데 회차를 최근 쪽에 넣는다. **이것도 관찰된 추세일 뿐 예측이 아니다** — UI 문구가 "오를 것" 처럼 읽히지 않게 한다. window 가 2회 미만이면 항상 `flat`.
+
+`overdue` 에는 `last_seen_round` 만 추가한다(비율·추세는 미출현 목록에 의미가 없다).
+
+#### 동반 출현 (2026-07-15 신규)
+
+주요통계 '동반 출현' 탭용. **함께 자주 나온 번호쌍**을 센다. `pair_affinity` 전략이 내부에서 쓰던 동시출현 집계를 사용자에게 노출하는 것이다.
+
+```
+GET /api/lotto/stats/pairs?window=20|50|100|all&number=&top=10
+```
+
+- `number`(선택, 1~45) — 주면 그 번호와 함께 나온 상대 번호를 많이 나온 순으로 준다. 생략하면 **전체 번호쌍 중 동시출현이 많은 순**.
+- `top`(선택, 기본 10, 최대 45) — 반환 개수.
+
+```json
+{
+  "window": 20,
+  "rounds_analyzed": 20,
+  "number": null,
+  "pairs": [
+    { "numbers": [18, 33], "count": 5 },
+    { "numbers": [12, 27], "count": 4 }
+  ]
+}
+```
+
+`numbers` 는 항상 오름차순 2개. `count` 는 `window` 안에서 그 두 번호가 **같은 회차에 함께 나온 횟수**다. `number` 를 준 경우 각 `numbers` 는 `[요청번호, 상대번호]` 가 아니라 여전히 **오름차순**이며, 응답 최상위 `number` 로 어떤 번호 기준인지 구분한다. 동시출현 역시 관찰된 사실이고, 이 값이 "이 쌍이 또 나온다" 를 뜻하지 않는다 — 확률 표현을 붙이지 않는다.
 
 pattern 응답은 역대 조합이 어떤 모양이었는지의 분포다. 비율(`0.0~1.0`)은 관찰된 **빈도의 비율**이지 다음 회차의 무엇이 아니다.
 
@@ -259,10 +295,19 @@ POST /api/dream/recommend   { "text": "돼지가 나오는 꿈을 꿨어요" }
 ### 뉴스
 
 ```
-GET /api/news?page=1&size=20                  # size 최대 100
+GET /api/news?page=1&size=20&keyword=&period=all    # size 최대 100
 ```
 
 응답은 [페이지네이션 봉투](#페이지네이션-봉투)이고, `items` 의 기사 객체는 `id`, `title`, `description`, `link`, `orig_link`, `source`, `pub_date`, `keywords` 다. 정렬은 `pub_date` 내림차순. `description` 은 원문이 아니라 요약이다. 프론트는 `link` 를 `rel="nofollow noopener"` 와 `target="_blank"` 로 연다.
+
+**002 개편으로 조회 조건 두 개를 더한다** (하위호환 — 생략하면 종전과 동일):
+
+- **`keyword`**(선택) — 공백 제거 후 비어 있지 않으면, `title`·`description`·`keywords` 중 하나라도 그 문자열을 **대소문자 무시 포함**하는 기사만 남긴다. 원천에 `keyword_list`(text[])·제목·요약이 이미 저장돼 있어 워커 변경 없이 백엔드 WHERE 로 처리한다.
+- **`period`**(선택, 기본 `all`) — `pub_date` 기준 최근 기간 필터. 허용값 `1w | 2w | 1m | 3m | 6m | all`. `1w` = 최근 7일(`pub_date >= now() - interval '7 days'`), `1m`=30일, `3m`=90일, `6m`=180일. 그 외 값은 `422`.
+
+`total` 은 **필터 적용 후** 건수다(페이지네이션 봉투 규약 그대로). 두 조건은 AND 로 결합한다.
+
+> **API 기본값은 `all` 이다** — 사이트맵·홈 등 기존 호출이 영향받지 않게 하기 위해서다. 반면 **뉴스 페이지(`/news`)의 화면 기본값은 `period=1w`(최근 1주일)** 이다(R30). "API 기본값" 과 "화면 기본값" 을 구분한다 — 프론트가 최초 진입 시 `period=1w` 를 명시적으로 붙인다.
 
 `id` 는 `/api/meta/sitemap-entries` 의 `news[].id` 와 같은 값이다 — 사이트맵의 URL 과 목록의 항목을 잇는 유일한 키라서 목록에도 실어야 한다.
 

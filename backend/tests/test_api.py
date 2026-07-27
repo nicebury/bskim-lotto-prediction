@@ -86,13 +86,62 @@ async def test_통계_세_엔드포인트(client: httpx.AsyncClient, window: str
     assert freq.status_code == 200
     assert len(freq.json()["counts"]) == 45
 
-    hot_cold = await client.get(f"/api/lotto/stats/hot-cold?window={window}")
-    assert hot_cold.status_code == 200
-    assert hot_cold.json().keys() >= {"hot", "cold", "overdue"}
+    hc = await client.get(f"/api/lotto/stats/hot-cold?window={window}")
+    assert hc.status_code == 200
+    body = hc.json()
+    assert body.keys() >= {"hot", "cold", "overdue"}
+    # 002 개편으로 hot·cold 항목에 세 필드가 붙었다
+    assert body["hot"][0].keys() >= {
+        "number", "count", "appearance_rate", "last_seen_round", "trend"
+    }
+    assert body["hot"][0]["trend"] in {"up", "down", "flat"}
+    assert 0.0 <= body["hot"][0]["appearance_rate"] <= 1.0
+    assert "last_seen_round" in body["overdue"][0]
 
     pattern = await client.get(f"/api/lotto/stats/pattern?window={window}")
     assert pattern.status_code == 200
     assert pattern.json()["sum_range"].keys() == {"min", "max", "peak"}
+
+    pairs = await client.get(f"/api/lotto/stats/pairs?window={window}")
+    assert pairs.status_code == 200
+    pbody = pairs.json()
+    assert pbody["number"] is None
+    for p in pbody["pairs"]:
+        assert p["numbers"] == sorted(p["numbers"]) and len(p["numbers"]) == 2
+
+
+async def test_동반출현_number_필터(client: httpx.AsyncClient):
+    response = await client.get("/api/lotto/stats/pairs?window=all&number=1&top=5")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["number"] == 1
+    assert len(body["pairs"]) <= 5
+    for p in body["pairs"]:
+        assert 1 in p["numbers"]
+
+
+async def test_동반출현_잘못된_number_는_422(client: httpx.AsyncClient):
+    assert (await client.get("/api/lotto/stats/pairs?number=46")).status_code == 422
+    assert (await client.get("/api/lotto/stats/pairs?top=99")).status_code == 422
+
+
+async def test_뉴스_keyword_필터(client: httpx.AsyncClient):
+    """keyword 를 주면 total 이 필터 후 건수로 줄어든다."""
+    full = (await client.get("/api/news?size=1")).json()["total"]
+    # 실데이터에 흔한 단어. 없으면 0 이어도 필터가 동작한 것이다.
+    filtered = (await client.get("/api/news?size=1&keyword=로또")).json()["total"]
+    assert filtered <= full
+
+
+async def test_뉴스_period_필터(client: httpx.AsyncClient):
+    """좁은 기간의 total 은 all 보다 크지 않다."""
+    all_total = (await client.get("/api/news?size=1&period=all")).json()["total"]
+    week_total = (await client.get("/api/news?size=1&period=1w")).json()["total"]
+    assert week_total <= all_total
+
+
+async def test_뉴스_잘못된_period_는_422(client: httpx.AsyncClient):
+    assert (await client.get("/api/news?period=2y")).status_code == 422
 
 
 async def test_잘못된_window_는_422(client: httpx.AsyncClient):

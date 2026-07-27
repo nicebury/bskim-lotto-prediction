@@ -94,9 +94,10 @@ export const GUIDES = [
     accent: 'news',
   },
   {
+    // 002 R26: '로또 기본 규칙' → 흥미 중심 제목. URL(slug)은 유지해 색인·링크를 보존한다.
     slug: 'lotto-rule',
-    title: '로또 기본 규칙',
-    summary: '6/45 게임 방식과 등위 판정 기준',
+    title: '로또의 재미있는 사실',
+    summary: '조합의 수·확률 비유·세계의 로또 이야기',
     accent: 'stats',
   },
   {

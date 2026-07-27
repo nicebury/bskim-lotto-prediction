@@ -59,7 +59,7 @@ export default async function HotColdPage() {
 
       <section className="section" aria-labelledby="hotcold-title">
         <h2 id="hotcold-title" className="sr-only">
-          회차 구간별 HOT · COLD 번호
+          회차 구간별 많이 나온 번호와 안 나오던 번호
         </h2>
 
         <StatWindowTabs panels={panels} label="통계 관찰 구간 선택" />
@@ -70,10 +70,10 @@ export default async function HotColdPage() {
       <AdSlot slot="stat-hot-cold" />
 
       <section className="section prose" aria-labelledby="read-title">
-        <h2 id="read-title">HOT 번호와 COLD 번호는 무엇인가요?</h2>
+        <h2 id="read-title">많이 나온 번호와 안 나오던 번호는 무엇인가요?</h2>
         <p>
-          HOT 번호는 선택한 구간에서 상대적으로 자주 나온 번호이고, COLD 번호는 적게 나온
-          번호입니다. 오래 안 나온 번호는 마지막으로 출현한 뒤 몇 회차가 지났는지를 셉니다. 세
+          많이 나온 번호는 선택한 구간에서 상대적으로 자주 나온 번호이고, 안 나오던 번호는 적게
+          나온 번호입니다. 오래 안 나온 번호는 마지막으로 출현한 뒤 몇 회차가 지났는지를 셉니다. 세
           가지 모두 <strong>과거를 요약한 이름</strong>일 뿐 앞으로를 가리키는 표지가 아닙니다.
         </p>
         <p>
@@ -89,7 +89,7 @@ export default async function HotColdPage() {
 
       <JsonLd
         data={datasetLd({
-          name: '로또 6/45 HOT·COLD 번호 통계',
+          name: '로또 6/45 많이 나온 번호·안 나오던 번호 통계',
           description:
             '최근 회차 구간별로 로또 6/45 당첨번호의 출현 횟수와 미출현 회차 수를 집계한 데이터입니다. 과거 회차의 분포를 이해하기 위한 참고 정보입니다.',
           siteName: SITE_NAME,

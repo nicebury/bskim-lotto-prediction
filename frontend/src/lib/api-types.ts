@@ -11,6 +11,12 @@
 /** 통계 조회 구간. 최근 몇 회차를 볼지. */
 export type StatWindow = 20 | 50 | 100 | 'all'
 
+/**
+ * 뉴스 기간 필터(002 개편). `1w`=7일 … `all`=전체.
+ * API 기본값은 `all`(기존 호출 보호), 화면 기본값은 `1w`(뉴스 페이지 R30).
+ */
+export type NewsPeriod = '1w' | '2w' | '1m' | '3m' | '6m' | 'all'
+
 /** 번호 추천 전략. → docs/wiki/40-domain/prediction-algorithm.md */
 export type RecommendStrategy =
   | 'ensemble'
@@ -104,15 +110,30 @@ export interface FrequencyResult {
   counts: Record<string, number>
 }
 
+/** window 최근 절반 vs 이전 절반의 출현 비교. 관찰된 추세일 뿐 예측이 아니다. */
+export type Trend = 'up' | 'down' | 'flat'
+
 export interface RankedNumber {
   number: number
   count: number
+  /**
+   * `count / rounds_analyzed`. 0.0~1.0 의 **과거 출현 비율**이다(002 개편).
+   * ⚠ 다음 회차 확률이 아니다 — "지난 N회 중 나온 비율" 로만 표시한다.
+   * 백엔드가 아직 안 줄 수 있어 optional 이다(미제공 시 프론트가 count/rounds 로 계산).
+   */
+  appearance_rate?: number
+  /** 그 번호가 마지막으로 나온 회차 번호(절대값). 역대로 없으면 null. */
+  last_seen_round?: number | null
+  /** window 를 최근/이전 절반으로 나눈 출현 추세. window<2 면 flat. */
+  trend?: Trend
 }
 
 /** 미출현 회차 수. 최신 회차에 나온 번호는 0. */
 export interface OverdueNumber {
   number: number
   rounds_since: number
+  /** 마지막 출현 회차(002 개편). */
+  last_seen_round?: number | null
 }
 
 export interface HotColdResult {
@@ -124,6 +145,27 @@ export interface HotColdResult {
   cold: RankedNumber[]
   /** ⚠ 이 배열만은 window 가 아니라 **역대 전체** 기준이다. */
   overdue: OverdueNumber[]
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 동반 출현 (002 개편) — 함께 자주 나온 번호쌍.
+ * pair_affinity 전략의 동시출현 집계를 사용자에게 노출한 것이다.
+ * 이 값이 "이 쌍이 또 나온다" 를 뜻하지 않는다 — 확률 표현을 붙이지 않는다.
+ * ──────────────────────────────────────────────────────────── */
+
+export interface NumberPair {
+  /** 항상 오름차순 2개. */
+  numbers: [number, number]
+  /** window 안에서 두 번호가 같은 회차에 함께 나온 횟수. */
+  count: number
+}
+
+export interface PairsResult {
+  window: StatWindow
+  rounds_analyzed: number
+  /** 특정 번호 기준이면 그 번호, 전체 상위쌍이면 null. */
+  number: number | null
+  pairs: NumberPair[]
 }
 
 /**

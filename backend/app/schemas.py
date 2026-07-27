@@ -94,17 +94,39 @@ class FrequencyResponse(StatsBase):
 class HotNumber(BaseModel):
     number: int
     count: int
+    # count / rounds_analyzed. 과거 출현 비율이지 다음 회차 확률이 아니다 — 그래서
+    # 이름이 probability 가 아니라 appearance_rate 다.
+    appearance_rate: float = Field(description="지난 window 회 중 나온 비율 (0.0~1.0)")
+    last_seen_round: Optional[int] = Field(
+        default=None, description="마지막으로 나온 회차 번호. 역대로 없으면 null"
+    )
+    trend: str = Field(description='"up" | "down" | "flat". 최근 절반 vs 이전 절반 비교')
 
 
 class OverdueNumber(BaseModel):
     number: int
     rounds_since: int = Field(description="최신 회차 기준. 역대 전체에서 계산한다")
+    last_seen_round: Optional[int] = Field(
+        default=None, description="마지막으로 나온 회차 번호. 역대로 없으면 null"
+    )
 
 
 class HotColdResponse(StatsBase):
     hot: list[HotNumber]
     cold: list[HotNumber]
     overdue: list[OverdueNumber]
+
+
+class NumberPair(BaseModel):
+    numbers: list[int] = Field(min_length=2, max_length=2, description="항상 오름차순 2개")
+    count: int = Field(description="window 안에서 두 번호가 함께 나온 횟수")
+
+
+class PairsResponse(StatsBase):
+    number: Optional[int] = Field(
+        default=None, description="기준 번호. 없으면 전체 쌍 중 상위"
+    )
+    pairs: list[NumberPair]
 
 
 class SumRange(BaseModel):

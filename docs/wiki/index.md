@@ -34,6 +34,7 @@
 - [0008 — Python 3.13 + torch>=2.13 핀, 상한도 건다](00-decisions/0008-python-313-torch-pin.md) — 상한 없는 requires-python 이 과거 사고의 원인
 - [0009 — 볼 색상은 시안이 아니라 공식 규칙](00-decisions/0009-official-ball-colors-over-mockup.md) — 학습된 색-구간 매핑을 깨면 신뢰를 잃는다
 - [0010 — DB 명명 표준화, API 필드는 유지](00-decisions/0010-db-naming-standard.md) — 공개 계약을 DB 스키마에 결합시키지 않는다
+- [0011 — 상세페이지 이미지는 빌드타임 큐레이션](00-decisions/0011-build-time-image-curation.md) — 런타임 호출·워커 수집이 아니라 사람이 골라 커밋한다
 
 ## 10-contracts — 세션 간 계약 ★
 
@@ -80,6 +81,7 @@
 - [naver-search-api](90-external/naver-search-api.md) — 일일 쿼터 **25,000**. 신선도 필터와 3중 중복 제거. ⚠ 재배포 약관은 미확인
 - [dhlottery-blocked](90-external/dhlottery-blocked.md) — ⚠ **수집 정책 미결.** 네이버 `robots.txt` 전면 금지 확인, 백필 중단. 위젯이 등위별·판매점까지 준다는 사실도 여기
 - [trademark-check](90-external/trademark-check.md) — ⚠ **KIPRIS 상표 검색·도메인 미확인**
+- [pexels-image-usage](90-external/pexels-image-usage.md) — Pexels License 사실, 빌드타임 큐레이션, 인물 배제. 저작권 최종 판단은 사용자
 
 ---
 

@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 
 import { Breadcrumb } from '@/components/Breadcrumb'
 import { Faq } from '@/components/Faq'
+import { GuideNav } from '@/components/GuideNav'
 import { JsonLd, articleLd } from '@/components/JsonLd'
 import { SITE_NAME, SITE_URL } from '@/lib/env'
 
@@ -110,6 +111,8 @@ export default function AutoVsManualPage() {
         <Faq items={FAQ_ITEMS} />
       </article>
 
+      <GuideNav current="auto-vs-manual" />
+
       <JsonLd
         data={articleLd({
           headline: '자동과 수동의 차이',
@@ -117,6 +120,7 @@ export default function AutoVsManualPage() {
           siteName: SITE_NAME,
           siteUrl: SITE_URL,
           datePublished: '2026-07-09',
+          dateModified: '2026-07-15',
         })}
       />
     </div>

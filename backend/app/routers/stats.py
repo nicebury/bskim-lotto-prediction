@@ -10,7 +10,12 @@ from fastapi import APIRouter, Query
 from .. import repository as repo
 from ..db import get_pool
 from ..domain import stats
-from ..schemas import FrequencyResponse, HotColdResponse, PatternResponse
+from ..schemas import (
+    FrequencyResponse,
+    HotColdResponse,
+    PairsResponse,
+    PatternResponse,
+)
 
 router = APIRouter(prefix="/api/lotto/stats", tags=["stats"])
 
@@ -53,3 +58,21 @@ async def pattern(window: str = _WINDOW_QUERY) -> dict:
     draws = await repo.all_draws(get_pool())
     windowed = stats.slice_window(draws, stats.resolve_window(window))
     return {"window": _window_echo(window), **stats.pattern(windowed)}
+
+
+@router.get("/pairs", response_model=PairsResponse)
+async def pairs(
+    window: str = _WINDOW_QUERY,
+    number: int | None = Query(
+        None, ge=1, le=45, description="주면 그 번호와 함께 나온 상대 번호만"
+    ),
+    top: int = Query(
+        stats.PAIRS_DEFAULT_TOP, ge=1, le=stats.PAIRS_MAX_TOP, description="반환 개수"
+    ),
+) -> dict:
+    draws = await repo.all_draws(get_pool())
+    windowed = stats.slice_window(draws, stats.resolve_window(window))
+    return {
+        "window": _window_echo(window),
+        **stats.pairs(windowed, number=number, top=top),
+    }

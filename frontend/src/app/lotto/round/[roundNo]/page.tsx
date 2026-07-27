@@ -25,16 +25,40 @@ export const revalidate = 604800 // 7일
 export const dynamicParams = true
 
 /**
+ * 빌드 시 미리 구울 회차 수의 상한.
+ *
+ * 회차는 1,231건이다. 전부 구우면 빌드가 백엔드에 1,231개 요청을 순간에 쏟아붓고, 그 부하
+ * 때문에 **같은 빌드 안의 다른 요청이 타임아웃한다** — 실제로 추천 API(몬테카를로 50,000회)가
+ * 밀려나 추천 페이지가 폴백으로 구워졌다.
+ *
+ * 최근 회차부터 일부만 굽고 나머지는 첫 요청 때 생성한다(ISR). 과거 회차는 검색 유입이
+ * 얇고 사실상 불변이라 한 번 생성되면 오래 캐시된다. **사이트맵에는 전부 싣는다** —
+ * 색인은 빌드와 무관하다.
+ */
+const PRERENDER_LIMIT = 300
+
+/**
  * 빌드 시 굽는 회차 목록.
  *
  * ⚠ 백엔드가 없으면 빈 배열을 반환해 **빌드를 실패시키지 않는다.** 그 경우 모든 회차가
  *   첫 요청 때 생성되고(ISR), 이후 캐시된다.
- * ⚠ 회차가 1,200건을 넘으면 빌드 시간이 길어진다. 전부 굽는 것이 SEO 상 유리하지만,
- *   빌드 시간이 문제가 되면 최근 N개만 굽고 나머지를 dynamicParams 에 맡기는 선택지가 있다.
  */
 export async function generateStaticParams() {
   const entries = await getSitemapEntries()
-  return (entries?.rounds ?? []).map((round) => ({ roundNo: String(round.round_no) }))
+  const rounds = entries?.rounds ?? []
+
+  // 계약상 rounds 는 round_no **오름차순**이다. 최근 회차가 뒤에 있으므로 뒤에서 자른다.
+  const recent = rounds.slice(-PRERENDER_LIMIT)
+
+  if (rounds.length > recent.length) {
+    // 조용히 자르지 않는다. 무엇이 빌드에서 빠졌는지 로그에 남긴다.
+    console.info(
+      `[lotto] 회차 ${rounds.length}개 중 최근 ${recent.length}개만 사전 생성합니다. ` +
+        '나머지는 첫 요청 시 생성됩니다(dynamicParams).',
+    )
+  }
+
+  return recent.map((round) => ({ roundNo: String(round.round_no) }))
 }
 
 type Params = { params: Promise<{ roundNo: string }> }

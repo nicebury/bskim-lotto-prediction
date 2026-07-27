@@ -5,9 +5,10 @@ import { useState } from 'react'
 import { browserRecommend } from '@/lib/api'
 import type { RecommendSet, RecommendStrategy } from '@/lib/api-types'
 import { STRATEGIES, strategyMeta } from '@/lib/strategies'
-import { traitRows, traitSentence } from '@/lib/traits'
+import { traitRows, traitSentence, traitSummaryLine } from '@/lib/traits'
 import { Card, EmptyState } from './Card'
 import { LottoBall } from './LottoBall'
+import { NumberActions } from './NumberActions'
 import { KeyValueList } from './stats'
 
 /**
@@ -121,6 +122,13 @@ export function RecommendStudio({
                   <div style={{ marginTop: 'var(--space-4)' }}>
                     <KeyValueList rows={traitRows(set.traits)} />
                   </div>
+
+                  {/* 번호를 가져가려고 들어온 자리다. 세 가지를 모두 낸다. */}
+                  <NumberActions
+                    numbers={set.numbers}
+                    strategyLabel={meta.label}
+                    subtitle={traitSummaryLine(set.traits)}
+                  />
                 </Card>
               </li>
             ))}
