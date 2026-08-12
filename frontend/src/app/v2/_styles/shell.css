@@ -1,0 +1,284 @@
+/*
+ * /v2 셸 — 기존 레이아웃과의 접합부, 글래스 헤더, 하단 독.
+ *
+ * ★ 이 파일은 **기존 클래스를 겨냥하는 유일한 파일**이다.
+ *   그런 선택자는 반드시 `body:has(.hb-root)` 로 시작한다. 그래야
+ *   (1) 다른 라우트에 이 스타일시트가 남아 있어도 아무 효과가 없고,
+ *   (2) 특이도 (0,2,1) 로 기존 규칙 (0,1,0) 을 **로드 순서와 무관하게** 이긴다.
+ *
+ *   감사: grep -n "^[^ ]" shell.css | grep -v "hb-\|body:has"  → 0건이어야 한다.
+ *   여기에 무조건 선택자가 하나라도 섞이면 사이트 전체가 깨진다.
+ */
+
+/* ────────────────────────────────────────────────────────────
+ * 1. 기존 셸과의 접합
+ * ──────────────────────────────────────────────────────────── */
+
+/*
+ * 전역 헤더를 이 라우트에서만 감춘다.
+ *
+ * `display:none` 을 쓰는 이유: 접근성 트리에서 완전히 제거되어 스크린리더가 내비를
+ * 두 번 읽지 않는다. `visibility:hidden`·`opacity:0`·`height:0` 은 여전히 읽히거나
+ * 포커스가 들어간다.
+ *
+ * JS 로 body 에 클래스를 붙이는 방식은 쓰지 않았다 — 하이드레이션 이후에야 적용되어
+ * 헤더가 한 번 번쩍이고(FOUC) 60px 만큼 레이아웃이 밀린다(CLS).
+ */
+body:has(.hb-root) .site-header {
+  display: none;
+}
+
+/* 페이지 바탕. <main> 밖까지 어두워야 스크롤 끝에서 흰 띠가 보이지 않는다. */
+body:has(.hb-root) {
+  background: var(--hb-canvas);
+}
+
+/*
+ * 푸터는 **지운다는 선택지가 없다.** 추천번호를 노출하는 화면에는 면책 고지가 붙어야
+ * 하고(→ 40-domain/forbidden-expressions.md 부착 위치), 정책 4종 링크는 애드센스
+ * 심사 자산이다. 그래서 톤만 맞춘다.
+ *
+ * 토큰(--color-surface 등)을 덮어쓰지 않고 속성을 직접 지정하는 이유는 tokens.css
+ * 상단 주석과 같다 — :root 토큰 재정의는 순서 의존을 만든다.
+ */
+body:has(.hb-root) .site-footer {
+  margin-top: 0;
+  background: var(--hb-surface);
+  border-top-color: var(--hb-line);
+
+  /*
+    푸터 안쪽 요소들은 저마다 `--color-text` 계열을 직접 지정한다. 그래서 부모에 color 만
+    걸면 상속되지 않고, 라이트 모드 사용자에게는 어두운 글자가 어두운 배경 위에 얹혀
+    읽히지 않는다(375px 실측에서 브랜드명이 사라져 발견).
+    그래서 **푸터 요소에 스코프해서** 토큰 값을 갈아끼운다. tokens.css 가 경계한 것은
+    `:root` 레벨 재정의(특이도 동률로 순서 의존이 생긴다)이고, 이렇게 하위 요소에 선언한
+    값은 상속 규칙상 항상 이긴다 — 순서 문제가 없다.
+  */
+  --color-text: var(--hb-text);
+  --color-text-muted: var(--hb-text-2);
+  /* 다크 배경에서 3단계 회색은 과하다. subtle 을 한 단계 올려 그룹 제목이 읽히게 한다. */
+  --color-text-subtle: var(--hb-text-2);
+  --color-surface: var(--hb-surface);
+  --color-surface-2: var(--hb-surface-2);
+  --color-border: var(--hb-line);
+  --color-border-strong: var(--hb-line-strong);
+  --color-primary: var(--hb-accent);
+  --color-primary-hover: var(--hb-accent);
+}
+
+/*
+ * 하단 독이 푸터 마지막 줄을 가리지 않도록 여백을 준다. 독은 모바일에만 뜬다.
+ * 독 높이(약 60px) + 바닥 여백(12px) 보다 넉넉해야 한다 — 실측에서 마지막 링크가
+ * 가려져 값을 올렸다.
+ */
+body:has(.hb-root) .site-footer {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 640px) {
+  body:has(.hb-root) .site-footer {
+    padding-bottom: var(--space-8);
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 2. 루트 래퍼
+ * ──────────────────────────────────────────────────────────── */
+
+/*
+ * ⚠ 이 요소와 그 조상에 transform·filter·backdrop-filter·contain·will-change 를
+ *   절대 걸지 않는다. 그 중 하나라도 걸리면 자손의 position:sticky 가 이 요소를
+ *   기준으로 갇혀 글래스 헤더와 격자가 화면에 붙지 않는다.
+ */
+.hb-root {
+  color: var(--hb-text);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  /* 색 반전 요소(폼 컨트롤·스크롤바)가 라이트로 그려지지 않게 한다. */
+  color-scheme: dark;
+}
+
+.hb-root ::selection {
+  background: var(--hb-accent-dim);
+  color: var(--hb-text);
+}
+
+.hb-wrap {
+  width: 100%;
+  max-width: var(--hb-max);
+  margin-inline: auto;
+  padding-inline: var(--hb-pad);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 3. 글래스 헤더
+ * ──────────────────────────────────────────────────────────── */
+
+.hb-header {
+  position: sticky;
+  top: 0;
+  /* 기존 모달(81)보다 낮고 본문보다 높게. 이 라우트에는 기존 헤더가 없다. */
+  z-index: 60;
+  background: var(--hb-glass);
+  backdrop-filter: blur(var(--hb-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--hb-blur)) saturate(140%);
+  border-bottom: 1px solid var(--hb-glass-line);
+}
+
+.hb-header-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: var(--hb-header-h);
+  max-width: var(--hb-max);
+  margin-inline: auto;
+  padding-inline: var(--hb-pad);
+}
+
+.hb-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--hb-text);
+  text-decoration: none;
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-title);
+  /* 터치 타겟 44px */
+  min-height: 44px;
+}
+
+.hb-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: linear-gradient(140deg, var(--hb-accent), #4f5fd8);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: var(--fw-black);
+  letter-spacing: 0;
+}
+
+.hb-brand-tag {
+  padding: 2px 6px;
+  border: 1px solid var(--hb-line-strong);
+  border-radius: var(--radius-pill);
+  color: var(--hb-text-2);
+  font-size: 0.62rem;
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--hb-ls-label);
+}
+
+/* 데스크톱 내비. 모바일에서는 하단 독이 같은 역할을 하므로 감춘다. */
+.hb-nav {
+  display: none;
+  margin-left: auto;
+  gap: var(--space-1);
+}
+
+.hb-nav a,
+.hb-back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-pill);
+  color: var(--hb-text-2);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  text-decoration: none;
+  transition: color var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
+}
+
+.hb-nav a:hover,
+.hb-back:hover {
+  color: var(--hb-text);
+  background: rgb(255 255 255 / 0.06);
+}
+
+/*
+ * "기존 화면으로" — 이 시안은 전역 헤더를 감추므로, 돌아갈 길을 반드시 남긴다.
+ * 두 안을 비교하는 것이 이 페이지의 목적이기도 하다.
+ */
+.hb-back {
+  margin-left: auto;
+  border: 1px solid var(--hb-line-strong);
+  color: var(--hb-text);
+}
+
+.hb-nav + .hb-back {
+  margin-left: var(--space-2);
+}
+
+@media (min-width: 1024px) {
+  .hb-nav {
+    display: flex;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 4. 모바일 하단 독
+ *
+ * 링크뿐이라 JS 가 필요 없다 — 서버 컴포넌트로 렌더한다.
+ * 데스크톱에는 헤더 내비가 있으므로 뜨지 않는다.
+ * ──────────────────────────────────────────────────────────── */
+
+.hb-dock {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+  z-index: 60;
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: 1px solid var(--hb-glass-line);
+  border-radius: var(--radius-pill);
+  background: var(--hb-glass);
+  backdrop-filter: blur(var(--hb-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--hb-blur)) saturate(140%);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.45);
+  /* 375px 에서도 넘치지 않게. 항목이 늘어나면 여기서 먼저 깨진다. */
+  max-width: calc(100% - var(--space-6));
+}
+
+.hb-dock a {
+  display: inline-grid;
+  place-items: center;
+  gap: 2px;
+  min-width: 62px;
+  min-height: 44px;
+  padding: 4px 6px;
+  border-radius: var(--radius-pill);
+  color: var(--hb-text-2);
+  font-size: 0.66rem;
+  font-weight: var(--fw-medium);
+  text-decoration: none;
+}
+
+.hb-dock a:hover {
+  color: var(--hb-text);
+  background: rgb(255 255 255 / 0.06);
+}
+
+.hb-dock svg {
+  width: 17px;
+  height: 17px;
+}
+
+@media (min-width: 1024px) {
+  .hb-dock {
+    display: none;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 5. 포커스 — 기존 규약과 같은 모양을 쓰되 다크 배경에 맞춘 색으로
+ * ──────────────────────────────────────────────────────────── */
+
+.hb-root :focus-visible {
+  outline: 2px solid var(--hb-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}

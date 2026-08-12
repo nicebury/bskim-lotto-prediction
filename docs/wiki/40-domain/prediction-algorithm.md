@@ -7,7 +7,7 @@ owner: backend
 status: stable
 sources: ["backend/app/prediction/config.py", "backend/app/prediction/ensemble.py", "backend/app/prediction/montecarlo.py", "backend/app/prediction/analyzer/", "backend/app/prediction/strategies/"]
 created: 2026-07-09
-updated: 2026-07-09
+updated: 2026-08-12
 ---
 
 # 번호 추천 알고리즘
@@ -180,6 +180,34 @@ avg_number_hits = int(sum(number_counts[n] for n in combo) / 6)
 
 반환되는 다른 값: `hit_count`(그 조합이 정확히 등장한 횟수), `valid_combos_count`, `total_simulations`.
 
+### ★ 비용은 전부 여기에 있다 (2026-08-12 실측)
+
+개발 DB 1,232회차 기준으로 `predict()` 안의 시간 배분이다.
+
+| 구간 | 시간 | 비고 |
+|---|---|---|
+| DB 조회(1,232행) | 5.0ms | |
+| `frequency` + `delay` + `hot_cold` + `pattern` + `ensemble` | **합계 4.6ms** | 회차에만 의존 |
+| **`montecarlo.simulate`** | **2,522ms** | 전체의 99.6% |
+
+**분석기를 캐시해도 의미가 없다.** 다 합쳐 5ms 이므로, 캐시는 2.5초를 2.4954초로 만든다. 추천이 느린 이유를 찾을 때 분석기부터 뒤지지 않는다.
+
+### ★ 함정 — 작은 numpy 호출 5만 회는 동시 실행에서 n² 로 무너진다
+
+`simulate` 의 루프는 5만 회를 돌며 매 회 `rng.choice` · `np.sort` · `np.sum` 같은 **작은 numpy 호출**을 여러 번 한다. 작은 numpy 호출은 각각 GIL 을 잠깐 놓았다 다시 잡는데, 스레드가 둘 이상이면 이 손바꿈이 계산보다 비싸진다(convoy).
+
+| 동시 요청 | 벽시계 | 1건 대비 |
+|---|---|---|
+| 1건 | 2.52s | 1.0배 |
+| 2건 | 16.35s | **6.5배** |
+| 4건 | 62.58s | **24.8배** |
+
+같은 조건에서 순수 파이썬 루프는 2.0배·4.1배(= GIL 직렬화, 정상), 큰 numpy 연산도 2.2배·4.1배였다. **무너지는 것은 "작은 numpy 호출이 아주 많은" 이 코드뿐이다.**
+
+귀결: 이 계산은 스레드를 늘려도 총 처리량이 늘지 않는다. 그래서 백엔드는 몬테카를로 경로를 **한 번에 하나만** 실행한다 ([[0012-serialize-monte-carlo]]). 알고리즘은 그대로 두고 실행 방식만 막은 것이다.
+
+**`simulations` 를 성능을 이유로 낮추지 않는다.** 그것은 결과를 바꾸는 일이고, 아래 5번 규칙(가중치 변경 = 백테스트 + ADR)과 같은 부류다.
+
 ---
 
 ## 대체 전략 5종
@@ -201,7 +229,7 @@ avg_number_hits = int(sum(number_counts[n] for n in combo) / 6)
 ## 이식할 때 지킬 것
 
 1. **모듈을 재작성하지 않는다.** SQLite 접근부만 걷어낸다. ~~`predictor.py` 는 `sqlite3` 표준 라이브러리를 직접 쓰고 있다.~~ **완료(2026-07-09)**: `predict()` 가 `db_path` 대신 `Sequence[Draw]` 를 받는다. 데이터를 여는 쪽은 호출자다 — 백엔드의 Postgres 접근은 async 라 동기 함수인 여기서 부를 수 없다. 알고리즘은 한 줄도 바뀌지 않았다.
-2. `predictor.predict()` 는 동기 함수로 유지하고, 라우터에서 `asyncio.to_thread` 로 감싼다.
+2. `predictor.predict()` 는 동기 함수로 유지하고, 라우터에서 `asyncio.to_thread` 로 감싼다. **다만 그 스레드에 동시에 여럿을 보내지 않는다** — 위 함정 절과 [[0012-serialize-monte-carlo]].
 3. `window` 파라미터를 일반화한다. 지금은 `hot_rounds=20` 고정이지만 API 는 20/50/100/all 을 요구한다.
 4. `avg_number_hits`, `hit_count`, `valid_combos_count` 를 API 응답에서 뺀다.
 5. 가중치를 바꾸지 않는다. 바꾸려면 백테스트 + ADR.

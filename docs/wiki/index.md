@@ -35,6 +35,7 @@
 - [0009 — 볼 색상은 시안이 아니라 공식 규칙](00-decisions/0009-official-ball-colors-over-mockup.md) — 학습된 색-구간 매핑을 깨면 신뢰를 잃는다
 - [0010 — DB 명명 표준화, API 필드는 유지](00-decisions/0010-db-naming-standard.md) — 공개 계약을 DB 스키마에 결합시키지 않는다
 - [0011 — 상세페이지 이미지는 빌드타임 큐레이션](00-decisions/0011-build-time-image-curation.md) — 런타임 호출·워커 수집이 아니라 사람이 골라 커밋한다
+- [0012 — 몬테카를로 추천은 한 번에 하나만](00-decisions/0012-serialize-monte-carlo.md) — 동시 실행이 n² 로 무너진다. 알고리즘이 아니라 실행 방식을 고친다
 
 ## 10-contracts — 세션 간 계약 ★
 
@@ -53,6 +54,7 @@
 - [responsive-rules](20-design/responsive-rules.md) — 브레이크포인트 3단, mobile-first, 터치 타겟 44px, CLS 방지
 - [components](20-design/components.md) — 볼·카드·헤더·캐러셀·광고 슬롯 사양
 - [accessibility](20-design/accessibility.md) — a11y 체크리스트. 색만으로 정보를 전달하지 않기
+- [home-v2-concept](20-design/home-v2-concept.md) — ⚗ **새 메인 시안 `/v2`.** 45칸 격자 시그니처·다크 캔버스·`hb-` 격리 규칙. 운영 홈과 비교용
 
 ## 30-seo — 검색·광고·분석
 
@@ -66,7 +68,7 @@
 
 - [forbidden-expressions](40-domain/forbidden-expressions.md) — ★ **전 세션 구속.** 금지 표현과 그 이유
 - [lotto-rules](40-domain/lotto-rules.md) — 6/45 규칙, 등위 판정, 추첨 일정, 볼 5구간
-- [prediction-algorithm](40-domain/prediction-algorithm.md) — 앙상블 4모듈 + 몬테카를로. **문서-코드 불일치 기록**
+- [prediction-algorithm](40-domain/prediction-algorithm.md) — 앙상블 4모듈 + 몬테카를로. **문서-코드 불일치 기록**, 비용 실측과 동시성 함정
 - [dream-pipeline](40-domain/dream-pipeline.md) — kiwipiepy → ChromaDB → tier별 조합. 첫 요청 20초 함정
 
 ## 50-ops — 운영
@@ -103,7 +105,13 @@ Postgres 롤은 준비됐고(2026-07-09), 네이버 API 키와 일일 쿼터(25,
 
 **Phase 2(backend) 는 구현·검증 완료다** (2026-07-09). [[api-contract]] 의 전 엔드포인트가 200 을 반환하고, `sets=3&seed=1` 두 호출이 바이트 단위로 같으며, `app_reader` 의 쓰기가 권한으로 거부된다. 단위 40 + 통합 27 테스트 통과. 개발 DB(1,231회차·뉴스 75건)에 직접 붙어 전 엔드포인트 200 을 확인했다. 기동 시 접속 롤이 `app_reader` 이고 쓰기 권한이 없음을 백엔드가 스스로 검증한다.
 
-**Phase 3(frontend) 는 구현 완료다** (2026-07-09). 초안 5.1 의 URL 22개, 애드센스 정책 페이지 4종, [[api-contract]] 정합. 백엔드가 없어도 빌드·렌더가 통과하고(조회 실패 시 폴백), 계약을 그대로 흉내낸 목 백엔드로 렌더링을 확인했다. **375px 가로 스크롤과 Lighthouse 는 실측하지 못했다** — 헤드리스 브라우저 의존 라이브러리 설치에 `sudo` 가 필요하다. 남은 것은 Phase 4 의 측정 ID·도메인이다.
+**백엔드는 V2(002) 이후 전면 재검증됐다** (2026-08-12). 계약의 전 엔드포인트를 개발 DB(1,232회차·뉴스 172건)에 붙여 응답 키·정렬·필드 정의·금지 필드명까지 자동 검사해 **위반 0건**. 이 과정에서 **추천 API 가 동시 요청에서 n² 로 무너지던 원인을 찾아 고쳤다** — 동시 4건 62.6초 → 10.1초([[0012-serialize-monte-carlo]]). 알고리즘은 건드리지 않았고 `seed` 결과가 수정 전과 바이트 단위로 같다. 테스트 94개 통과.
+
+**Phase 3(frontend) 는 구현 완료다** (2026-07-09). 초안 5.1 의 URL 22개, 애드센스 정책 페이지 4종, [[api-contract]] 정합. 백엔드가 없어도 빌드·렌더가 통과하고(조회 실패 시 폴백), 계약을 그대로 흉내낸 목 백엔드로 렌더링을 확인했다. 남은 것은 Phase 4 의 측정 ID·도메인이다.
+
+**375px 실측 방법을 확보했다** (2026-08-12). 종전에 "헤드리스 브라우저 설치에 `sudo` 가 필요해 불가"로 남겼던 항목이다. Windows 크롬 헤드리스는 `--window-size=375` 를 줘도 **창을 512px 아래로 줄이지 않아**(실측 `VIEWPORT=512x1102`) 정상 레이아웃이 잘린 것처럼 보인다. 512 창 안에 폭 375 짜리 `<iframe>` 을 띄운 로컬 HTML 을 캡처하면 그 안쪽이 정확히 375 CSS px 뷰포트가 된다 — 설치가 필요 없다. 절차는 [log.md](log.md) 의 2026-08-12 항목 참조. **Lighthouse 는 여전히 미측정이다.**
+
+**새 메인 시안 `/v2` 를 추가했다** (2026-08-12). 운영 홈(`/`)은 그대로 두고 **두 안을 비교해 하나를 고르기 위한** 화면이다. 45칸 격자 하나가 페이지를 관통하는 다크 시안이며, 검색에는 노출하지 않는다. 기존 `frontend/` 파일 수정 0건 — `src/app/v2/` 디렉터리 하나를 지우면 원상복구된다. 컨셉과 규칙은 [[home-v2-concept]].
 
 ---
 

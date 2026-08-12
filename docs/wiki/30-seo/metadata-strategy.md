@@ -157,6 +157,32 @@ Next.js 파일 규약 `app/robots.ts` 로 생성한다.
 
 ---
 
+## 비공개 프리뷰 라우트 (색인 제외)
+
+디자인 시안처럼 **사람은 URL 로 볼 수 있어야 하지만 검색에는 노출하지 않을** 라우트가 있다. 첫 사례는 새 메인 시안 `/v2`([[home-v2-concept]]) 다.
+
+세 가지를 함께 해야 하고, 하나만으로는 규정 위반이 남는다.
+
+1. **페이지 `metadata.robots` 가 정본이다.**
+   ```ts
+   robots: { index: false, follow: false, googleBot: { index: false, follow: false } }
+   ```
+   루트 레이아웃이 `robots: { index: true, follow: true }` 를 선언하므로 페이지에서 통째로 덮어써야 한다.
+
+2. **`alternates.canonical` 을 반드시 명시한다.** 생략하면 루트의 `canonical: '/'` 를 상속해 **그 페이지가 자기를 홈이라고 주장한다.** noindex 와 겹치면 크롤러가 모순된 신호를 받는다.
+
+3. **`sitemap.ts` 에 넣지 않는다.** 현행 `sitemap.ts` 는 정적 URL 을 화이트리스트로 나열하므로 아무것도 하지 않으면 자동으로 빠진다.
+
+### `robots.txt` 에 `Disallow` 를 넣지 않는다
+
+직관과 반대지만, 크롤을 막으면 크롤러가 **`noindex` 메타를 읽지 못한다.** 그러면 다른 곳에 링크가 하나라도 있을 때 본문 없이 URL 만 색인되는 최악의 결과가 나온다. 정확한 조합은 **"크롤 허용 + 페이지 noindex"** 다.
+
+대신 **기존 페이지 어디에서도 프리뷰 라우트로 링크하지 않는다.** 발견 경로는 직접 URL 입력뿐이다.
+
+> 더 강한 보증이 필요하면 `next.config.ts` 의 `headers()` 로 해당 경로에 `X-Robots-Tag: noindex, nofollow` 를 붙일 수 있다. 다만 그것은 기존 파일 수정이므로 별도 판단 사항이다.
+
+---
+
 ## 렌더링 전략 (보완판 6.1)
 
 어느 페이지를 SSG/ISR/CSR 로 렌더링하고 `revalidate` 주기를 얼마로 둘지의 정본이다. 검색엔진이 읽어야 하는 본문은 반드시 서버 렌더링한다.

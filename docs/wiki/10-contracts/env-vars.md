@@ -7,7 +7,7 @@ owner: shared
 status: stable
 sources: ["env.sample", "raw:작업지시서초안_보완.md#9", "raw:002-작업지시서_두번째_보완.md#7"]
 created: 2026-07-09
-updated: 2026-07-15
+updated: 2026-08-12
 ---
 
 # 환경변수 계약과 시크릿 취급 규약
@@ -191,9 +191,21 @@ CHROMA_DB_PATH=./data/chroma_words
 BACKEND_PORT=8005
 CORS_ORIGINS=http://localhost:3000
 TZ=Asia/Seoul
+
+# ── 몬테카를로 추천 동시 실행 수 ───────────────────
+# 기본 1. 올리면 느려진다 (0012-serialize-monte-carlo).
+RECOMMEND_MAX_CONCURRENCY=1
 ```
 
 백엔드에는 `WORKER_JOB_KEY` 가 **없다.** 백엔드는 워커를 부르지 않는다.
+
+### `RECOMMEND_MAX_CONCURRENCY` — 왜 기본값이 1인가
+
+`strategy=ensemble` 추천은 몬테카를로 5만 회를 돈다. 이 계산은 **동시에 돌릴수록 느려진다** — 2건 6.5배, 4건 24.8배 (실측, [[0012-serialize-monte-carlo]]). 작은 numpy 호출이 GIL 을 놓았다 잡기를 반복하며 스레드끼리 손바꿈에 시간을 쓰기 때문이고, GIL 아래에서는 어차피 총 처리량이 하나분이라 **동시 실행의 이득이 0** 이다.
+
+그래서 백엔드는 이 경로를 한 번에 하나만 실행한다. 값을 여는 이유는 튜닝이 아니라, 훗날 알고리즘이 벡터화되거나 프로세스 모델이 바뀌었을 때 코드를 고치지 않고 되돌리기 위해서다. **평상시에 이 값을 올리지 않는다.**
+
+값이 없어도 백엔드는 기동한다(기본 1). `0` 이하를 넣으면 기동을 거부한다 — 조용히 모든 추천 요청이 멈추는 것보다 시끄럽게 죽는 편이 낫다.
 
 ### 왜 URL 한 줄이 아니라 조각인가
 

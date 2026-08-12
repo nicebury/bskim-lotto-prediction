@@ -12,6 +12,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
+from .. import concurrency
 from .. import repository as repo
 from ..db import get_pool
 from ..domain import recommend as rec
@@ -41,7 +42,24 @@ async def recommend(
     draws = await repo.all_draws(get_pool())
 
     try:
-        combos = await asyncio.to_thread(rec.generate, strategy, draws, sets=sets, seed=seed)
+        if strategy in rec.HEAVY_STRATEGIES:
+            # 몬테카를로는 동시에 돌릴수록 느려진다 — 2건 6.5배, 4건 24.8배(실측).
+            # 스레드를 늘려도 GIL 아래에서는 총 처리량이 하나분이라 이득이 0 이고,
+            # 잦은 GIL 손바꿈(convoy) 손해만 남는다. 그래서 줄을 세운다
+            # (docs/wiki/00-decisions/0012-serialize-monte-carlo.md).
+            #
+            # 게이트를 `to_thread` **바깥**에 두는 것이 중요하다. 안쪽에서 기다리면
+            # 대기하는 스레드가 기본 실행기 슬롯을 쥔 채 잠들고, 같은 실행기를 쓰는
+            # 꿈해몽이 굶는다.
+            async with concurrency.heavy_slot(strategy):
+                combos = await asyncio.to_thread(
+                    rec.generate, strategy, draws, sets=sets, seed=seed
+                )
+        else:
+            # 나머지 다섯 전략은 6~14ms 다. 무거운 요청 뒤에 줄 세우지 않는다.
+            combos = await asyncio.to_thread(
+                rec.generate, strategy, draws, sets=sets, seed=seed
+            )
     except rec.InsufficientDataError as exc:
         # 요청 자체는 유효하다. 처리 조건(회차 50개)이 미충족일 뿐이라 400 이 아니라 422 다.
         raise HTTPException(status_code=422, detail=str(exc)) from exc

@@ -99,6 +99,7 @@ docker exec -u postgres bskim-dev-pg18 psql -d prod_db \
 | `app/config.py` | 환경변수를 읽는 **유일한** 곳 |
 | `app/db.py` | psycopg 커넥션 풀. 세션을 `default_transaction_read_only` 로 연다 |
 | `app/repository.py` | 모든 SQL. **DB 컬럼명이 이 파일 밖으로 나가지 않는다** |
+| `app/concurrency.py` | 무거운 계산의 동시 실행 게이트. 몬테카를로는 한 번에 하나만 |
 | `app/domain/` | `traits`(조합 성향) · `stats`(공개 통계) · `recommend`(전략 6종 어댑터) |
 | `app/routers/` | `lotto` · `stats` · `recommend` · `dream` · `news` · `meta` |
 | `app/prediction/` | 앙상블 4모듈 + 몬테카를로 + 대체 전략 5종. **재작성하지 않는다** |
@@ -118,7 +119,7 @@ docker exec -u postgres bskim-dev-pg18 psql -d prod_db \
 | GET | `/api/lotto/stats/frequency` | `window=20\|50\|100\|all`, `include_bonus` |
 | GET | `/api/lotto/stats/hot-cold` | `overdue` 만 역대 전체에서 계산 |
 | GET | `/api/lotto/stats/pattern` | |
-| POST | `/api/lotto/recommend` | `strategy`·`sets`(1~10)·`seed`. `disclaimer` 필수 |
+| POST | `/api/lotto/recommend` | `strategy`·`sets`(1~10)·`seed`. `disclaimer` 필수. `ensemble` 은 **한 번에 하나만** |
 | GET | `/api/dream/keywords` | 임베딩 모델을 로드하지 않는다 |
 | POST | `/api/dream/recommend` | **첫 요청 20초** |
 | GET | `/api/news` | `lotto_news` 가 비면 빈 배열 |
@@ -141,5 +142,9 @@ docker exec -u postgres bskim-dev-pg18 psql -d prod_db \
 **`import torch` 가 `IndentationError` 로 죽는다** — torch 버전이 낮다. `torch>=2.13` 을 확인한다.
 
 **추천 API 가 `422` 를 반환한다** — 회차가 50개 미만이다. 워커가 먼저 데이터를 채워야 한다. `strategy=pure_random` 만은 이 경우에도 200 이다.
+
+**`strategy=ensemble` 응답이 2.5초를 넘고, 동시에 부르면 그만큼 더 걸린다** — 정상이다. 몬테카를로 5만 회는 단독 2.5초이고, 이 계산은 **동시에 돌리면 오히려 느려지므로**(2건 6.5배, 4건 24.8배) 백엔드가 한 번에 하나만 실행한다. 그래서 동시 4건은 62초가 아니라 약 10초(2.5×4)로 **줄 서서** 끝난다. 나머지 전략 5종과 다른 엔드포인트는 이 대기에 걸리지 않는다.
+
+서버 로그에 `무거운 계산(ensemble) 슬롯을 기다린 시간 N초` 경고가 잦게 뜨면 추천 요청이 몰리고 있다는 뜻이다. `RECOMMEND_MAX_CONCURRENCY` 를 **올리지 않는다** — 올리면 더 느려진다. 근거와 대안은 [`../docs/wiki/00-decisions/0012-serialize-monte-carlo.md`](../docs/wiki/00-decisions/0012-serialize-monte-carlo.md).
 
 **`FileNotFoundError: chroma_words`** — `CHROMA_DB_PATH` 를 확인한다. 상대경로는 `backend/` 기준으로 풀린다. 이 디렉토리는 이관 대상이 아니며 파일 그대로 쓴다.

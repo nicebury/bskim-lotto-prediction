@@ -51,6 +51,15 @@ class Settings(BaseSettings):
     DB_POOL_MIN_SIZE: int = 1
     DB_POOL_MAX_SIZE: int = 8
 
+    # 몬테카를로 추천(strategy=ensemble)을 동시에 몇 개까지 돌릴지.
+    # 기본 1 이다. 올리면 **느려진다** — 2건 6.5배, 4건 24.8배(실측). 작은 numpy 호출이
+    # GIL 을 놓았다 잡기를 반복하며 스레드끼리 손바꿈에 시간을 쓰고, 어차피 GIL 아래에서는
+    # 총 처리량이 하나분이라 동시 실행의 이득이 0 이다.
+    # 값을 여는 이유는 튜닝이 아니라, 훗날 알고리즘이 벡터화되거나 프로세스 모델이
+    # 바뀌었을 때 코드를 고치지 않고 되돌리기 위해서다.
+    # 근거: docs/wiki/00-decisions/0012-serialize-monte-carlo.md
+    RECOMMEND_MAX_CONCURRENCY: int = 1
+
     def model_post_init(self, __context) -> None:
         """필수값을 검사한다.
 
@@ -65,6 +74,17 @@ class Settings(BaseSettings):
                 f"필수 환경변수가 비어 있습니다: {', '.join(missing)}. "
                 "backend/.env_backend 를 확인하세요. 형식은 backend/env.sample 에 있고, "
                 "PG_USER 는 app_writer 가 아니라 app_reader 여야 합니다."
+            )
+
+        # 0 이하면 세마포어가 영원히 열리지 않아 **모든 추천 요청이 조용히 멈춘다.**
+        # 헬스체크는 통과하고 다른 엔드포인트도 멀쩡하니 알아채기까지 오래 걸린다.
+        # 증상 없는 고장을 시끄러운 기동 실패로 바꾼다 (롤 자가검증과 같은 취지).
+        # 값 자체는 시크릿이 아니므로 메시지에 담아도 된다.
+        if self.RECOMMEND_MAX_CONCURRENCY < 1:
+            raise RuntimeError(
+                "RECOMMEND_MAX_CONCURRENCY 는 1 이상이어야 합니다 "
+                f"(현재 {self.RECOMMEND_MAX_CONCURRENCY}). "
+                "0 이하로 두면 추천 요청이 영원히 대기합니다."
             )
 
     @property

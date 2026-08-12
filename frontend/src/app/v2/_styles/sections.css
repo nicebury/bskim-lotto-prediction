@@ -1,0 +1,1100 @@
+/*
+ * /v2 본문 스타일.
+ *
+ * 규칙: 클래스는 전부 `hb-` 접두, 커스텀 프로퍼티는 전부 `--hb-` 접두, `!important` 금지.
+ * 기존 클래스를 겨냥하는 선택자는 이 파일에 두지 않는다(→ shell.css).
+ *
+ * mobile-first. 기본이 모바일이고 min-width 로 확장한다. 브레이크포인트는 사이트 규약과
+ * 같은 3단(~639 / 640~1023 / 1024~)을 쓰되, 헤더 내비만 900px 에서 갈린다(항목 폭 문제).
+ */
+
+/* ────────────────────────────────────────────────────────────
+ * 공통 프리미티브
+ * ──────────────────────────────────────────────────────────── */
+
+.hb-section {
+  padding-block: var(--space-12);
+}
+
+.hb-section h2,
+.hb-stats > h2 {
+  margin: 0 0 var(--space-3);
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-title);
+  line-height: var(--lh-tight);
+  color: var(--hb-text);
+}
+
+.hb-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.hb-head > h2 {
+  margin-bottom: var(--space-3);
+}
+
+.hb-note {
+  margin-left: var(--space-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--hb-text-3);
+}
+
+.hb-section-lede {
+  margin: 0 0 var(--space-6);
+  max-width: 46ch;
+  color: var(--hb-text-2);
+  font-size: var(--fs-sm);
+}
+
+.hb-more,
+.hb-more-link {
+  font-size: var(--fs-sm);
+}
+
+.hb-more a,
+.hb-more-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--hb-accent);
+  text-decoration: none;
+  font-weight: var(--fw-medium);
+}
+
+.hb-more a:hover,
+.hb-more-link:hover {
+  text-decoration: underline;
+}
+
+.hb-empty {
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px dashed var(--hb-line-strong);
+  border-radius: var(--radius-card);
+  color: var(--hb-text-2);
+  font-size: var(--fs-sm);
+}
+
+/*
+ * 면책 고지. 추천·통계가 보이는 구간마다 붙는다(→ 40-domain/forbidden-expressions.md).
+ * 눈에 띄되 본문을 압도하지 않는 크기로 둔다 — 작게 숨기면 고지의 의미가 없다.
+ */
+.hb-disclaimer {
+  margin: var(--space-6) 0 0;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--hb-line-strong);
+  color: var(--hb-text-3);
+  font-size: var(--fs-xs);
+  line-height: 1.7;
+}
+
+/* ── 버튼 ─────────────────────────────────────────── */
+
+.hb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding-inline: var(--space-6);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
+}
+
+.hb-btn-primary {
+  background: linear-gradient(135deg, var(--hb-accent), #5566e8);
+  color: #fff;
+  box-shadow: 0 8px 20px -10px var(--hb-accent);
+}
+
+.hb-btn-quiet {
+  background: rgb(255 255 255 / 0.06);
+  border-color: var(--hb-line-strong);
+  color: var(--hb-text);
+}
+
+.hb-btn-ghost {
+  min-height: 40px;
+  padding-inline: var(--space-4);
+  background: transparent;
+  border-color: var(--hb-line-strong);
+  color: var(--hb-text-2);
+  font-size: var(--fs-sm);
+}
+
+.hb-btn:hover {
+  transform: translateY(-1px);
+}
+
+.hb-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+  transform: none;
+}
+
+.hb-iconbtn {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--hb-line-strong);
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.04);
+  color: var(--hb-text);
+  cursor: pointer;
+}
+
+.hb-iconbtn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.hb-iconbtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 스테이지 — 히어로 · 격자 · 통계를 한 그리드에 묶는다.
+ *
+ * 격자가 이 범위 안에서만 sticky 로 붙어야 하므로 세 조각이 같은 부모여야 한다.
+ * ⚠ 이 요소와 조상에 transform·filter·contain·will-change 를 걸지 않는다 —
+ *   하나라도 걸리면 자손의 sticky 가 갇힌다.
+ * ──────────────────────────────────────────────────────────── */
+
+.hb-stage {
+  position: relative;
+  display: grid;
+  /*
+    ⚠ 열을 **명시해야 한다.** 생략하면 암시적 트랙이 `auto` 가 되고, auto 트랙은
+    자식의 max-content 만큼 커진다 — 10열 격자가 그 max-content 를 375px 훨씬 위로
+    밀어올려 스테이지 전체가 화면 밖으로 잘려 나갔다(375px 실측에서 발견).
+    `min-width: 0` 은 item 의 축소 거부만 풀 뿐 **트랙 크기는 막지 못한다.**
+    minmax(0, 1fr) 이 트랙을 컨테이너 폭에 묶는다.
+  */
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-8);
+  max-width: var(--hb-max);
+  margin-inline: auto;
+  padding: var(--space-8) var(--hb-pad) var(--space-12);
+}
+
+/* 같은 이유로 item 쪽 축소 거부도 함께 푼다(둘 다 있어야 안전하다). */
+.hb-stage > * {
+  min-width: 0;
+}
+
+/* ── 셰이더 배경 ─────────────────────────────────────
+ * 캔버스가 아니라 이 래퍼의 그라디언트가 **기본값**이다. WebGL 이 없거나 실패해도
+ * 화면이 비지 않는다. 스테이지 상단만 덮어 아래 섹션과 자연스럽게 이어진다.
+ */
+.hb-shader {
+  position: absolute;
+  inset: 0 0 auto;
+  height: min(760px, 92vh);
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background:
+    radial-gradient(60% 50% at 22% 18%, rgb(90 104 220 / 0.28), transparent 70%),
+    radial-gradient(55% 45% at 82% 8%, rgb(124 92 200 / 0.22), transparent 72%),
+    linear-gradient(180deg, rgb(18 22 45 / 0.85), transparent 78%);
+  /* 아래쪽을 부드럽게 지워 경계선이 보이지 않게 한다. */
+  mask-image: linear-gradient(180deg, #000 55%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent 100%);
+}
+
+.hb-shader-gl {
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  /* 첫 프레임이 실제로 그려진 뒤에만 .is-ready 가 붙는다. */
+  transition: opacity 600ms var(--ease-out);
+}
+
+.hb-shader-gl.is-ready {
+  opacity: 1;
+}
+
+/* 스테이지 안의 실제 콘텐츠는 셰이더 위에 온다. */
+.hb-hero,
+.hb-gridpanel,
+.hb-stats {
+  position: relative;
+  z-index: 1;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 히어로
+ * ──────────────────────────────────────────────────────────── */
+
+.hb-eyebrow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  font-size: var(--hb-fs-label);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--hb-ls-label);
+  color: var(--hb-text-2);
+}
+
+.hb-eyebrow-dday {
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--hb-accent-dim);
+  color: var(--hb-accent);
+  letter-spacing: 0.06em;
+}
+
+/* 카운트다운. 자릿수가 바뀌어도 폭이 흔들리지 않게 tabular-nums 를 쓴다. */
+.hb-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--hb-text-3);
+  letter-spacing: 0.02em;
+}
+
+.hb-hero h1 {
+  margin: 0;
+  font-size: var(--hb-fs-display);
+  font-weight: var(--fw-black);
+  letter-spacing: var(--ls-hero);
+  line-height: var(--lh-tight);
+  color: var(--hb-text);
+}
+
+.hb-hero h1 em {
+  font-style: normal;
+  /* 강조는 한 곳에만. 여섯 칸이 이 화면의 주제다. */
+  background: linear-gradient(120deg, var(--hb-accent), #b6a2ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.hb-lede {
+  margin: var(--space-4) 0 0;
+  max-width: 42ch;
+  color: var(--hb-text-2);
+}
+
+.hb-hero-when {
+  margin: var(--space-3) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--hb-text-3);
+}
+
+.hb-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+/* 모바일에서는 버튼을 전폭으로 세운다(규약 5.3). */
+.hb-cta .hb-btn {
+  flex: 1 1 100%;
+}
+
+@media (min-width: 640px) {
+  .hb-cta .hb-btn {
+    flex: 0 0 auto;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 45칸 격자 — 이 시안의 시그니처
+ * ──────────────────────────────────────────────────────────── */
+
+.hb-gridpanel {
+  padding: var(--space-4);
+  border: 1px solid var(--hb-line);
+  border-radius: var(--radius-card);
+  /*
+    불투명하게 둔다. 반투명으로 하면 sticky 로 고정된 동안 뒤로 지나가는 텍스트가 비쳐
+    번호가 읽히지 않는다. backdrop-filter 를 쓰지 않는 이유이기도 하다 — 고정 요소의
+    blur 는 매 프레임 재계산되어 모바일에서 비싸다.
+  */
+  background: var(--hb-surface);
+  box-shadow: 0 18px 40px -24px rgb(0 0 0 / 0.9);
+
+  /* 스테이지 범위 안에서만 붙는다. 헤더 높이만큼 내려 겹치지 않게 한다. */
+  position: sticky;
+  top: calc(var(--hb-header-h) + var(--space-2));
+  align-self: start;
+}
+
+/*
+ * 10열 격자. 왼쪽 한 칸은 구간 라벨이다.
+ *
+ * ⚠ 고정 px 폭을 쓰지 않는다. 셀은 1fr 로 늘어나므로 375px 에서도 넘치지 않는다
+ *   (라벨 + 10칸 + 간격이 컨테이너를 100% 로 나눠 가진다).
+ */
+.hb-grid {
+  display: grid;
+  grid-template-columns: max-content repeat(10, minmax(0, 1fr));
+  gap: var(--hb-cell-gap);
+  align-items: center;
+  /* 자신도 flex/grid 자손일 수 있으므로 같은 이유로 최소 폭을 푼다. */
+  min-width: 0;
+}
+
+.hb-grid-label {
+  padding-right: var(--space-1);
+  font-size: 0.56rem;
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.02em;
+  color: var(--hb-text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.hb-cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border-radius: var(--hb-cell-radius);
+  background: var(--hb-surface-2);
+  /* 빈 칸도 격자의 일부로 읽히도록 아주 옅은 경계를 남긴다. */
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.04);
+  overflow: hidden;
+}
+
+.hb-cell-num {
+  position: relative;
+  z-index: 2;
+  font-size: 0.62rem;
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+  /* 히트맵이 켜지면 칸 배경이 밝아진다. 숫자가 그 위에서도 읽히도록 밝게 둔다. */
+  color: var(--hb-text);
+  line-height: 1;
+}
+
+/*
+ * 히트맵 레이어.
+ *
+ * **기본값이 보이는 상태**다 — JS 가 꺼져 있어도 최근 20회 빈도가 정적으로 남는다.
+ * JS 가 있을 때만 감췄다가 스크롤이 통계 구간에 닿으면 되살린다.
+ */
+.hb-cell-heat {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  /*
+    상한을 70% 로 둔다. 100% 까지 채우면 밝은 보라 위 숫자 대비가 무너진다(실측).
+    히트맵은 "많다/적다"의 상대 비교라 절대 채도가 필요하지 않다.
+  */
+  background: color-mix(in oklab, var(--hb-heat-hi) calc(var(--hb-heat, 0) * 70%), transparent);
+}
+
+/*
+ * ★ 당첨 칸에는 히트 레이어를 씌우지 않는다.
+ *
+ * 씌우면 파란 히트가 볼 구간 색 위에 겹쳐 **공식 5구간 색이 다른 색으로 보인다**
+ * (빨강 21~30 이 보라로 읽혔다 — 실측). 볼 색은 사용자가 색만 보고 구간을 아는
+ * 학습된 매핑이라 어떤 연출도 그 위에 올릴 수 없다(→ 00-decisions/0009).
+ * 당첨 칸의 빈도는 옆 통계 목록이 숫자로 전달한다.
+ */
+.hb-cell[data-win] .hb-cell-heat {
+  display: none;
+}
+
+.hb-js .hb-cell-heat {
+  opacity: 0;
+  transition: opacity 420ms var(--ease-out);
+}
+
+.hb-js .hb-stage[data-phase='heat'] .hb-cell-heat {
+  opacity: 1;
+}
+
+/* 당첨 마킹. 볼 공식 5구간 색을 그대로 읽는다 — 여기서 재정의하지 않는다. */
+.hb-cell[data-win] .hb-cell-num {
+  z-index: 2;
+  font-weight: var(--fw-bold);
+  color: var(--ball-fg);
+}
+
+.hb-cell[data-win][data-range='1'] {
+  background: var(--ball-1-10);
+}
+.hb-cell[data-win][data-range='2'] {
+  background: var(--ball-11-20);
+}
+.hb-cell[data-win][data-range='3'] {
+  background: var(--ball-21-30);
+}
+.hb-cell[data-win][data-range='4'] {
+  background: var(--ball-31-40);
+}
+.hb-cell[data-win][data-range='5'] {
+  background: var(--ball-41-45);
+}
+
+/* 밝은 볼(노랑·초록) 위 흰 글자는 대비 AA 에 미달한다. */
+.hb-cell[data-win][data-range='1'] .hb-cell-num,
+.hb-cell[data-win][data-range='5'] .hb-cell-num {
+  color: var(--ball-fg-dark);
+}
+
+/*
+ * 보너스는 당첨번호 여섯 개와 성격이 다르다. 그래서 배경을 채우지 않고 테두리로만
+ * 구분하고, 숫자를 밝혀 빈 칸과 구별되게 한다. 이 표시의 뜻은 캡션 범례가 말로 설명한다.
+ */
+.hb-cell[data-bonus] {
+  box-shadow: inset 0 0 0 2px var(--hb-text-2);
+}
+
+.hb-cell[data-bonus] .hb-cell-num {
+  color: var(--hb-text);
+  font-weight: var(--fw-bold);
+}
+
+/* ── 격자 캡션 ────────────────────────────────────── */
+
+.hb-gridcap {
+  margin-top: var(--space-4);
+}
+
+.hb-gridcap-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  font-size: var(--fs-sm);
+  color: var(--hb-text-3);
+}
+
+.hb-round {
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-black);
+  letter-spacing: var(--ls-title);
+  color: var(--hb-text);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * 격자의 두 상태를 말로 설명한다. 색 변화만으로 전달하면 색각 이상이 있는 사용자와
+ * 모션을 끈 사용자에게 닿지 않는다.
+ */
+.hb-gridcap-legend {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  margin: var(--space-4) 0 0;
+  font-size: 0.68rem;
+  color: var(--hb-text-3);
+}
+
+.hb-legend-mark {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hb-legend-mark::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  flex: none;
+}
+
+.hb-legend-mark[data-on='mark']::before {
+  background: var(--ball-21-30);
+}
+
+.hb-legend-mark[data-on='heat']::before {
+  background: var(--hb-heat-hi);
+}
+
+.hb-legend-mark[data-on='bonus']::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--hb-text-2);
+}
+
+/* 현재 상태가 아닌 설명은 물러난다. JS 가 없으면 둘 다 유효하므로 둘 다 선명하게 둔다. */
+.hb-js .hb-stage[data-phase='mark'] .hb-legend-mark[data-on='heat'],
+.hb-js .hb-stage[data-phase='heat'] .hb-legend-mark[data-on='mark'] {
+  opacity: 0.4;
+  transition: opacity 420ms var(--ease-out);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 볼
+ * ──────────────────────────────────────────────────────────── */
+
+.hb-ballrow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.hb-ballrow-plus {
+  color: var(--hb-text-3);
+  font-size: var(--fs-sm);
+}
+
+.hb-ball {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--ball-fg);
+  flex: none;
+}
+
+.hb-ball[data-size='lg'] {
+  width: 40px;
+  height: 40px;
+  font-size: var(--fs-body);
+}
+
+.hb-ball[data-range='1'] {
+  background: var(--ball-1-10);
+  color: var(--ball-fg-dark);
+}
+.hb-ball[data-range='2'] {
+  background: var(--ball-11-20);
+}
+.hb-ball[data-range='3'] {
+  background: var(--ball-21-30);
+}
+.hb-ball[data-range='4'] {
+  background: var(--ball-31-40);
+}
+.hb-ball[data-range='5'] {
+  background: var(--ball-41-45);
+  color: var(--ball-fg-dark);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 통계
+ * ──────────────────────────────────────────────────────────── */
+
+.hb-statgrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+.hb-statblock {
+  padding: var(--space-4);
+  border: 1px solid var(--hb-line);
+  border-radius: var(--radius-card);
+  background: rgb(255 255 255 / 0.02);
+}
+
+.hb-statblock h3 {
+  margin: 0 0 var(--space-3);
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-semibold);
+  color: var(--hb-text-2);
+}
+
+.hb-statlist {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hb-statlist li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.hb-statlist-value {
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--hb-text-3);
+}
+
+@media (min-width: 640px) {
+  .hb-statgrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 번호 뽑기 — 3D 원근 스택
+ * ──────────────────────────────────────────────────────────── */
+
+.hb-stack {
+  --hb-stack-h: 250px;
+}
+
+.hb-stack-viewport {
+  position: relative;
+  height: var(--hb-stack-h);
+  /* 원근. 값이 작을수록 왜곡이 커진다 — 카드 글자가 읽혀야 하므로 넉넉히 준다. */
+  perspective: 1200px;
+  /*
+    카드가 좌우로 밀려나므로 자기 컨테이너에서 잘라 낸다.
+    전역 `html,body{overflow-x:clip}` 안전망에 기대지 않는다 — 그 안전망은 넘침을
+    스크롤바 대신 잘림으로 숨겨 버그를 안 보이게 만든다.
+  */
+  overflow: clip;
+}
+
+.hb-stack-card {
+  position: absolute;
+  /*
+    좌우에 여백을 둔다. 카드가 뷰포트를 꽉 채우면 뒤 카드가 밀려나도 활성 카드에 완전히
+    가려 "쌓여 있다"는 사실이 보이지 않는다 — 스택의 의미가 사라진다.
+  */
+  inset: 0 5%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid var(--hb-line-strong);
+  border-radius: var(--radius-card);
+  background: linear-gradient(160deg, var(--hb-surface-2), var(--hb-surface));
+  box-shadow: 0 20px 44px -26px rgb(0 0 0 / 0.95);
+
+  /*
+    --hb-off(부호 있는 거리)와 --hb-depth(절댓값)를 JS 가 넘긴다.
+    CSS 의 abs() 는 아직 지원이 고르지 않아 절댓값을 미리 계산해 받는다.
+  */
+  transform: translateX(calc(var(--hb-off, 0) * 26%)) scale(calc(1 - var(--hb-depth, 0) * 0.09))
+    rotateY(calc(var(--hb-off, 0) * -14deg));
+  opacity: calc(1 - var(--hb-depth, 0) * 0.42);
+  transition: transform 420ms var(--ease-out), opacity 420ms var(--ease-out);
+}
+
+/*
+ * 3겹을 넘어가면 보이지 않는다(opacity 계산이 이미 0 이하로 떨어진다). 렌더는 유지해
+ * 전환이 끊기지 않게 하되, 투명한 카드가 클릭을 가로채지 않도록 포인터를 막는다.
+ */
+.hb-stack-card:not([data-depth='0']):not([data-depth='1']):not([data-depth='2']) {
+  pointer-events: none;
+}
+
+.hb-stack-label {
+  margin: 0;
+  font-size: var(--hb-fs-label);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--hb-ls-label);
+  color: var(--hb-accent);
+}
+
+.hb-stack-balls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/*
+ * 여섯 개가 한 줄에 들어가야 조합으로 읽힌다. 375px 에서 40px 볼은 줄바꿈이 나서
+ * (실측) 좁은 화면에서만 한 단계 줄인다. 640px 부터는 원래 크기로 돌아간다.
+ */
+.hb-stack-balls .hb-ball[data-size='lg'] {
+  width: 36px;
+  height: 36px;
+  font-size: var(--fs-sm);
+}
+
+.hb-stack-desc {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--hb-text-2);
+}
+
+.hb-stack-empty {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--hb-text-3);
+}
+
+.hb-stack-again {
+  margin-top: auto;
+  align-self: flex-start;
+}
+
+.hb-stack-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+}
+
+.hb-stack-dots {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* 점 자체는 8px 이지만 히트 영역은 44px 다(시각 크기와 클릭 영역 분리). */
+.hb-dot {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--hb-line-strong);
+  cursor: pointer;
+}
+
+.hb-dot::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+}
+
+.hb-dot[data-on] {
+  background: var(--hb-accent);
+}
+
+.hb-stack-counter {
+  margin: var(--space-3) 0 0;
+  text-align: center;
+  font-size: var(--fs-sm);
+  color: var(--hb-text-3);
+}
+
+.hb-stack-error {
+  margin: var(--space-3) 0 0;
+  text-align: center;
+  font-size: var(--fs-sm);
+  color: #ff9a9a;
+}
+
+@media (min-width: 640px) {
+  .hb-stack {
+    --hb-stack-h: 230px;
+  }
+
+  .hb-stack-viewport {
+    max-width: 460px;
+    margin-inline: auto;
+  }
+
+  .hb-stack-card {
+    inset: 0 7%;
+  }
+
+  /* 2열이 되기 전까지는 스택을 가운데 두고, 2열에서는 오른쪽 열을 채운다. */
+  .hb-pick-stack .hb-stack-viewport {
+    max-width: 480px;
+  }
+
+  .hb-stack-balls .hb-ball[data-size='lg'] {
+    width: 40px;
+    height: 40px;
+    font-size: var(--fs-body);
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 서비스 타일
+ * ──────────────────────────────────────────────────────────── */
+
+.hb-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hb-tile {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  height: 100%;
+  padding: var(--space-4);
+  border: 1px solid var(--hb-line);
+  border-radius: var(--radius-card);
+  background: rgb(255 255 255 / 0.02);
+  color: var(--hb-text);
+  text-decoration: none;
+  transition: background var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out);
+}
+
+.hb-tile:hover {
+  background: rgb(255 255 255 / 0.05);
+  border-color: var(--hb-line-strong);
+}
+
+.hb-tile[data-disabled] {
+  opacity: 0.55;
+}
+
+/* 아이콘 색은 서비스 6색을 그대로 쓴다 — 사이트 전체에서 같은 색이 같은 서비스를 가리킨다. */
+.hb-tile-glyph {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  color: var(--svc-fg);
+}
+
+.hb-tile-glyph svg {
+  width: 19px;
+  height: 19px;
+}
+
+.hb-tile-glyph[data-accent='lotto'] {
+  background: var(--svc-lotto);
+}
+.hb-tile-glyph[data-accent='stats'] {
+  background: var(--svc-stats);
+}
+.hb-tile-glyph[data-accent='reco'] {
+  background: var(--svc-reco);
+}
+.hb-tile-glyph[data-accent='dream'] {
+  background: var(--svc-dream);
+}
+.hb-tile-glyph[data-accent='news'] {
+  background: var(--svc-news);
+}
+.hb-tile-glyph[data-accent='pension'] {
+  background: var(--svc-pension);
+}
+
+.hb-tile-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-semibold);
+}
+
+.hb-tile-badge {
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--hb-line);
+  color: var(--hb-text-3);
+  font-size: 0.62rem;
+  font-weight: var(--fw-medium);
+}
+
+/* 타일에는 반드시 한 줄 설명이 붙는다 — 아이콘만 있는 홈은 저가치 페이지로 읽힌다. */
+.hb-tile-summary {
+  font-size: var(--fs-xs);
+  color: var(--hb-text-3);
+}
+
+@media (min-width: 640px) {
+  .hb-tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .hb-tiles {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 뉴스 · 가이드
+ * ──────────────────────────────────────────────────────────── */
+
+.hb-news {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hb-news a {
+  display: grid;
+  gap: 4px;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--hb-line);
+  border-radius: var(--radius-card);
+  color: var(--hb-text);
+  text-decoration: none;
+}
+
+.hb-news a:hover {
+  background: rgb(255 255 255 / 0.04);
+}
+
+.hb-news-title {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  line-height: 1.5;
+}
+
+.hb-news-meta {
+  font-size: var(--fs-xs);
+  color: var(--hb-text-3);
+}
+
+.hb-guides {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hb-guide {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  height: 100%;
+  padding: var(--space-4);
+  border: 1px solid var(--hb-line);
+  border-left: 3px solid var(--hb-line-strong);
+  border-radius: var(--radius-card);
+  color: var(--hb-text);
+  text-decoration: none;
+}
+
+.hb-guide:hover {
+  background: rgb(255 255 255 / 0.04);
+}
+
+/* 가이드 카드도 서비스 색 체계를 따른다 — 왼쪽 선 하나로만 표시해 조용히 둔다. */
+.hb-guide[data-accent='lotto'] {
+  border-left-color: var(--svc-lotto);
+}
+.hb-guide[data-accent='stats'] {
+  border-left-color: var(--svc-stats);
+}
+.hb-guide[data-accent='reco'] {
+  border-left-color: var(--svc-reco);
+}
+.hb-guide[data-accent='dream'] {
+  border-left-color: var(--svc-dream);
+}
+.hb-guide[data-accent='news'] {
+  border-left-color: var(--svc-news);
+}
+
+.hb-guide-title {
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-semibold);
+}
+
+.hb-guide-summary {
+  font-size: var(--fs-xs);
+  color: var(--hb-text-3);
+}
+
+@media (min-width: 640px) {
+  .hb-guides {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .hb-guides {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 소개 본문
+ * ──────────────────────────────────────────────────────────── */
+
+.hb-prose {
+  max-width: 68ch;
+}
+
+.hb-prose p {
+  margin: 0 0 var(--space-4);
+  color: var(--hb-text-2);
+  font-size: var(--fs-sm);
+  line-height: 1.8;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 데스크톱 — 스테이지 2열
+ * ──────────────────────────────────────────────────────────── */
+
+@media (min-width: 1024px) {
+  /* 번호 뽑기: 왼쪽 설명 · 오른쪽 스택 */
+  .hb-pick {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: var(--space-12);
+    align-items: center;
+  }
+
+  .hb-pick-intro .hb-disclaimer {
+    margin-bottom: 0;
+  }
+
+  /* 2열에서는 스택을 열 왼쪽에 붙인다. 가운데 두면 오른쪽 여백만 좁아져 답답해 보인다. */
+  .hb-pick-stack .hb-stack-viewport {
+    max-width: 500px;
+    margin-inline: 0;
+  }
+
+  .hb-stage {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 42%);
+    column-gap: var(--space-12);
+    align-items: start;
+    padding-top: var(--space-12);
+  }
+
+  .hb-hero {
+    grid-column: 1;
+    grid-row: 1;
+    padding-block: var(--space-8);
+  }
+
+  /* 격자가 히어로와 통계 두 행에 걸쳐 있어야 그 구간 내내 붙어 있다. */
+  .hb-gridpanel {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  .hb-stats {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .hb-grid-label {
+    font-size: 0.62rem;
+  }
+
+  .hb-cell-num {
+    font-size: 0.72rem;
+  }
+}
+
+/*
+ * ⚠ reduced-motion 은 전역 규약이 `animation-duration/transition-duration: 0ms !important`
+ *   로 이미 강제한다(src/styles/base.css). 그래서 여기서 전환을 다시 끄지 않는다.
+ *   대신 **모션이 꺼져도 정보가 사라지지 않도록** 설계했다 — 격자 상태는 transition 이
+ *   아니라 opacity 의 최종값으로 결정되므로, 0ms 에서는 즉시 최종 상태로 스냅한다.
+ */

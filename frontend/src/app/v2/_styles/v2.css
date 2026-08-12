@@ -1,0 +1,16 @@
+/*
+ * /v2 스타일 진입점.
+ *
+ * `src/app/v2/layout.tsx` 가 이 파일 하나만 import 한다. layout(서버 컴포넌트)에서
+ * import 하면 이 CSS 가 **해당 라우트 세그먼트의 청크**로 묶여 다른 라우트의 HTML 에는
+ * <link> 가 붙지 않는다.
+ *
+ * @import 는 CSS 규격상 다른 규칙보다 먼저 와야 한다. 순서가 곧 캐스케이드 순서다:
+ *   tokens   → 값 정의 (아무것도 그리지 않는다)
+ *   shell    → 기존 셸과의 접합 + 헤더/독
+ *   sections → 페이지 본문
+ * 다만 이 순서에 **의존하는 규칙을 쓰지 않는다** — 모든 오버라이드는 특이도로 이긴다.
+ */
+@import './tokens.css';
+@import './shell.css';
+@import './sections.css';
