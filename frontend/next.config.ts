@@ -21,6 +21,42 @@ const nextConfig: NextConfig = {
 
   // 빌드 산출물에 서버 정보를 흘리지 않는다.
   poweredByHeader: false,
+
+  /*
+   * 메타데이터를 **스트리밍하지 않고 항상 `<head>` 안에서 확정**한다.
+   *
+   * Next 15.2 부터 metadata 는 기본이 스트리밍이다 — 셸(`<head>`)을 먼저 흘려보내고
+   * `<meta>` 는 나중에 스트림 뒤쪽, 즉 **`<body>` 안**에 꽂는다. 이 목록에 걸린 UA 에게만
+   * 예전처럼 `<head>` 를 채운 뒤 응답한다. 기본 목록은 JS 를 실행하지 않는 봇들(Bingbot·
+   * Slackbot·Twitterbot·Yeti 등)이고 **Googlebot 은 일부러 빠져 있다**(JS 를 실행하므로).
+   *
+   * 그런데 우리 사이트에서 dynamic 인 라우트는 `/news` 하나이고, 거기서 실측한 결과
+   * `<meta name="description">` 이 **JS 실행 후에도 `<body>` 에 그대로 남았다**(2026-08-21).
+   * meta 는 `<head>` 안에 있어야 하는 태그이고, Lighthouse SEO 도 이걸 근거로 /news 만
+   * 91점을 줬다(나머지 정적 라우트는 100점). 완료 기준이 SEO 100 이라 맞춰야 한다.
+   *
+   * 모든 UA 를 목록에 넣어 스트리밍을 끄는 대가는 **사실상 없다.** 스트리밍 메타데이터는
+   * `generateMetadata` 가 느릴 때를 위한 최적화인데, 우리 메타데이터는 전부 정적 객체이거나
+   * 이미 받아 둔 값으로 만든다. 나머지 라우트는 빌드 때 미리 렌더되므로 영향 자체가 없다.
+   * ⚠ 앞으로 `generateMetadata` 안에서 느린 조회를 하면 그만큼 첫 바이트가 늦어진다.
+   *   그럴 일이 생기면 이 설정이 아니라 그 조회를 고친다.
+   */
+  htmlLimitedBots: /.*/,
+
+  // 산출물 디렉토리. 기본은 `.next` 이고 평소에는 이 값을 건드리지 않는다.
+  //
+  // ⚠ 이 탈출구가 필요한 이유: `next dev` 는 떠 있는 동안 `.next` 를 계속 다시 쓴다.
+  // 개발 서버를 켜 둔 채로 `next build && next start` 를 하면, 빌드된 프로덕션 산출물이
+  // dev 의 산출물로 덮여 `next start` 가 **개발용 청크를 서빙한다**(`main-app.js?v=…`).
+  // 에러가 나지 않아 알아채기 어렵고, 그 상태로 Lighthouse 를 돌리면 번들 크기·LCP·TBT 가
+  // 전부 무의미한 값이 된다. 실측할 때는 `NEXT_DIST_DIR=.next-prod` 로 산출물을 갈라 둔다.
+  //   NEXT_DIST_DIR=.next-prod npx next build
+  //   NEXT_DIST_DIR=.next-prod npx next start -p 3100
+  //
+  // ⚠ 부작용 하나: Next 는 빌드할 때마다 `next-env.d.ts` 의 참조 경로를 현재 distDir 로
+  //   다시 쓴다. 실측이 끝나면 `git checkout -- next-env.d.ts` 로 되돌린다. 안 되돌리면
+  //   사라진 `.next-prod/types/...` 를 가리켜 `tsc --noEmit` 이 깨진다. 절차는 README 참조.
+  distDir: process.env.NEXT_DIST_DIR || '.next',
 }
 
 export default nextConfig

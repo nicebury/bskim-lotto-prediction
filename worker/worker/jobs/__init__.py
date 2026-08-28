@@ -21,7 +21,8 @@ import logging
 from collections.abc import Awaitable, Callable
 
 from .. import job_log
-from . import lotto, news
+from ..log_capture import capture
+from . import lotto, news, video_channel, video_refresh, video_search
 from .progress import JobProgress
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,12 @@ logger = logging.getLogger(__name__)
 JOBS: dict[str, Callable[[JobProgress], Awaitable[None]]] = {
     "lotto": lotto.run,
     "news": news.run,
+    # 영상은 잡이 셋이다. 쿼터 버킷(search.list 는 하루 100회 별도 버킷)·락·
+    # 실패의 의미가 각각 다르기 때문이다 — 수집 실패는 "새 영상이 없다"지만
+    # 갱신 실패는 "30일 초과 데이터가 남았다" 는 정책 위반이다.
+    "video_channel": video_channel.run,
+    "video_search": video_search.run,
+    "video_refresh": video_refresh.run,
 }
 
 
@@ -99,19 +106,40 @@ class JobRunner:
         경고만 남고 이력은 running 인 채로 굳는다.
         """
         progress = JobProgress()
+        # capture 안에서 난 WARNING 이상을 전부 모아 log_list 에 남긴다.
+        # error_desc 는 잡을 죽인 마지막 예외 하나뿐이라, 죽지 않고 넘어간
+        # 문제(채널명 변경·LLM 판정 실패·배치 건너뜀)가 아무 데도 안 남았다.
+        # contextvars 기반이라 동시에 도는 다른 잡의 로그와 섞이지 않는다.
+        with capture() as entries:
+            try:
+                await JOBS[job_nm](progress)
+            except Exception as exc:  # noqa: BLE001 — 잡의 모든 실패를 이력에 남긴다
+                logger.exception("%s 잡 실패", job_nm)
+                ok = False
+                err: str | None = str(exc)
+            else:
+                ok = True
+                err = None
+            finally:
+                self._lock(job_nm).release()
+
+        # 마감은 capture 밖에서 한다 — 마감 중 오류가 자기 자신의 log_list 에
+        # 들어가려다 이미 닫힌 버퍼를 건드리는 일을 피한다.
         try:
-            await JOBS[job_nm](progress)
-        except Exception as exc:  # noqa: BLE001 — 잡의 모든 실패를 이력에 남긴다
-            logger.exception("%s 잡 실패", job_nm)
-            # collected 는 0 이 아니라 실제로 커밋된 건수다. 부분 성공을 기록한다.
-            await job_log.finish(job_log_id, "failed", progress.collected, str(exc))
-            return False
-        else:
-            await job_log.finish(job_log_id, "success", progress.collected)
+            await job_log.finish(
+                job_log_id,
+                "success" if ok else "failed",
+                progress.collected,
+                err,
+                stat=progress.stat or None,
+                log_entries=entries or None,
+            )
+        except Exception:  # noqa: BLE001 — 이력 기록 실패가 잡 결과를 뒤집지 않는다
+            logger.exception("%s 잡 이력 마감 실패 (job_log_id=%d)", job_nm, job_log_id)
+
+        if ok:
             logger.info("%s 잡 성공 — %d건 수집", job_nm, progress.collected)
-            return True
-        finally:
-            self._lock(job_nm).release()
+        return ok
 
     async def run_now(self, job_nm: str, exec_type_cd: str) -> bool:
         """잡이 끝날 때까지 기다린다. 크론이 재시도 여부를 판단할 때 쓴다.

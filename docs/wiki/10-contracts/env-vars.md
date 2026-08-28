@@ -123,7 +123,7 @@ PG_PASSWORD=                  # init_roles.sql 로 만든 비번
 # 추첨 방송은 20:35 시작이고 끝나는 시각이 회차마다 달라 세 번 시도한다.
 # ★ 요일은 이름으로 쓴다. APScheduler 는 0=월…6=일 이라 `6` 은 토요일이 아니라 일요일이다.
 LOTTO_CRON=40,50 20 * * sat;0 21 * * sat
-NEWS_CRON=0 * * * *           # 매시간. 쿼터 25,000 중 48회(0.2%)만 쓴다
+NEWS_CRON=0 * * * *           # 매시간. 쿼터 25,000 중 72회(0.3%)만 쓴다
 
 # lotto 잡이 '오류로' 죽었을 때의 재시도. 위 크론 3회와는 별개다.
 LOTTO_RETRY_DELAY_MIN=60
@@ -136,12 +136,20 @@ WORKER_JOB_KEY=
 # ── 네이버 검색 API (뉴스) ────────────────────────
 NAVER_CLIENT_ID=
 NAVER_CLIENT_SECRET=
-NAVER_NEWS_QUERY=로또,복권     # 쉼표 구분
+NAVER_NEWS_QUERY=로또,복권,연금복권   # 쉼표 구분. 연금복권은 검색 커버리지용(판정은 '복권' 이 이미 잡는다)
 NAVER_NEWS_DISPLAY=50         # 최대 100
 
 # 발행일(KST)이 실행일로부터 이 일수보다 오래된 기사는 저장하지 않는다.
 # 1 = 오늘과 어제. 0 이면 당일만이라 자정 직전 기사를 영영 놓친다.
 NEWS_MAX_AGE_DAYS=1
+
+# ── 뉴스 주제 적합성 필터 ─────────────────────────
+# 검색 API 는 본문 전문을 뒤져 '복권기금' 이 각주에 한 줄 있는 보도자료까지 준다.
+# 제목만이 기사의 주제를 말해 준다(요약은 검색어 주변 스니펫이라 거의 항상 걸린다).
+NEWS_TITLE_MUST_MATCH=true    # 제목에 검색어가 없으면 버린다
+# 제목에 이 낱말이 있으면 버린다. 부동산·증시가 '로또' 를 비유로 쓰는 문맥.
+# 새 유행어가 생기면 재배포 없이 여기에 더한다. 비우면 제외어 검사를 끈다.
+NEWS_EXCLUDE_KEYWORDS=청약,줍줍,분양,무순위,입주,재건축,임대주택,임대,그린벨트,택지,아파트,부동산,억 로또,경쟁률,공모주,따상,주식,코인,적금,예금,반도체,사면·복권
 
 # ── 서버 ─────────────────────────────────────────
 WORKER_HOST=127.0.0.1      # 루프백 고정. 외부 노출 금지
@@ -162,7 +170,79 @@ NEWS_BACKOFF_BASE_SEC=2.0
 # ── 잡 이력 정리 / catch-up ───────────────────────
 STALE_RUNNING_HOURS=6         # 이 시간을 넘긴 running 행을 기동 시 failed 로 정리
 CATCH_UP_DAYS=7               # lotto 마지막 성공이 이보다 오래되면 기동 직후 1회 실행
+JOB_LOG_RETAIN_DAYS=90        # 이보다 오래된 collect_job_log 행을 기동 시 삭제
+                              # log_list 가 실행마다 쌓인다 — news 만 연 8,760행
+
+# ── YouTube Data API (영상) ───────────────────────
+# console.cloud.google.com → 프로젝트 → YouTube Data API v3 활성화 → API 키 생성
+# ★ 키에 "API 제한"을 걸어 YouTube Data API v3 만 허용한다. IP 제한은 걸지 않는다
+#   (서버 IP 가 바뀌면 조용히 403 이 된다).
+# 없으면 video_* 세 잡을 크론에 등록하지 않는다. lotto·news 는 정상 동작한다.
+YOUTUBE_API_KEY=
+
+# search.list 는 2026-06-01 부터 자체 쿼터 버킷이고 하루 100회가 상한이다.
+# 네이버(25,000회)와 자릿수가 달라 매시간 크론이 불가능하다.
+#   채널  3 units/회 × 4회 =  12 units
+#   검색  4 calls/회 × 6회 =  24 calls / 100
+#   갱신  1 unit/일
+#   → 합계 약 20 units / 10,000 (0.2%)
+YOUTUBE_CHANNEL_CRON=0 */6 * * *;20,50 21 * * sat;20 22 * * sat
+YOUTUBE_SEARCH_CRON=15 */4 * * *
+YOUTUBE_REFRESH_CRON=30 4 * * *
+
+# 화이트리스트 채널(UC 로 시작). 2026-08-27 RSS 실측으로 확정한 공식 채널 둘.
+#   UCEk3VwaA6e4H9TW1vSXOjDA = 동행복권 공식
+#   UCeyspQm90Le7EjROpj6rZXA = 알아볼권리(MBC 로또·연금 방송 공식)
+YOUTUBE_CHANNEL_KEY_LIST=UCEk3VwaA6e4H9TW1vSXOjDA,UCeyspQm90Le7EjROpj6rZXA
+
+# 예상번호 제공 채널. 검색 경로로 새어 들어오는 것을 막는다.
+YOUTUBE_BLOCK_CHANNEL_KEY_LIST=UC-uNAS6008_bFvbI4Nk-jcQ,UCWciziKWCdkqdoikWxo9fUw,UC-3zYni9OqS1nsR9blpspfA,UCWw2D-nV95cEoi-kR6nCfGg,UCQjUd_yvBYBadBTOfkmcESg,UCNoyjx2baN6rM2b7MjNg0lA,UCGd7y1IBVgTd26f1HSEHoWA
+
+YOUTUBE_SEARCH_QUERY=로또 추첨,로또 당첨번호,연금복권 추첨,로또 판매점
+YOUTUBE_SEARCH_MAX_RESULT=50
+YOUTUBE_SEARCH_MAX_CALL_PER_RUN=4     # 질의 수와 일치시킨다
+YOUTUBE_SEARCH_DAILY_BUDGET=60        # 100 중 60. 재시도·수동 트리거 여유
+YOUTUBE_MAX_AGE_DAYS=7
+YOUTUBE_TITLE_MUST_MATCH=true
+YOUTUBE_EXCLUDE_KEYWORDS=청약,줍줍,분양,부동산,공모주,주식,코인
+
+# ★ 금지 표현. forbidden-expressions.md 의 낱말을 수집 단계에서 막는다.
+#   로또 유튜브 제목은 이 표현들의 밀집 구역이다.
+YOUTUBE_FORBIDDEN_KEYWORDS=예상번호,추천번호,예측번호,고정수,고확률,당첨확률,1등예측,당첨보장,필승,비법,명당번호,적중률,조합공식,필출
+
+YOUTUBE_SHORTS_MAX_SEC=180            # 쇼츠 공식 정의는 3분 이하
+YOUTUBE_SUMMARY_MAX_LEN=300
+YOUTUBE_DEDUPE_SAME_TITLE=true        # 같은 콘텐츠의 쇼츠판/롱폼판 중복 제거
+YOUTUBE_REFRESH_AFTER_DAYS=25         # 30일 정책에 5일 버퍼
+YOUTUBE_HARD_EXPIRE_DAYS=30           # 이걸 넘긴 행은 API 성공 여부와 무관하게 삭제
+YOUTUBE_RETAIN_DAYS=60                # 게시 60일 지난 영상은 갱신하지 않고 삭제
+YOUTUBE_REFRESH_BATCH_LIMIT=500
+YOUTUBE_MAX_RETRY=3
+YOUTUBE_BACKOFF_BASE_SEC=2.0
+YOUTUBE_DRY_RUN=false                 # true 면 DB 를 건드리지 않고 필터 통계만 로그로
+
+# ── LLM 금지 표현 보조 판정 ───────────────────────
+# 규칙 제외어가 놓치는 신조어("필출 2수", "고정수 5")를 한 번 더 거른다.
+# 생성이 아니라 분류다. 키가 없거나 API 가 죽으면 규칙 결과를 그대로 쓰고 경고만 남긴다.
+# ★ 키 이름이 일반적이라 YOUTUBE_API_KEY 와 헷갈리기 쉽다 — 이쪽이 LLM 키다.
+LLM=OPENAI                    # 현재 OPENAI 만 지원
+MODEL=gpt-5-nano              # 입력 $0.05/1M · 출력 $0.40/1M (2026-08-28)
+API_KEY=
+LLM_JUDGE_ENABLED=true
+LLM_JUDGE_BATCH_SIZE=20       # 한 요청에 묶을 영상 수. 시스템 프롬프트를 한 번만 낸다
+LLM_JUDGE_TIMEOUT_SEC=20.0
+LLM_JUDGE_MAX_RETRY=2
 ```
+
+### 함정: API 키를 쿼리스트링에 싣지 않는다 ★
+
+Google API 는 `?key=...` 쿼리스트링 인증을 표준으로 안내한다. **그대로 쓰면 안 된다.**
+
+httpx 의 예외 메시지에는 **request URL 이 실린다.** `naver_news.py` 처럼 `f"... {last_exc}"` 로 감싸 올리면 그 문자열이 `collect_job_log.error_desc` 에 저장되고 터미널 로그에도 남는다 — **API 키가 DB 에 평문으로 쌓인다.** `alembic.ini` 가 `app_writer` 비밀번호를 뱉었던 사고(2026-07-09, 실제로 비번을 교체해야 했다)와 같은 형태다.
+
+- YouTube 는 **`X-goog-api-key` 헤더**로 보낸다 (공식 지원)
+- OpenAI 는 `Authorization: Bearer` 헤더다 (원래 헤더 인증)
+- 예외를 다시 던질 때 원본 문자열을 싣지 않는다 — `type(exc).__name__` 과 status_code 만 올린다
 
 `WORKER_HOST` 를 `0.0.0.0` 으로 바꾸지 않는다. [[worker-jobs]] 의 보안 절 참조.
 
@@ -195,6 +275,18 @@ TZ=Asia/Seoul
 # ── 몬테카를로 추천 동시 실행 수 ───────────────────
 # 기본 1. 올리면 느려진다 (0012-serialize-monte-carlo).
 RECOMMEND_MAX_CONCURRENCY=1
+
+# ── 운영자 전용 화면 (수집 로그) ───────────────────
+# `openssl rand -hex 32` 로 생성한다. 이 값을 아는 사람만 /admin 에 들어온다.
+# ★ 비어 있으면 /api/admin/* 가 전부 503 을 낸다. 빈 문자열끼리 compare_digest
+#   비교는 통과하므로, 빈 값을 '인증 없음'으로 두면 아무나 들어온다 —
+#   인증이 없는 것보다 나쁘다(있다고 착각하게 만든다).
+#   워커의 WORKER_JOB_KEY 와 같은 규약이다.
+ADMIN_TOKEN=
+# 로그인 세션 쿠키 서명 키. ADMIN_TOKEN 과 **다른 값**이어야 한다 —
+# 같으면 쿠키에서 토큰을 역산할 여지가 생긴다.
+ADMIN_SESSION_SECRET=
+ADMIN_SESSION_HOURS=12
 ```
 
 백엔드에는 `WORKER_JOB_KEY` 가 **없다.** 백엔드는 워커를 부르지 않는다.
@@ -220,6 +312,27 @@ RECOMMEND_MAX_CONCURRENCY=1
 조각으로 받으면 조립은 라이브러리의 일이다. `psycopg.conninfo.make_conninfo(host=..., password=...)` 가 이스케이프를 처리하므로 비밀번호에 어떤 문자가 있어도 된다.
 
 `PG_DB` · `PG_USER` · `PG_PASSWORD` 중 하나라도 비면 백엔드는 **기동을 거부한다.**
+
+### 함정: `CORS_ORIGINS` 는 오리진을 **문자 그대로** 비교한다
+
+003 개편으로 프론트가 **브라우저에서 백엔드를 직접 호출**하게 됐다(기간·순위 개수·번호 변경은 CSR). 그 전까지 브라우저가 부르는 것은 추천·꿈해몽뿐이었고, 이제 통계 전체가 이 경로를 탄다. 그래서 이 값이 틀리면 화면의 절반이 죽는다.
+
+**실측(2026-08-18)**: `CORS_ORIGINS=http://localhost:3000` 인 서버에
+
+| 요청 Origin | 서버 응답 | 브라우저 |
+|---|---|---|
+| `http://localhost:3000` | 200 + `access-control-allow-origin` | 통과 |
+| `http://127.0.0.1:3000` | **200 인데 헤더가 없다** | **차단** |
+
+`localhost` 와 `127.0.0.1` 은 같은 곳을 가리키지만 **오리진 문자열로는 다르다.** 스킴·호스트·포트가 한 글자라도 다르면 다른 오리진이다(`https` vs `http`, 끝의 `/` 포함).
+
+**이 실패는 서버 쪽에서 보이지 않는다.** 접근 로그에는 200 만 남고, 브라우저 콘솔에만 CORS 오류가 뜬다. 프론트는 "백엔드가 죽었나" 부터 의심하게 되므로, 화면이 비면 **서버 로그가 아니라 브라우저 콘솔을 먼저 본다.**
+
+**대응**: 쓰는 주소를 전부 쉼표로 나열한다. 배포 시 실제 도메인을 추가하는 것을 잊으면 운영에서 통계 화면이 통째로 비므로, [[deployment]] 의 점검 항목이다.
+
+```bash
+CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+```
 
 ### 백엔드는 자기 롤을 스스로 검증한다
 
@@ -291,6 +404,9 @@ PEXELS_API_KEY=
 | `app_writer` / `app_reader` 롤 | Postgres | ✅ 생성·권한 테스트 통과 | — |
 | `WORKER_JOB_KEY` | worker | ✅ 채움 | — |
 | `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` | worker | ✅ 채움 (2026-07-09 확인) | — |
+| `YOUTUBE_API_KEY` | worker | 미발급 | 영상 수집 |
+| `API_KEY` (LLM) / `MODEL` / `LLM` | worker | ✅ 채움 (2026-08-28, `gpt-5-nano`) | — |
+| `ADMIN_TOKEN` / `ADMIN_SESSION_SECRET` | backend | **미생성 — 사용자가 채워야 한다** | 운영자 로그 화면. 백엔드 구현은 2026-08-28 완료됐고 **값만 기다린다.** 비어 있는 동안 `/api/admin/*` 는 503 이고 공개 API 는 정상이다. `openssl rand -hex 32` 를 **두 번** 돌려 서로 다른 값을 넣는다 — 같으면 기동을 거부한다 |
 | `NEXT_PUBLIC_GA_ID` | frontend | 미발급 | Phase 4 |
 | `NEXT_PUBLIC_NAVER_ANALYTICS_ID` | frontend | 미발급 | Phase 4 |
 | `GOOGLE_SITE_VERIFICATION` / `NAVER_SITE_VERIFICATION` | frontend | 미발급 | Phase 4 |

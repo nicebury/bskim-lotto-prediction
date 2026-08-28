@@ -1,3 +1,5 @@
+import { DREAM_MEANINGS } from './dream-meanings'
+
 /**
  * 사이트 구조 상수. 내비게이션·홈 타일·가이드 목록·면책 문구의 단일 출처.
  *
@@ -15,7 +17,7 @@ export const DISCLAIMER = {
     '로또 번호는 무작위로 추첨되므로 과거 통계가 향후 당첨을 보장하지 않습니다. 본 통계는 과거 회차의 분포를 이해하기 위한 참고 정보입니다.',
   /** 꿈해몽 화면. 꿈과 당첨 사이에 인과관계를 주장하지 않는다. */
   dream:
-    '꿈해몽 번호는 꿈 키워드를 사전과 대조해 만든 재미용 콘텐츠입니다. 꿈과 당첨 사이에는 아무런 인과관계가 없으며, 당첨을 보장하지 않습니다.',
+    '꿈해몽 번호는 전통적인 꿈 해석 자료를 바탕으로 만든 참고용 콘텐츠입니다. 꿈과 당첨 사이에는 아무런 인과관계가 없으며, 당첨을 보장하지 않습니다.',
   /** localStorage 안내(로그인이 없다는 사실을 명확히 알린다). */
   localStorage:
     '저장한 번호는 현재 브라우저에만 보관됩니다. 브라우저 데이터를 삭제하거나 다른 기기에서 접속하면 저장 정보가 유지되지 않을 수 있습니다.',
@@ -26,7 +28,8 @@ export const NAV_ITEMS = [
   { href: '/lotto', label: '로또' },
   { href: '/lotto/stat', label: '번호통계' },
   { href: '/lotto/recommend', label: '번호추천' },
-  { href: '/dream', label: '꿈해몽' },
+  { href: '/dream', label: '꿈해몽번호' },
+  { href: '/videos', label: '영상' },
   { href: '/news', label: '뉴스' },
   { href: '/guide', label: '가이드' },
 ] as const
@@ -116,24 +119,76 @@ export const GUIDES = [
 
 export type GuideSlug = (typeof GUIDES)[number]['slug']
 
-/** 통계 상세 페이지. /lotto/stat 허브와 사이트맵이 공유한다. */
+/**
+ * 통계 화면 3종. 상단 탭 내비·사이트맵이 공유한다.
+ *
+ * ⚠ **`/lotto/stat` 자체가 '많이 나온 번호와 안 나온 번호' 화면이다**(003 개편).
+ *   종전에는 허브였고 hot-cold 가 하위 URL 이었는데, 사용자가 통계에 들어오면 곧바로 그
+ *   화면을 보길 원했다. `/lotto/stat/hot-cold` 는 여기로 영구 리다이렉트한다.
+ *   아직 배포 전이라 색인된 URL 이 없어 URL 하나를 줄여도 잃을 것이 없다.
+ *
+ * `short` 는 좁은 화면의 탭 라벨이다. 제목을 그대로 쓰면 3개가 한 줄에 들어가지 않는다.
+ */
 export const STAT_PAGES = [
   {
-    slug: 'hot-cold',
+    key: 'hot-cold',
+    href: '/lotto/stat',
+    short: '많이·안 나온',
     title: '많이 나온 번호 · 안 나온 번호',
-    summary: '최근 회차 기준 출현이 잦은 번호, 적은 번호, 오래 미출현한 번호를 정리합니다.',
+    summary: '자주 나온 번호, 뜸했던 번호, 오래 안 나온 번호를 순위로 봅니다.',
+    /** 카드 배경에 쓰는 서비스 색 키. 사이트 전체가 같은 색 언어를 쓴다. */
+    accent: 'stats',
   },
   {
-    slug: 'frequency',
+    key: 'frequency',
+    href: '/lotto/stat/frequency',
+    short: '출현 빈도',
     title: '번호별 출현 빈도',
-    summary: '1번부터 45번까지 각 번호가 몇 번 나왔는지 횟수로 봅니다.',
+    summary: '1번부터 45번까지 각 번호가 몇 번 나왔는지 한눈에 봅니다.',
+    accent: 'lotto',
   },
   {
-    slug: 'pattern',
-    title: '홀짝 · 고저 · 합계 · 연속번호 패턴',
-    summary: '당첨번호 조합이 어떤 분포를 그려 왔는지 살펴봅니다.',
+    key: 'pattern',
+    href: '/lotto/stat/pattern',
+    short: '조합 패턴',
+    title: '홀짝 · 고저 · 합계 패턴',
+    summary: '당첨 조합이 어떤 모양이었는지 분포로 살펴봅니다.',
+    accent: 'reco',
   },
 ] as const
+
+export type StatPageKey = (typeof STAT_PAGES)[number]['key']
+
+/**
+ * hot-cold 순위 목록의 표시 개수 선택지 (003). **기본 10.**
+ *
+ * 종전 기본값은 15였는데, 첫 화면에 15줄짜리 표가 둘(자주 나온 / 안 나온) 쌓여 훑기가
+ * 부담스러웠다(사용자). 10은 "TOP 10" 이라는 익숙한 단위이기도 하다. 더 보고 싶으면
+ * 칩으로 늘린다 — 선택지 자체는 그대로 둔다.
+ */
+export const STAT_TOP_OPTIONS = [10, 15, 20, 25, 30, 35, 40] as const
+export const STAT_TOP_DEFAULT = 10
+
+
+/**
+ * 검색에 노출할 꿈 키워드 (003).
+ *
+ * 사전에는 표제어가 4,802개 있고 종전에는 그것을 **전부** 사이트맵에 실었다. 그러나 백엔드는
+ * 표제어와 번호만 주고 해몽 풀이 본문은 주지 않는다 — 풀이 없는 4,802개는 서로 거의 같은
+ * 얇은 페이지다. 그런 페이지가 사이트맵의 79%를 차지하면 사이트 전체가 저품질로 평가될
+ * 위험이 있고, 애드센스 심사에서도 같은 기준이 적용된다(→ [[adsense-readiness]]).
+ *
+ * 그래서 **손으로 쓴 민간 해석이 있는 소재만** 색인 대상으로 남긴다. 나머지 키워드도 URL 로는
+ * 그대로 열리고 꿈 분석도 정상 동작한다 — 색인만 하지 않는 것이다.
+ *
+ * ⚠ 목록을 **`DREAM_MEANINGS` 에서 그대로 끌어온다.** 두 곳에 따로 적으면 어긋난다 —
+ *   풀이 없는 소재를 색인하면 얇은 페이지가 되고, 풀이가 있는데 색인하지 않으면 애써 쓴
+ *   원고가 검색에 나오지 않는다. 소재를 늘리려면 `dream-meanings.ts` 에 풀이를 쓰면 되고,
+ *   그것이 곧 "풀이 없이 색인하지 않는다" 는 규칙의 강제이기도 하다.
+ * ⚠ 슬러그는 **한글 표기 그대로**다. 로마자로 바꾸지 않는다([[api-contract]]).
+ *   30개 전부 백엔드 사전에 실제로 있는지 확인했다(2026-08-27, 표제어 4,802개 기준).
+ */
+export const DREAM_INDEXED_KEYWORDS: readonly string[] = Object.keys(DREAM_MEANINGS)
 
 /** 정책 페이지. 애드센스 신청 전 4종이 모두 실제 콘텐츠로 채워져 있어야 한다. */
 export const POLICY_PAGES = [

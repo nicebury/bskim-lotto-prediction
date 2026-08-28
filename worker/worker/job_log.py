@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import json
 import logging
 
 from .config import settings
@@ -40,6 +41,8 @@ async def finish(
     status_cd: str,
     collected_cnt: int,
     error_desc: str | None = None,
+    stat: dict | None = None,
+    log_entries: list[dict] | None = None,
 ) -> None:
     """실행을 마감한다.
 
@@ -52,6 +55,12 @@ async def finish(
     if error_desc and len(error_desc) > 2000:
         error_desc = error_desc[:2000] + "…(생략)"
 
+    # jsonb 컬럼에는 문자열로 넘긴다. psycopg 가 dict 를 자동 변환하지 않아
+    # 그냥 넘기면 "can't adapt type 'dict'" 로 잡 마감 자체가 실패한다 —
+    # 잡은 성공했는데 이력이 running 으로 굳는 최악의 형태가 된다.
+    stat_json = json.dumps(stat, ensure_ascii=False) if stat else None
+    log_json = json.dumps(log_entries, ensure_ascii=False) if log_entries else None
+
     async with connect() as conn:
         await conn.execute(
             """
@@ -59,10 +68,12 @@ async def finish(
                SET status_cd     = %s,
                    finished_dttm = now(),
                    collected_cnt = %s,
-                   error_desc    = %s
+                   error_desc    = %s,
+                   stat_json     = %s::jsonb,
+                   log_list      = %s::jsonb
              WHERE job_log_id    = %s
             """,
-            (status_cd, collected_cnt, error_desc, job_log_id),
+            (status_cd, collected_cnt, error_desc, stat_json, log_json, job_log_id),
         )
 
 
@@ -125,5 +136,102 @@ async def recent_by_job() -> list[dict]:
               FROM collect_job_log
              ORDER BY job_nm, started_dttm DESC
             """
+        )
+        return list(await cur.fetchall())
+
+
+async def cleanup_old() -> int:
+    """보존 기간을 넘긴 이력을 지운다. 기동 시 부른다.
+
+    log_list 가 실행마다 쌓이므로 방치하면 테이블이 계속 커진다 — news 잡만
+    매시간 돌아 연 8,760행이다. 90일이면 계절성 문제를 되짚기에 충분하다.
+
+    실패해도 기동을 막지 않는다(호출부에서 잡는다). 이력 정리가 안 되는 것보다
+    워커가 안 뜨는 것이 나쁘다.
+    """
+    async with connect() as conn:
+        cur = await conn.execute(
+            """
+            DELETE FROM collect_job_log
+             WHERE started_dttm < now() - make_interval(days => %s)
+            """,
+            (settings.JOB_LOG_RETAIN_DAYS,),
+        )
+        removed = cur.rowcount
+    if removed:
+        logger.info(
+            "%d일이 지난 잡 이력 %d행을 정리했다", settings.JOB_LOG_RETAIN_DAYS, removed
+        )
+    return removed
+
+
+async def list_logs(
+    *,
+    job_nm: str | None = None,
+    status_cd: str | None = None,
+    limit: int = 50,
+    before_id: int | None = None,
+) -> list[dict]:
+    """잡 이력을 최신순으로 조회한다. 관리자 화면과 /internal/jobs/logs 가 쓴다.
+
+    커서 페이징(before_id)을 쓰는 이유: OFFSET 은 뒤로 갈수록 느려지고, 조회
+    중에 새 행이 들어오면 경계에서 같은 행이 두 번 보이거나 빠진다. 잡 이력은
+    끊임없이 추가되므로 그 상황이 항상이다.
+
+    ix_collect_job_log_started (started_dttm DESC) 를 탄다.
+    """
+    where = ["1=1"]
+    params: list = []
+    if job_nm:
+        where.append("job_nm = %s")
+        params.append(job_nm)
+    if status_cd:
+        where.append("status_cd = %s")
+        params.append(status_cd)
+    if before_id:
+        where.append("job_log_id < %s")
+        params.append(before_id)
+    params.append(min(max(limit, 1), 200))
+
+    async with connect() as conn:
+        cur = await conn.execute(
+            f"""
+            SELECT job_log_id, job_nm, exec_type_cd, status_cd,
+                   started_dttm, finished_dttm, collected_cnt, error_desc,
+                   stat_json, log_list,
+                   EXTRACT(EPOCH FROM (coalesce(finished_dttm, now()) - started_dttm))::int
+                       AS duration_sec
+              FROM collect_job_log
+             WHERE {' AND '.join(where)}
+             ORDER BY job_log_id DESC
+             LIMIT %s
+            """,
+            params,
+        )
+        return list(await cur.fetchall())
+
+
+async def summary(days: int = 7) -> list[dict]:
+    """잡별 최근 N일 요약. 관리자 화면 상단에 쓴다.
+
+    '몇 번 돌아서 몇 건 모았고 몇 번 실패했나' 를 한눈에 본다.
+    """
+    async with connect() as conn:
+        cur = await conn.execute(
+            """
+            SELECT job_nm,
+                   count(*)                                          AS run_cnt,
+                   count(*) FILTER (WHERE status_cd = 'success')     AS success_cnt,
+                   count(*) FILTER (WHERE status_cd = 'failed')      AS failed_cnt,
+                   count(*) FILTER (WHERE status_cd = 'running')     AS running_cnt,
+                   coalesce(sum(collected_cnt), 0)                   AS collected_sum,
+                   max(started_dttm)                                 AS last_started_dttm,
+                   max(started_dttm) FILTER (WHERE status_cd = 'success') AS last_success_dttm
+              FROM collect_job_log
+             WHERE started_dttm >= now() - make_interval(days => %s)
+             GROUP BY job_nm
+             ORDER BY job_nm
+            """,
+            (days,),
         )
         return list(await cur.fetchall())

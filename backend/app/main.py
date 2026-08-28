@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 
 from .config import settings
 from .db import close_pool, open_pool
-from .routers import dream, lotto, meta, news, recommend, stats
+from .routers import admin, dream, lotto, meta, news, recommend, stats, video
 
 logging.basicConfig(
     level=logging.INFO,
@@ -73,6 +73,8 @@ app.include_router(stats.router)
 app.include_router(recommend.router)
 app.include_router(dream.router)
 app.include_router(news.router)
+app.include_router(video.router)
+app.include_router(admin.router)
 app.include_router(meta.router)
 
 

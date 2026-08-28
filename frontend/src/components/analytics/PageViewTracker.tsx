@@ -8,7 +8,9 @@ import { GA_ID, NAVER_ANALYTICS_ID } from '@/lib/env'
 declare global {
   interface Window {
     gtag?: (...args: unknown[]) => void
-    wcs?: { inflow?: (domain?: string) => void; event?: Record<string, string> }
+    wcs?: { inflow?: (domain?: string) => void }
+    /** 네이버 wcslog.js 가 읽어 가는 전역 설정 객체. `wa` 가 계정 ID 다. */
+    wcs_add?: Record<string, string>
     wcs_do?: () => void
   }
 }
@@ -28,8 +30,12 @@ declare global {
  *   않으면 상위 라우트 전체가 클라이언트 렌더링으로 떨어지고 정적 생성이 깨진다.
  *   레이아웃에서 반드시 <Suspense> 로 감싼다.
  *
- * ⚠ 네이버의 SPA 재호출 API 는 라이브러리 버전에 따라 인터페이스가 다르다. GA4 부분은
- *   표준적이고 안정적이지만, 네이버는 실제 콘솔에서 이벤트 도달을 확인해야 한다.
+ * ⚠ 네이버는 **`wcs_add["wa"]` 에 계정 ID 를 넣은 뒤** `wcs_do()` 를 불러야 한다. 이게
+ *   공식 스니펫의 형태이고, 빠지면 스크립트는 멀쩡히 로드되는데 **집계가 한 건도 잡히지
+ *   않는다**(어디에도 에러가 나지 않아 알아채기 어렵다). 종전 코드가 `wcs.event` 에
+ *   account 를 넣고 있었는데 그건 전환 이벤트용 인터페이스라 페이지뷰에 쓰이지 않는다.
+ * ⚠ 그래도 네이버는 GA4 만큼 표준적이지 않다 — 측정 ID 를 채운 뒤 **네이버 애널리틱스
+ *   콘솔에서 실제 도달을 한 번 확인해야** 완료로 볼 수 있다.
  */
 export function PageViewTracker() {
   const pathname = usePathname()
@@ -48,9 +54,11 @@ export function PageViewTracker() {
     }
 
     if (NAVER_ANALYTICS_ID && typeof window.wcs_do === 'function') {
-      window.wcs = window.wcs || {}
-      window.wcs.inflow?.()
-      window.wcs.event = { type: '0', account: NAVER_ANALYTICS_ID }
+      // 계정 ID 를 먼저 심는다. 이 줄이 없으면 wcs_do() 는 아무 데도 보내지 않는다.
+      window.wcs_add = window.wcs_add || {}
+      window.wcs_add.wa = NAVER_ANALYTICS_ID
+      // 유입 경로(검색어·참조 페이지) 수집. 도메인을 주지 않으면 현재 호스트를 쓴다.
+      window.wcs?.inflow?.()
       window.wcs_do()
     }
   }, [pathname, searchParams])

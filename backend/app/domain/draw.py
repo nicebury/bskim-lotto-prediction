@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
+from typing import Optional
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,3 +22,10 @@ class Draw:
     round_no: int
     numbers: tuple[int, int, int, int, int, int]
     bonus: int
+    # 통계 응답의 구간 메타(`from_date`/`to_date`)와 번호 통계의 `recent_appearances` 가
+    # 이 값을 쓴다. 화면이 "1213~1232회 (2026.02.28~2026.07.11)" 을 그리려면 회차→날짜를
+    # 따로 왕복하지 않아야 한다 (docs/wiki/10-contracts/api-contract.md).
+    #
+    # 기본값을 둔 이유: 예측 모듈은 추첨일을 쓰지 않으므로 날짜 없이 만든 Draw 도
+    # 유효해야 한다. 날짜가 없으면 구간 메타의 날짜가 null 이 될 뿐 집계는 정상이다.
+    draw_date: Optional[date] = None

@@ -155,6 +155,14 @@ async def run(progress: JobProgress) -> None:
     # 최신 회차가 오래 낡았다면 회차를 놓친 것이다. 잡을 실패시키지는 않는다 —
     # 수집할 게 없는 것과 수집에 실패한 것은 다르고, failed 로 남기면 재시도가
     # 매주 헛돈다. 사람이 볼 수 있게 경고만 남기고 수동 트리거에 맡긴다.
+    progress.stat = {
+        "start_round": start_round,
+        # 마지막으로 시도했으나 아직 추첨 전이었던 회차. "어디까지 갔나" 를
+        # 남긴다 — 0건일 때 소스 파싱이 깨진 것인지 정말 추첨 전인지 가른다.
+        "stopped_at_round": current,
+        "stored": progress.collected,
+    }
+
     if progress.collected == 0:
         await _warn_if_draw_data_is_stale()
 

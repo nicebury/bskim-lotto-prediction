@@ -71,3 +71,33 @@ export function formatPubDate(iso: string | null | undefined): string {
 export function pad2(n: number): string {
   return String(n).padStart(2, '0')
 }
+
+/**
+ * 재생시간 초 → `3:45` / `1:02:03`.
+ *
+ * ⚠ 계약이 초를 그대로 주고 **포맷은 프론트가 한다**고 못박았다. 백엔드가 문자열로 주면
+ *   화면마다 다른 표기를 만들 수 없기 때문이다.
+ * ⚠ `null` 은 빈 문자열이다. "0:00" 으로 채우면 길이 0초인 영상처럼 보인다.
+ */
+export function formatDuration(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined || seconds < 0) return ''
+  const total = Math.floor(seconds)
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  return h > 0 ? `${h}:${pad2(m)}:${pad2(s)}` : `${m}:${pad2(s)}`
+}
+
+/**
+ * 조회수 → `1.2만회` / `3,450회`.
+ *
+ * 만 단위로 줄이는 것은 한국어 화면의 관례다. 천 단위(K)는 우리말로 읽히지 않는다.
+ * ⚠ `null` 은 빈 문자열이다. 조회수를 못 받은 것과 0회는 다르다.
+ */
+export function formatViews(views: number | null | undefined): string {
+  if (views === null || views === undefined || views < 0) return ''
+  if (views < 10000) return `${formatNumber(views)}회`
+  const man = views / 10000
+  // 10만 미만은 소수 첫째 자리까지. 그 위는 정수로 — "123.4만회" 는 읽기 어렵다.
+  return man < 10 ? `${man.toFixed(1)}만회` : `${formatNumber(Math.round(man))}만회`
+}

@@ -60,6 +60,20 @@ DB 컬럼명은 REST 응답 필드명과 **다르며**, 매핑은 [[api-contract
 | 오류 | `error` | |
 | 생성 | `created` | |
 | 수정 | `updated` | |
+| 영상 | `video` | 유튜브 영상 |
+| 채널 | `channel` | 영상 게시 채널 |
+| 썸네일 | `thumbnail` | URL 만 저장. 이미지 파일은 받지 않는다 |
+| 재생시간 | `duration` | `_sec` 와 결합 |
+| 조회수 | `view` | `_cnt` 이지만 bigint (아래 단서) |
+| 쇼츠 | `shorts` | |
+| 추정 | `estimate` | **확정이 아님을 이름이 말한다** |
+| 근거 | `basis` | 추정의 판정 근거 |
+| 아동용 | `made_for_kids` | YouTube 정책 III.E.4.10 |
+| 임베드가능 | `embeddable` | |
+| 공개상태 | `privacy` | |
+| 발견경로 | `discovery` | 화이트리스트 / 검색 |
+| 갱신확인 | `refreshed` | `updated` 와 다르다 — "값을 고쳤다"가 아니라 "확인했다" |
+| 게임 | `game` | 로또 / 연금복권 구분. 기존 '게임당 당첨금'의 `game` 과 같은 단어 |
 
 ---
 
@@ -78,6 +92,25 @@ DB 컬럼명은 REST 응답 필드명과 **다르며**, 매핑은 [[api-contract
 | `_desc` | 설명 | `text` |
 | `_url` | URL | `text` |
 | `_list` | 목록(배열) | `text[]` 등 |
+| `_key` | **외부 시스템이 발급한 문자열 식별자** | `text` |
+| `_sec` | **초 단위 시간 길이** | `integer` |
+
+> **`_key` 는 `_id` 와 다르다.** `_id` 는 우리가 발급한 `bigint` 대리키 전용이다.
+> 유튜브 영상 ID(`dQw4w9WgXcQ`) 처럼 **외부 시스템이 발급한 문자열 식별자**를 `_id` 에
+> 담으면 `news_id`·`job_log_id` 와 의미가 갈려, 조인할 때 사람이 타입을 착각한다.
+> `_nm` 도 아니다 — 사람이 읽는 이름이 아니라 기계 식별자다. `_cd` 도 아니다 —
+> `_cd` 는 값 집합이 닫힌 코드 + `CHECK` 전용인데 외부 ID 는 열려 있다.
+> **길이를 `CHECK` 하지 않는다.** 11자는 YouTube 의 현재 규칙일 뿐이고 provider 가
+> 늘면 달라진다. 형식 검증은 소스 클라이언트의 일이다. (2026-08-28 신설)
+
+> **`_sec` 는 기간이지 시각이 아니다.** `_dttm`(시점)도 `_cnt`(수량)도 아니라서
+> 접미어를 새로 뒀다. Postgres `interval` 을 쓰지 않는 이유는 두 가지다 —
+> "3분 이하" 같은 필터와 정렬이 `integer` 로 훨씬 단순하고, `interval` 은
+> 클라이언트 라이브러리마다 직렬화가 달라 API 응답에서 사고가 난다. (2026-08-28 신설)
+
+> **`_cnt` 는 `integer` 가 기본이지만 값 범위가 넘칠 수 있으면 `bigint` 다.**
+> 유튜브 조회수는 int4 상한(약 21억)을 넘는 영상이 실제로 있다. `view_cnt` 가
+> 그 예다. 접미어가 타입을 정하되, 범위가 우선한다. (2026-08-28 단서 추가)
 
 > **`_ymd` 는 `date` 타입이다.** `YYYYMMDD` 문자열을 연상시키지만 문자열로 저장하면
 > 날짜 연산마다 캐스팅이 필요해 인덱스가 죽는다(sargable 위반). 이 프로젝트에서
@@ -133,6 +166,7 @@ DB 컬럼명은 REST 응답 필드명과 **다르며**, 매핑은 [[api-contract
 | 로또 회차별 당첨결과 | `lotto_draw` | `lotto_draws` |
 | 등위별 당첨정보 | `lotto_prize` | `lotto_prize_tiers` |
 | 복권 관련 뉴스 | `lotto_news` | `news_articles` |
+| 복권 관련 영상 | `lotto_video` | (2026-08-28 신설) |
 | 수집 잡 실행이력 | `collect_job_log` | `job_runs` |
 
 ### `lotto_draw` — 로또 회차별 당첨결과
@@ -178,6 +212,37 @@ DB 컬럼명은 REST 응답 필드명과 **다르며**, 매핑은 [[api-contract
 | 키워드목록 | `keyword_list` | `text[]` | NULL |
 | 수집일시 | `collected_dttm` | `timestamptz` | NOT NULL DEFAULT now() |
 
+### `lotto_video` — 복권 관련 유튜브 영상 메타데이터
+
+| 논리명 | 물리명 | 타입 | 제약 |
+|--------|--------|------|------|
+| 영상식별자 | `video_id` | `bigint` IDENTITY | PK |
+| 제공처 | `provider_nm` | `text` | NOT NULL DEFAULT 'youtube' |
+| 제공처영상키 | `provider_video_key` | `text` | NOT NULL, UNIQUE(provider_nm, 이것) |
+| 제공처채널키 | `provider_channel_key` | `text` | NOT NULL |
+| 채널명 | `channel_nm` | `text` | NULL |
+| 제목 | `title_nm` | `text` | NOT NULL |
+| 요약 | `summary_desc` | `text` | NULL |
+| 썸네일URL | `thumbnail_url` | `text` | NULL |
+| 게시일시 | `published_dttm` | `timestamptz` | NOT NULL |
+| 재생시간 | `duration_sec` | `integer` | NULL, >= 0 |
+| 조회수 | `view_cnt` | `bigint` | NULL, >= 0 |
+| 쇼츠추정 | `shorts_estimate_cd` | `text` | NOT NULL, CHECK(likely/unlikely/unknown) |
+| 쇼츠추정근거 | `shorts_basis_desc` | `text` | NULL |
+| 아동용여부 | `made_for_kids_cd` | `text` | NOT NULL, CHECK(yes/no/unknown) |
+| 임베드가능여부 | `embeddable_cd` | `text` | NOT NULL, CHECK(yes/no/unknown) |
+| 공개상태 | `privacy_status_cd` | `text` | NOT NULL, CHECK(public/unlisted/private/unknown) |
+| 발견경로 | `discovery_cd` | `text` | NOT NULL, CHECK(channel/search) |
+| 회차 | `round_no` | `integer` | NULL, > 0. **FK 없음** |
+| 게임구분 | `game_cd` | `text` | NOT NULL, CHECK(lotto/pension/unknown) |
+| 키워드목록 | `keyword_list` | `text[]` | NULL |
+| 수집일시 | `collected_dttm` | `timestamptz` | NOT NULL DEFAULT now() |
+| 갱신확인일시 | `refreshed_dttm` | `timestamptz` | NOT NULL DEFAULT now() |
+
+> `refreshed_dttm` 은 `updated_dttm` 이 아니다. "값을 고쳤다"가 아니라 **"확인했다"**
+> 를 뜻하고, YouTube 개발자 정책 III.E.4 의 30일 시계다. 값이 하나도 안 바뀌어도
+> 재조회에 성공하면 갱신한다. 두 개념을 나누면 어느 쪽이 정책 시계인지 헷갈린다.
+
 ### `collect_job_log` — 수집 잡 실행이력
 
 | 논리명 | 물리명 | 타입 | 제약 |
@@ -205,12 +270,24 @@ DB 컬럼명은 REST 응답 필드명과 **다르며**, 매핑은 [[api-contract
 
 현재 스키마의 전체 목록:
 
-- **PK**: `pk_lotto_draw` · `pk_lotto_prize` · `pk_lotto_news` · `pk_collect_job_log`
+- **PK**: `pk_lotto_draw` · `pk_lotto_prize` · `pk_lotto_news` · `pk_lotto_video` · `pk_collect_job_log`
 - **FK**: `fk_lotto_prize_round`
-- **UNIQUE**: `uk_lotto_draw_draw_ymd` · `uk_lotto_news_link_url`
+- **UNIQUE**: `uk_lotto_draw_draw_ymd` · `uk_lotto_news_link_url` · `uk_lotto_video_provider_key`
 - **CHECK**: `ck_lotto_draw_ascending` · `ck_lotto_draw_no_range` ·
-  `ck_lotto_prize_grade` · `ck_collect_job_log_exec_type` · `ck_collect_job_log_status`
-- **INDEX**: `ix_lotto_news_published_dttm` · `ix_collect_job_log_job_nm_started`
+  `ck_lotto_prize_grade` · `ck_collect_job_log_exec_type` · `ck_collect_job_log_status` ·
+  `ck_lotto_video_provider_key` · `ck_lotto_video_shorts_estimate` ·
+  `ck_lotto_video_made_for_kids` · `ck_lotto_video_embeddable` ·
+  `ck_lotto_video_privacy_status` · `ck_lotto_video_discovery` ·
+  `ck_lotto_video_game` · `ck_lotto_video_round_no` ·
+  `ck_lotto_video_duration_sec` · `ck_lotto_video_view_cnt`
+- **INDEX**: `ix_lotto_news_published_dttm` · `ix_collect_job_log_job_nm_started` ·
+  `ix_lotto_video_published_dttm` · `ix_lotto_video_refreshed_dttm` ·
+  `ix_lotto_video_shorts_published` · `ix_lotto_video_game_round`
+
+> **`lotto_video` 에 FK 가 없다.** `round_no` 가 `lotto_draw.round_no` 를 가리키는
+> 것처럼 보이지만 FK 를 걸지 않는다 — 아직 추첨 전인 회차를 예고하는 영상이 있고
+> (INSERT 가 거부된다), 연금복권 330회와 로또 330회는 전혀 다른 것이라 번호만으로
+> 참조 대상이 정해지지 않는다. `game_cd` 와 짝을 이뤄야만 의미가 있다.
 
 > `lotto_draw` 에는 별도 보조 인덱스를 두지 않는다. `round_no`(PK)가
 > `draw_ymd` 와 단조증가로 대응하여 최신·페이징·최근 N회차 조회를 모두 커버하고,

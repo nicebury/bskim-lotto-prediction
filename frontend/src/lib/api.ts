@@ -26,15 +26,23 @@ import type {
   HotColdResult,
   NewsItem,
   NewsPeriod,
+  NumberStat,
   Paged,
   PairsResult,
   PatternResult,
+  RangeMeta,
   RecommendResult,
   RecommendStrategy,
   Round,
   RoundDetail,
+  RoundIndex,
   SitemapEntries,
+  StatQuery,
   StatWindow,
+  VideoDetail,
+  VideoGame,
+  VideoItem,
+  VideoKind,
 } from './api-types'
 
 /** 백엔드가 응답하지 않을 때 페이지 렌더를 더 기다리지 않는다. 빌드가 멈추면 안 된다. */
@@ -64,6 +72,15 @@ export const REVALIDATE = {
   stat: 60 * 60 * 24 * 7,
   /** 뉴스 — 수집 주기에 맞춤 */
   news: 60 * 60,
+  /**
+   * 영상 — **24시간을 넘기지 않는다.**
+   *
+   * ⚠ 다른 값과 달리 이것은 취향이 아니라 **정책 상한**이다. `lotto_video` 의 행은
+   *   YouTube 개발자 정책 III.E.4 에 따라 30일 안에 갱신되거나 삭제되므로, 오래 캐시하면
+   *   워커가 지운 영상을 계속 내보내게 된다(→ 90-external/youtube-data-api.md).
+   *   여섯 시간으로 두어 여유를 남긴다.
+   */
+  video: 60 * 60 * 6,
 } as const
 
 /**
@@ -96,6 +113,58 @@ async function getJson<T>(path: string, revalidate: number): Promise<T | null> {
   }
 }
 
+/**
+ * 백엔드에 닿지 못했다. **자원이 없는 것과 구분하기 위해** 따로 둔다.
+ *
+ * ⚠ 이 둘을 뭉개면 장애가 404 로 굳는다. 백엔드가 죽은 동안 회차 페이지를 요청하면
+ *   `notFound()` 가 불리고, 그 404 응답이 ISR 캐시에 7일간 남는다 — 백엔드가 살아난
+ *   뒤에도 그 회차는 계속 "없는 페이지" 다. 실제로 500회에서 겪었다(2026-08-28).
+ *
+ * 규칙은 하나다. **없음(404)은 캐시해도 되고, 장애는 캐시하면 안 된다.**
+ * 장애일 때 이 오류를 던지면 Next 는 그 렌더를 캐시하지 않고 다음 요청에 다시 시도한다.
+ */
+export class BackendUnavailableError extends Error {
+  constructor(readonly url: string, cause?: unknown) {
+    super(`백엔드에 연결하지 못했습니다: ${url}`)
+    this.name = 'BackendUnavailableError'
+    this.cause = cause
+  }
+}
+
+/**
+ * `getJson` 과 같되 **장애를 삼키지 않는다.** 404 는 `null`, 그 밖의 실패는 던진다.
+ *
+ * ⚠ 페이지가 성립하려면 반드시 있어야 하는 데이터에만 쓴다. 없어도 화면이 서는 부가
+ *   데이터에 쓰면 통계 하나 때문에 페이지 전체가 500 이 된다.
+ * ⚠ 정적 생성 중에 던지면 **빌드가 실패한다.** 그것이 의도다 — 백엔드가 죽은 채로 구운
+ *   404 를 배포하는 것보다 빌드가 멈추고 원인을 알려 주는 편이 낫다.
+ */
+async function getJsonOrThrow<T>(path: string, revalidate: number): Promise<T | null> {
+  const url = `${API_BASE_URL}${path}`
+  let res: Response
+  try {
+    res = await fetch(url, {
+      next: { revalidate },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      headers: { Accept: 'application/json' },
+    })
+  } catch (err) {
+    // 백엔드 미기동 · 타임아웃 · DNS 실패가 여기로 온다. 전부 일시적일 수 있는 장애다.
+    throw new BackendUnavailableError(url, err)
+  }
+
+  // 404 만 "없음" 이다. 5xx 는 서버가 아프다는 뜻이라 장애로 본다.
+  if (res.status === 404) return null
+  if (!res.ok) throw new BackendUnavailableError(`${url} (HTTP ${res.status})`)
+
+  try {
+    return (await res.json()) as T
+  } catch (err) {
+    // 본문이 JSON 이 아니다 — 프록시 오류 페이지 따위. 캐시하면 안 된다.
+    throw new BackendUnavailableError(url, err)
+  }
+}
+
 /* ────────────────────────────────────────────────────────────
  * 로또 회차
  * ──────────────────────────────────────────────────────────── */
@@ -117,30 +186,78 @@ export async function getRounds(page = 1, size = 20): Promise<Paged<Round>> {
   return payload ?? { total: 0, page, size, items: [] }
 }
 
+/**
+ * 회차 상세. **없으면 `null`, 백엔드 장애면 던진다**(`BackendUnavailableError`).
+ *
+ * ⚠ 이 페이지의 핵심 데이터라 장애를 삼키면 안 된다. 삼키면 호출부가 `notFound()` 를
+ *   부르고, 그 404 가 일주일치 ISR 캐시에 굳는다(→ `BackendUnavailableError` 주석).
+ */
 export function getRound(roundNo: number): Promise<RoundDetail | null> {
-  return getJson<RoundDetail>(`/api/lotto/rounds/${roundNo}`, REVALIDATE.round)
+  return getJsonOrThrow<RoundDetail>(`/api/lotto/rounds/${roundNo}`, REVALIDATE.round)
 }
 
 /* ────────────────────────────────────────────────────────────
  * 통계 — 서버가 계산한 값을 그대로 받아 그린다
  * ──────────────────────────────────────────────────────────── */
 
+/**
+ * 통계 조회 조건 → 쿼리스트링 (003 개편).
+ *
+ * **기간(`from_round`+`to_round`)이 있으면 `window` 를 보내지 않는다.** 계약상 둘 다 오면
+ * 백엔드가 기간을 택하지만, 무엇을 조회했는지 화면과 서버가 어긋날 여지를 아예 없앤다.
+ * 기간은 **둘 다 있어야** 유효하다 — 하나만 보내면 계약이 422 로 거절한다.
+ */
+function statQuery(query: StatQuery = {}): string {
+  const params = new URLSearchParams()
+  const hasRange = query.fromRound !== undefined && query.toRound !== undefined
+
+  if (hasRange) {
+    params.set('from_round', String(query.fromRound))
+    params.set('to_round', String(query.toRound))
+  } else if (query.window !== undefined) {
+    params.set('window', String(query.window))
+  }
+
+  if (query.top !== undefined) params.set('top', String(query.top))
+  if (query.includeBonus !== undefined) params.set('include_bonus', String(query.includeBonus))
+
+  return params.toString()
+}
+
+/**
+ * 응답이 003 기간 조회를 지원하는 백엔드에서 왔는지.
+ *
+ * 세 세션이 병렬로 개발하므로 프론트가 먼저 나갈 수 있다. 그때 화면은 기간 UI 를 **잠그고**
+ * window 기반으로만 동작해야 한다 — 지원하지 않는 파라미터를 보내면 백엔드가 그것을 무시한
+ * 채 기본 구간을 돌려주고, 화면은 사용자가 고른 것과 다른 데이터를 보여주게 된다.
+ */
+export function supportsRangeQuery(payload: RangeMeta | null | undefined): boolean {
+  return payload !== null && payload !== undefined && 'from_round' in payload
+}
+
 export function getFrequency(
   window: StatWindow = 20,
   includeBonus = false,
+  range: Pick<StatQuery, 'fromRound' | 'toRound'> = {},
 ): Promise<FrequencyResult | null> {
-  return getJson<FrequencyResult>(
-    `/api/lotto/stats/frequency?window=${window}&include_bonus=${includeBonus}`,
-    REVALIDATE.stat,
-  )
+  const query = statQuery({ window, includeBonus, ...range })
+  return getJson<FrequencyResult>(`/api/lotto/stats/frequency?${query}`, REVALIDATE.stat)
 }
 
-export function getHotCold(window: StatWindow = 20): Promise<HotColdResult | null> {
-  return getJson<HotColdResult>(`/api/lotto/stats/hot-cold?window=${window}`, REVALIDATE.stat)
+export function getHotCold(
+  window: StatWindow = 20,
+  options: Omit<StatQuery, 'window' | 'includeBonus'> = {},
+): Promise<HotColdResult | null> {
+  const query = statQuery({ window, ...options })
+  return getJson<HotColdResult>(`/api/lotto/stats/hot-cold?${query}`, REVALIDATE.stat)
 }
 
-export function getPattern(window: StatWindow = 20): Promise<PatternResult | null> {
-  return getJson<PatternResult>(`/api/lotto/stats/pattern?window=${window}`, REVALIDATE.stat)
+export function getPattern(
+  window: StatWindow = 20,
+  range: Pick<StatQuery, 'fromRound' | 'toRound'> = {},
+): Promise<PatternResult | null> {
+  const query = statQuery({ window, ...range })
+  return getJson<PatternResult>(`/api/lotto/stats/pattern?${query}`, REVALIDATE.stat)
 }
 
 /**
@@ -150,12 +267,101 @@ export function getPattern(window: StatWindow = 20): Promise<PatternResult | nul
  */
 export function getPairs(
   window: StatWindow = 20,
-  options: { number?: number; top?: number } = {},
+  options: { number?: number; top?: number } & Pick<StatQuery, 'fromRound' | 'toRound'> = {},
 ): Promise<PairsResult | null> {
-  const query = new URLSearchParams({ window: String(window) })
-  if (options.number !== undefined) query.set('number', String(options.number))
-  if (options.top !== undefined) query.set('top', String(options.top))
+  const { number, ...rest } = options
+  const query = new URLSearchParams(statQuery({ window, ...rest }))
+  if (number !== undefined) query.set('number', String(number))
   return getJson<PairsResult>(`/api/lotto/stats/pairs?${query.toString()}`, REVALIDATE.stat)
+}
+
+/**
+ * 번호 하나의 통계 (003 신규). 백엔드가 아직 구현하지 않았으면 404 → null 이고,
+ * 화면은 "준비 중" 을 그린다.
+ */
+export function getNumberStat(
+  n: number,
+  window: StatWindow = 50,
+  range: Pick<StatQuery, 'fromRound' | 'toRound'> = {},
+): Promise<NumberStat | null> {
+  const query = statQuery({ window, ...range })
+  return getJson<NumberStat>(`/api/lotto/stats/number/${n}?${query}`, REVALIDATE.stat)
+}
+
+/**
+ * `getNumberStat` 과 같되 **장애를 삼키지 않는다.** 404 는 `null`, 그 밖의 실패는 던진다.
+ *
+ * ⚠ 회차 상세의 "그때까지 기록" 절 전용이다. 그 절이 장애 때문에 빠진 페이지가 일주일
+ *   캐시되면 그동안 아무도 그 내용을 못 본다(→ `BackendUnavailableError` 주석).
+ * ⚠ 통계 화면(`/lotto/stat`)은 **삼키는 쪽**을 쓴다. 거기서는 이 엔드포인트로 구현 여부만
+ *   떠보는 것이라, 장애로 던지면 다른 데이터로 충분히 서는 페이지가 통째로 500 이 된다.
+ *   같은 데이터라도 **없을 때 페이지가 성립하는가**에 따라 다루는 방식이 갈린다.
+ */
+export function getNumberStatStrict(
+  n: number,
+  window: StatWindow = 50,
+  range: Pick<StatQuery, 'fromRound' | 'toRound'> = {},
+): Promise<NumberStat | null> {
+  const query = statQuery({ window, ...range })
+  return getJsonOrThrow<NumberStat>(`/api/lotto/stats/number/${n}?${query}`, REVALIDATE.stat)
+}
+
+/**
+ * 회차-날짜 목록 (003 신규). 기간 선택 UI 가 회차 옆에 날짜를 보여주기 위해 쓴다.
+ * 과거 회차는 불변이라 길게 캐시한다. 없으면 화면은 날짜 없이 회차 번호만 입력받는다.
+ */
+export function getRoundIndex(): Promise<RoundIndex | null> {
+  return getJson<RoundIndex>('/api/lotto/rounds/index', REVALIDATE.round)
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 유튜브 영상 (2026-08-28 계약 신설)
+ * ──────────────────────────────────────────────────────────── */
+
+/**
+ * 영상 목록.
+ *
+ * ⚠ **캐시를 24시간 넘게 두지 않는다.** `lotto_video` 의 행은 YouTube 개발자 정책 III.E.4
+ *   에 따라 30일 안에 갱신되거나 삭제된다. 우리가 오래 캐시하면 워커가 지운 영상을 계속
+ *   내보내게 되고, 그 시점부터 정책 위반의 주체가 된다
+ *   (→ docs/wiki/10-contracts/api-contract.md 영상 절). 백엔드에 걸린 상한과 같은 이유다.
+ * ⚠ 백엔드가 아직 이 엔드포인트를 만들지 않았으면 404 → 빈 봉투다. 화면은 "준비 중" 을
+ *   그리고 페이지 전체가 실패하지는 않는다.
+ */
+export async function getVideos(
+  kind: VideoKind = 'all',
+  page = 1,
+  size = 20,
+  filter: { round?: number; game?: VideoGame } = {},
+): Promise<Paged<VideoItem>> {
+  const params = new URLSearchParams({ kind, page: String(page), size: String(Math.min(100, size)) })
+  // 회차는 게임과 함께 보내야 의미가 있다. 하나만 보내면 계약이 걸러 준다.
+  if (filter.round !== undefined && filter.game) {
+    params.set('round', String(filter.round))
+    params.set('game', filter.game)
+  }
+  const payload = await getJson<Paged<VideoItem>>(
+    `/api/videos?${params.toString()}`,
+    REVALIDATE.video,
+  )
+  return payload ?? { total: 0, page, size, items: [] }
+}
+
+/**
+ * 회차 상세 — **장애를 삼키는** 쪽.
+ *
+ * ⚠ `getRound` 와 짝이다. 판정 기준은 **그 데이터가 없을 때 페이지가 성립하는가**다
+ *   (→ docs/wiki/20-design/components.md). 회차 상세 화면에서는 회차가 없으면 페이지가
+ *   아예 성립하지 않으므로 던지고, 영상 상세에서는 **영상이 주인공**이고 회차는 곁들이는
+ *   자료라 없어도 화면이 선다. 여기서 던지면 회차 하나 때문에 영상이 안 보인다.
+ */
+export function getRoundOptional(roundNo: number): Promise<RoundDetail | null> {
+  return getJson<RoundDetail>(`/api/lotto/rounds/${roundNo}`, REVALIDATE.round)
+}
+
+/** 영상 하나. 없으면 `null` — 화면은 404 를 낸다. */
+export function getVideo(id: number): Promise<VideoDetail | null> {
+  return getJson<VideoDetail>(`/api/videos/${id}`, REVALIDATE.video)
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -282,6 +488,81 @@ async function postJson<T>(path: string, body: unknown, timeoutMs: number): Prom
   return (await res.json()) as T
 }
 
+
+/* ────────────────────────────────────────────────────────────
+ * 브라우저 전용 통계 조회 (003 개편)
+ *
+ * 통계 라우트는 ISR 이고, 서버 컴포넌트가 `searchParams` 를 읽으면 dynamic 이 되어 ISR 이
+ * 깨지고 중복 URL 이 색인된다(→ docs/wiki/30-seo/metadata-strategy.md). 그런데 임의 기간은
+ * 조합이 무한해 서버가 미리 구울 수도 없다.
+ *
+ * 그래서 **기본 화면(최근 20/50/100/전체)은 서버가 굽고, 사용자가 조건을 바꾸면 브라우저가
+ * 직접 조회한다.** 색인되는 것은 기본 화면과 설명 본문이고 그것은 서버가 렌더한다.
+ *
+ * 조회 함수와 달리 이쪽은 **실패를 던진다** — 사용자가 버튼을 눌러 기다리고 있으므로
+ * 화면이 에러를 표시해야 한다(추천·꿈해몽과 같은 규약).
+ * ──────────────────────────────────────────────────────────── */
+
+/** 사용자가 기다리는 조회다. 조회는 계산이 아니라 집계라 빠르므로 짧게 잡는다. */
+const BROWSER_STAT_TIMEOUT_MS = 10_000
+
+async function browserGetJson<T>(path: string): Promise<T> {
+  let res: Response
+  try {
+    res = await fetch(`${PUBLIC_API_BASE_URL}${path}`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(BROWSER_STAT_TIMEOUT_MS),
+    })
+  } catch (err) {
+    /*
+     * 응답이 아예 오지 못한 경우 — CORS 차단·오프라인·DNS 실패·타임아웃.
+     *
+     * ⚠ 이때 fetch 가 던지는 것은 `TypeError: Failed to fetch` 같은 **영어 원문**이다.
+     *   화면들은 `err.message` 를 그대로 보여주므로, 감싸지 않으면 사용자에게 영어
+     *   오류가 노출된다. 번호 조회가 화면 진입과 동시에 실행되면서(→ NumberInspector)
+     *   이 문구가 첫 화면에 바로 뜨게 돼 실제로 드러났다(2026-08-21).
+     * ⚠ 가장 흔한 원인은 서버 장애가 아니라 **CORS 오리진 불일치**다. 서버 로그에는
+     *   200 만 남고 브라우저만 조용히 막으므로, 원인 추적을 위해 원본 오류는 콘솔에 남긴다
+     *   (→ docs/wiki/10-contracts/env-vars.md CORS_ORIGINS 함정).
+     */
+    console.error('[api] 통계 조회 실패:', path, err)
+    const timedOut = err instanceof DOMException && err.name === 'TimeoutError'
+    throw new Error(
+      timedOut
+        ? '응답이 늦어 조회를 멈췄습니다. 잠시 후 다시 시도해 주세요.'
+        : '통계 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.',
+    )
+  }
+  if (!res.ok) {
+    // 백엔드 오류 형식: { "detail": "한국어 메시지" }
+    let detail = '통계를 불러오지 못했습니다.'
+    try {
+      const data = (await res.json()) as { detail?: string }
+      if (data?.detail) detail = data.detail
+    } catch {
+      /* 본문이 JSON 이 아니면 기본 메시지를 쓴다 */
+    }
+    throw new Error(detail)
+  }
+  return (await res.json()) as T
+}
+
+export function browserHotCold(query: StatQuery): Promise<HotColdResult> {
+  return browserGetJson<HotColdResult>(`/api/lotto/stats/hot-cold?${statQuery(query)}`)
+}
+
+export function browserFrequency(query: StatQuery): Promise<FrequencyResult> {
+  return browserGetJson<FrequencyResult>(`/api/lotto/stats/frequency?${statQuery(query)}`)
+}
+
+export function browserPattern(query: StatQuery): Promise<PatternResult> {
+  return browserGetJson<PatternResult>(`/api/lotto/stats/pattern?${statQuery(query)}`)
+}
+
+export function browserNumberStat(n: number, query: StatQuery): Promise<NumberStat> {
+  return browserGetJson<NumberStat>(`/api/lotto/stats/number/${n}?${statQuery(query)}`)
+}
+
 export function browserRecommend(
   strategy: RecommendStrategy,
   sets = 1,
@@ -299,17 +580,36 @@ export function browserRecommend(
 }
 
 /**
- * 꿈 텍스트 → 재미용 번호.
+ * 꿈 텍스트 → 참고용 번호.
  *
  * `sets_per_tier` 를 **명시적으로 보낸다.** 계약의 기본값은 10 인데, tier 가 셋이면 최대
  * 30개 조합이 화면에 쏟아진다. 사용자가 훑을 수 있는 양이 아니다. 값을 넘기지 않으면
  * 백엔드가 기본값을 바꿀 때 화면이 조용히 달라진다 — 그것을 막으려는 명시다.
  */
-export function browserDreamRecommend(text: string, setsPerTier = 5): Promise<DreamResult> {
+/**
+ * 꿈 텍스트 → 참고용 번호.
+ *
+ * ⚠ `exclude` 는 **서버가 처리한다**(2026-08-28 계약 신설). 종전에는 이 파라미터가 없어
+ *   프론트가 보여줄 개수의 세 배를 받아 걸러 냈는데, 그 우회는 풀이 좁고 여러 번호를 빼면
+ *   남는 조합이 금세 바닥났고 **채움 번호에서는 아예 뺄 수 없었다.** 이제 번호가 풀에서도
+ *   채움에서도 빠지고 응답의 `pool` 에서도 빠진다.
+ * ⚠ 계약 상한은 **39개**다(6개를 만들려면 6개가 남아야 한다: 45−39=6). 40개 이상과 범위
+ *   밖 번호는 422 다 — 여기서 자르지 않고 그대로 보낸다. 조용히 줄이면 사용자는 뺐다고
+ *   믿는데 그 번호가 계속 나온다.
+ */
+export function browserDreamRecommend(
+  text: string,
+  setsPerTier = 5,
+  exclude: readonly number[] = [],
+): Promise<DreamResult> {
   return postJson<DreamResult>(
     '/api/dream/recommend',
-    // 계약상 1~30. 범위를 벗어나면 422 가 오므로 여기서 잘라 보낸다.
-    { text, sets_per_tier: Math.min(30, Math.max(1, setsPerTier)) },
+    {
+      text,
+      // 계약상 1~30. 범위를 벗어나면 422 가 오므로 여기서 잘라 보낸다.
+      sets_per_tier: Math.min(30, Math.max(1, setsPerTier)),
+      exclude: [...exclude],
+    },
     DREAM_TIMEOUT_MS,
   )
 }

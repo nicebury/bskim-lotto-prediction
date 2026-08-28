@@ -53,23 +53,26 @@ updated: 2026-07-09
 
   /* ── Color · Text ─────────────────────────────── */
   --color-text:          #1A1D2E;  /* 본문 (5.1) */
-  --color-text-muted:    #6B7280;  /* 보조 설명·날짜 (5.1) */
-  --color-text-subtle:   #98A2B3;  /* 3차 텍스트·placeholder */
+  --color-text-muted:    #626875;  /* 보조 설명·날짜. 파스텔 배경 위 4.6:1 기준 */
+  --color-text-subtle:   #647188;  /* 3차 텍스트·placeholder. 중립 배경 전용 */
 
   /* ── Color · Brand ────────────────────────────── */
   --color-primary:       #3B4FD8;  /* CTA·강조 숫자(D-day)·링크 (5.1) */
   --color-primary-hover: #2E40BE;
   --color-primary-soft:  #EEF0FB;  /* 히어로 그라디언트 시작 (5.1) */
   --color-primary-soft2: #F5F0FC;  /* 히어로 그라디언트 끝 (5.1) */
+  --color-on-accent:     #FFFFFF;  /* 채워진 강조 배경 위 글자. 다크에서 #0B0D12 로 뒤집힌다 */
 
-  /* ── Color · Semantic (상태 표시) ──────────────── */
-  --color-success:       #16A34A;
+  /* ── Color · Semantic (상태 표시) ────────────────
+   * 진한 값은 **짝이 되는 -soft 배경 위**를 기준으로 정한다. 배지가 항상 그렇게 쓰인다.
+   * 흰 배경만 보고 고르면 배지에서 미달한다(실제로 그랬다 → [[accessibility]]). */
+  --color-success:       #117F3A;
   --color-success-soft:  #DCFCE7;
-  --color-warning:       #D97706;
+  --color-warning:       #A55B05;
   --color-warning-soft:  #FEF3C7;
-  --color-danger:        #DC2626;
+  --color-danger:        #C92020;
   --color-danger-soft:   #FEE2E2;
-  --color-info:          #0284C7;
+  --color-info:          #0271AB;
   --color-info-soft:     #E0F2FE;
 
   /* ── Ball · 동행복권 공식 5구간 ────────────────── */
@@ -79,8 +82,8 @@ updated: 2026-07-09
   --ball-21-30:  #FF7272;  /* 21~30 빨강 */
   --ball-31-40:  #AAAAAA;  /* 31~40 회색 */
   --ball-41-45:  #B0D840;  /* 41~45 초록 */
-  --ball-fg:       #FFFFFF; /* 진한 볼(파랑·빨강·회색) 위 숫자 */
-  --ball-fg-dark:  #1A1D2E; /* 밝은 볼(노랑·초록) 위 숫자 — 대비 확보 */
+  --ball-fg:       #FFFFFF; /* ⚠ 볼에 쓰지 않는다. 진한 --svc-* 타일 위 글리프 전용 */
+  --ball-fg-dark:  #1A1D2E; /* **다섯 구간 전부** 이 색. 흰 숫자는 다섯 색 모두 AA 미달 */
 
   /* ── Service · 서비스별 고정 색 ─────────────────
    * 두 용도를 구분한다.
@@ -172,7 +175,17 @@ Pretendard 는 웹폰트 서브셋으로 자체 호스팅한다(5.1). CDN 의존
 
 원본 가변 폰트는 2MB 다. 그대로 쓰면 LCP 를 그만큼 늦춘다. **KS X 1001 상용 한글 2,350자 + 라틴·숫자·문장부호**로 서브셋하고 가변 축을 `wght 400~800` 으로 좁혀 **304KB** 로 줄였다. 소스의 UI 문구 677자가 전부 이 범위 안에 있음을 확인했다. 사용자가 입력한 희귀 음절(꿈 텍스트 등)은 시스템 폰트로 폴백된다 — 화면이 깨지지 않고 글꼴만 달라진다.
 
-`next/font/local` 을 쓰면 폰트 preload 와 **폴백 메트릭 오버라이드**(`size-adjust`·`ascent-override`)를 자동으로 얻는다. 후자가 CLS 방지의 핵심이다 — 웹폰트가 늦게 도착해도 글자 크기가 튀지 않는다. 파일은 `public/` 이 아니라 `src/fonts/` 에 둔다(번들러가 해석하는 경로여야 한다).
+`next/font/local` 을 쓰면 폰트 preload 와 **폴백 메트릭 오버라이드**(`size-adjust`·`ascent-override`)를 자동으로 얻는다. 파일은 `public/` 이 아니라 `src/fonts/` 에 둔다(번들러가 해석하는 경로여야 한다).
+
+### ⚠ 메트릭 오버라이드는 한글에 걸리지 않는다 — `display: 'optional'` 을 쓰는 이유
+
+오랫동안 이 문서는 메트릭 오버라이드가 "CLS 방지의 핵심" 이라고 적었다. **한글 사이트에서는 반만 맞다.** next/font 가 만들어 주는 폴백 페이스는 `local("Arial")` 기준인데 **Arial 에는 한글 글리프가 없다.** 한글은 그 단계를 건너뛰고 시스템 한글 폰트(Malgun Gothic · Apple SD Gothic Neo · Noto Sans CJK)로 떨어지며, 그 메트릭은 OS 마다 다르고 오버라이드 대상도 아니다.
+
+그래서 `display: 'swap'` 이면 Pretendard 가 도착하는 순간 줄바꿈이 다시 계산되어 문단 높이가 바뀐다. 실측(느린 4G + CPU 4배): 2,825ms 에 문단이 25px 줄면서 `/contact` **CLS 0.207**, `/privacy` **0.128** — 완료 기준(0.1)을 넘겼다(2026-08-21).
+
+**해법은 `display: 'optional'` 이다.** 짧은 블록 구간(약 100ms) 안에 도착하지 못하면 그 페이지 로드에서는 웹폰트를 아예 쓰지 않는다 — 교체가 없으니 리플로우도 없다. 파일은 그대로 캐시되므로 다음 이동·다음 방문부터 Pretendard 로 보인다. 적용 후 전 페이지 **CLS 0.000**.
+
+대가는 "느린 회선의 첫 화면이 시스템 폰트" 이고, 산 것은 모든 회선에서의 레이아웃 안정성이다. CLS 는 검색 순위 신호이고 글꼴은 아니다. ⚠ `swap` 으로 되돌리려면 반드시 스로틀 환경에서 긴 글(정책·가이드 페이지)의 CLS 를 다시 잰다.
 
 라이선스는 SIL Open Font License 1.1 이고 `src/fonts/LICENSE.txt` 에 동봉했다. 재배포 시 함께 배포해야 한다.
 
@@ -202,12 +215,20 @@ Pretendard 는 웹폰트 서브셋으로 자체 호스팅한다(5.1). CDN 의존
 
 --color-text:          #E6E9EF;
 --color-text-muted:    #9AA4B2;
---color-text-subtle:   #6B7280;
+--color-text-subtle:   #7E8593;  /* #6B7280 은 surface-2 에서 3.56 미달이었다 */
 
 --color-primary:       #7C8CFF;  /* 어두운 배경에서 명도 올림 */
 --color-primary-hover: #9AA8FF;
 --color-primary-soft:  #1E1B4B;
 --color-primary-soft2: #241C4E;
+--color-on-accent:     #0B0D12;  /* ★ 강조색이 밝아졌으므로 그 위 글자는 어두워야 한다 */
+
+/* ★ 진한 시맨틱 4색도 다크 전용 값이 필요하다. 종전에는 -soft 배경만 덮고
+   진한 값은 라이트 값을 그대로 써서 danger 3.34 · info 3.64 로 미달이었다. */
+--color-success:       #16A54B;
+--color-warning:       #D97706;
+--color-danger:        #E55C5C;
+--color-info:          #0297E3;
 
 --color-success-soft:  #052E16;
 --color-warning-soft:  #451A03;
@@ -221,7 +242,7 @@ Pretendard 는 웹폰트 서브셋으로 자체 호스팅한다(5.1). CDN 의존
 
 **볼 5구간 색(`--ball-*`)과 서비스 색(`--svc-*`)은 다크에서 바꾸지 않는다.** 볼 색은 학습된 색-구간 매핑이라(→ [[accessibility]]) 다크에서 변형하면 규칙이 깨진다. 서비스 색은 파스텔 배경(`-bg`)만 어둡게 낮추고 글리프 색은 유지한다. 필요 시 `-bg` 변형만 다크 값으로 덮는다.
 
-밝은 볼(노랑 `--ball-1-10`, 초록 `--ball-41-45`) 위 숫자는 라이트/다크 공통으로 `--ball-fg-dark` 를 쓴다. 흰 숫자를 얹으면 대비가 WCAG AA 에 미달한다(상세: [[accessibility]] · [[components]]).
+볼 위 숫자는 **다섯 구간 전부** 라이트/다크 공통으로 `--ball-fg-dark` 를 쓴다. 흰 숫자는 다섯 색 **모두** WCAG AA 에 미달한다(파랑 1.88 · 빨강 2.66 · 회색 2.32 · 노랑 1.62 · 초록 1.65 / 2026-08-21 실측). 배경색은 공식 규칙이라 그대로 두고 숫자 색만 바꾼다 — 숫자 색은 색-구간 매핑에 아무 역할도 하지 않는다(상세: [[accessibility]] · [[components]]).
 
 ---
 

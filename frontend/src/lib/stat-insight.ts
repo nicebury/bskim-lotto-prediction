@@ -21,10 +21,19 @@ export function ratePercent(rate: number): string {
   return `${Math.round(rate * 100)}%`
 }
 
-/** 추세 기호·라벨·색조. 색만으로 전달하지 않으려고 기호를 함께 준다(WCAG 1.4.1). */
+/**
+ * 추세 기호·라벨·색조. 색만으로 전달하지 않으려고 기호를 함께 준다(WCAG 1.4.1).
+ *
+ * 뜻은 "구간을 반으로 갈라 **뒤쪽 절반**이 앞쪽보다 많았는가" 다. 사용자가 "'최근 뜸' 이
+ * 뭐냐" 고 물어 와 라벨을 다듬었다 — '뜸' 은 명사로 쓰면 어색하고, 무엇과 비교한 것인지도
+ * 드러나지 않았다. 열 머리글의 도움말이 계산 방식을 함께 설명한다.
+ *
+ * ⚠ "늘어남/줄어듦" 같은 표현은 쓰지 않는다. 추세가 이어질 것처럼 읽혀 예측이 된다
+ *   (→ docs/wiki/40-domain/forbidden-expressions.md).
+ */
 export const TREND_DISPLAY: Record<Trend, { symbol: string; label: string; tone: string }> = {
-  up: { symbol: '↑', label: '최근 자주', tone: 'up' },
-  down: { symbol: '↓', label: '최근 뜸', tone: 'down' },
+  up: { symbol: '↑', label: '후반에 더', tone: 'up' },
+  down: { symbol: '↓', label: '후반에 덜', tone: 'down' },
   flat: { symbol: '—', label: '비슷', tone: 'flat' },
 }
 

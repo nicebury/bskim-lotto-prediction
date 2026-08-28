@@ -24,6 +24,18 @@ TOP_N = 10
 # 허용되는 window 값. FastAPI 쿼리 검증과 이 모듈이 같은 목록을 봐야 한다.
 WINDOW_CHOICES = ("20", "50", "100", "all")
 
+# hot/cold/overdue 의 `top` 상한. 45 를 주면 hot 과 cold 가 같은 45개를 정반대로 정렬한
+# 목록이 된다 — 이상해 보이지만 계약이 명시한 정상 동작이다.
+TOP_MAX = 45
+
+# 번호 하나의 통계에서 함께 나온 상대 번호를 몇 개까지 줄지, 출현 회차를 몇 개까지 줄지.
+COMPANIONS_TOP = 5
+RECENT_APPEARANCES_LIMIT = 20
+
+
+class InvalidRangeError(ValueError):
+    """기간 조회 파라미터가 잘못됐다. 라우터가 422 로 옮긴다."""
+
 
 def resolve_window(window: str) -> Optional[int]:
     """`"all"` 을 None 으로, 나머지는 정수로. None 은 '자르지 않음' 을 뜻한다."""
@@ -39,6 +51,67 @@ def slice_window(draws: Sequence[Draw], window: Optional[int]) -> Sequence[Draw]
     if window is None or window >= len(draws):
         return draws
     return draws[-window:]
+
+
+def select_range(
+    all_draws: Sequence[Draw],
+    *,
+    window: str,
+    from_round: Optional[int] = None,
+    to_round: Optional[int] = None,
+) -> tuple[Sequence[Draw], dict]:
+    """집계 대상 회차와 응답의 구간 메타를 함께 만든다.
+
+    통계 네 엔드포인트와 번호 통계가 **모두 이 함수 하나**를 쓴다. 구간 계산이 여러 곳에
+    흩어지면 화면마다 "몇 회차를 봤는가" 가 달라지고, 그것을 사용자가 대조하는 순간
+    어느 쪽도 믿을 수 없게 된다.
+
+    규칙 (docs/wiki/10-contracts/api-contract.md 의 '기간 조회'):
+
+    - `from_round`·`to_round` 를 **둘 다** 주면 `window` 는 무시한다.
+    - **하나만** 오면 `InvalidRangeError`. 한쪽만 받아 나머지를 알아서 채우면 사용자가
+      무엇을 보고 있는지 화면과 어긋난다.
+    - `from_round > to_round` 도 `InvalidRangeError`. 조용히 swap 하지 않는다 — 잘못
+      입력한 사실을 화면이 알려야 한다.
+    - 데이터 밖으로 나간 범위는 **에러가 아니라 교집합**으로 자른다. 그래서 응답의
+      `from_round`/`to_round` 는 요청값이 아니라 **실제로 집계에 쓰인 값**이다.
+    - 교집합이 비면 `rounds_analyzed: 0` 과 메타 전부 `None`. 없는 구간을 물어본 것은
+      오류가 아니라 사실 조회다.
+    """
+    range_mode = from_round is not None or to_round is not None
+
+    if range_mode:
+        if from_round is None or to_round is None:
+            raise InvalidRangeError(
+                "기간 조회는 from_round 와 to_round 를 함께 주어야 합니다."
+            )
+        if from_round > to_round:
+            raise InvalidRangeError(
+                f"from_round({from_round}) 가 to_round({to_round}) 보다 큽니다."
+            )
+        # 요청 범위를 그대로 믿지 않고 실제 데이터와 교집합을 낸다.
+        selected: Sequence[Draw] = [
+            d for d in all_draws if from_round <= d.round_no <= to_round
+        ]
+    else:
+        selected = slice_window(all_draws, resolve_window(window))
+
+    meta = {
+        # 기간 조회면 window 는 의미가 없다. 요청받은 값을 되돌려 주면 화면이 "최근 20회"
+        # 라고 잘못 쓰게 되므로 null 을 준다.
+        "window": None if range_mode else _window_echo(window),
+        "rounds_analyzed": len(selected),
+        "from_round": selected[0].round_no if selected else None,
+        "to_round": selected[-1].round_no if selected else None,
+        "from_date": selected[0].draw_date if selected else None,
+        "to_date": selected[-1].draw_date if selected else None,
+    }
+    return selected, meta
+
+
+def _window_echo(window: str) -> int | str:
+    """응답의 `window` 는 요청받은 값을 그대로 되돌려 준다."""
+    return window if window == "all" else int(window)
 
 
 def frequency(draws: Sequence[Draw], *, include_bonus: bool) -> dict[str, int]:
@@ -110,15 +183,24 @@ def _trend(windowed: Sequence[Draw], number: int) -> str:
     return "flat"
 
 
-def hot_cold(all_draws: Sequence[Draw], window: Optional[int]) -> dict:
-    """window 안의 출현 횟수로 hot/cold 를, 역대 전체로 overdue 를 만든다.
+def hot_cold(
+    all_draws: Sequence[Draw], windowed: Sequence[Draw], *, top: int = TOP_N
+) -> dict:
+    """`windowed` 안의 출현 횟수로 hot/cold 를, **역대 전체**로 overdue 를 만든다.
+
+    두 번째 인자가 window 정수가 아니라 **이미 고른 회차 목록**인 이유: 기간 조회
+    (`from_round`~`to_round`)는 "최근 N회" 라는 정수로 표현할 수 없다. 자르는 일은
+    `select_range` 한 곳이 하고, 여기서는 고른 결과를 받아 세기만 한다.
+
+    `all_draws` 를 따로 받는 것은 overdue·`last_seen_round` 가 구간이 아니라 역대
+    전체에서 나오기 때문이다. "최근 20회에 안 나왔다" 는 20 이상의 모든 값을 20 으로
+    뭉개므로 쓸모가 없다 (docs/wiki/10-contracts/api-contract.md).
 
     hot·cold 항목은 출현 횟수(`count`)에 더해 출현 비율(`appearance_rate`)·마지막 출현
     회차(`last_seen_round`)·추세(`trend`)를 담는다. 셋 다 과거의 사실이다 — 비율은
     다음 회차 확률이 아니라 "지난 N회 중 나온 비율" 이고, 그래서 `appearance_rate`
-    이지 `probability` 가 아니다 (docs/wiki/10-contracts/api-contract.md).
+    이지 `probability` 가 아니다.
     """
-    windowed = slice_window(all_draws, window)
     counts = frequency(windowed, include_bonus=False)
     rounds_analyzed = len(windowed)
 
@@ -145,8 +227,13 @@ def hot_cold(all_draws: Sequence[Draw], window: Optional[int]) -> dict:
 
     return {
         "rounds_analyzed": rounds_analyzed,
-        "hot": [_item(n) for n in by_count_desc[:TOP_N]],
-        "cold": [_item(n) for n in by_count_asc[:TOP_N]],
+        # 구간에 회차가 하나도 없으면 hot·cold 는 **빈 배열**이다. 45개를 전부 0회로
+        # 채워 내보내면 화면에 "1번 0회 · 1위" 가 뜨는데, 그것은 사실이 아니라 정렬의
+        # 부산물이다. 반면 overdue 는 구간이 아니라 역대 전체에서 나오므로 그대로 둔다 —
+        # 구간에 데이터가 없다는 것과 그 번호의 역사가 없다는 것은 다른 말이다
+        # (docs/wiki/10-contracts/api-contract.md 의 '기간 조회').
+        "hot": [_item(n) for n in by_count_desc[:top]] if rounds_analyzed else [],
+        "cold": [_item(n) for n in by_count_asc[:top]] if rounds_analyzed else [],
         # overdue 에는 비율·추세를 넣지 않는다 — 미출현 목록에 "얼마나 자주" 나 "추세" 는
         # 의미가 없다. 마지막 출현 회차만 더한다.
         "overdue": [
@@ -155,7 +242,7 @@ def hot_cold(all_draws: Sequence[Draw], window: Optional[int]) -> dict:
                 "rounds_since": since.get(n, 0),
                 "last_seen_round": last_seen[n],
             }
-            for n in by_overdue[:TOP_N]
+            for n in by_overdue[:top]
         ],
     }
 
@@ -166,7 +253,10 @@ def hot_cold_sets(all_draws: Sequence[Draw], window: int) -> tuple[set[int], set
     `/api/lotto/stats/hot-cold` 와 **같은 함수**에서 나온다. 두 화면의 숫자가 어긋나면
     사용자는 어느 쪽도 믿지 않는다.
     """
-    result = hot_cold(all_draws, window)
+    # 여기서만 기본 TOP_N 을 쓴다. 추천의 hot_count/cold_count 기준은 화면이 고르는
+    # `top` 과 무관하게 고정이어야 한다 — 사용자가 `top=40` 으로 본다고 추천의 정의가
+    # 따라 바뀌면 두 화면을 대조할 수 없다 (docs/wiki/10-contracts/api-contract.md).
+    result = hot_cold(all_draws, slice_window(all_draws, window))
     return (
         {item["number"] for item in result["hot"]},
         {item["number"] for item in result["cold"]},
@@ -191,6 +281,8 @@ def pattern(draws: Sequence[Draw]) -> dict:
             "sum_range": {"min": 0, "max": 0, "peak": 0},
             "tail_variety_avg": 0.0,
             "tail_counts": {},
+            "sum_histogram": {},
+            "consecutive_counts": {},
         }
 
     num_rows = [d.numbers for d in draws]
@@ -203,7 +295,47 @@ def pattern(draws: Sequence[Draw]) -> dict:
         "sum_range": raw["sum_range"],
         "tail_variety_avg": round(raw["tail_diversity_avg"], 2),
         "tail_counts": {str(k): v for k, v in sorted(raw["tail_counts"].items())},
+        "sum_histogram": _sum_histogram(draws),
+        "consecutive_counts": _consecutive_counts(draws),
     }
+
+
+def _sum_histogram(draws: Sequence[Draw]) -> dict[str, int]:
+    """여섯 번호 합계를 10 단위 구간으로 묶은 **회차 수**.
+
+    비율이 아니라 개수인 이유: 사용자가 `rounds_analyzed` 와 더해 검증할 수 있어야 한다.
+    기존 `sum_range`(10·90 퍼센타일과 중앙값)는 요약값이라 분포의 모양을 보여주지 못해
+    히스토그램을 따로 둔다 (docs/wiki/10-contracts/api-contract.md).
+
+    데이터가 있는 구간만 담는다. 합계는 최소 21(1+2+3+4+5+6), 최대 255(40..45)라
+    비어 있는 구간까지 채우면 대부분이 0 인 표가 된다.
+    """
+    buckets: Counter = Counter()
+    for d in draws:
+        low = (sum(d.numbers) // 10) * 10
+        buckets[low] += 1
+    return {f"{low}-{low + 9}": c for low, c in sorted(buckets.items())}
+
+
+def _consecutive_counts(draws: Sequence[Draw]) -> dict[str, float]:
+    """한 회차에 든 **연속번호 쌍의 개수**별 비율. 키는 개수, 값은 0.0~1.0.
+
+    `[1, 2, 3]` 은 (1,2)·(2,3) 두 쌍으로 센다.
+
+    **`consecutive_ratio` 와 반드시 맞아떨어져야 한다** — 그 값은 "연속을 한 쌍 이상
+    포함한 회차의 비율" 이므로 `1 - consecutive_counts["0"]` 과 같다. 두 값이 어긋나면
+    백엔드 버그이고, 테스트가 이 불변식을 지킨다.
+
+    `numbers` 는 오름차순이 보장돼 있어(DB CHECK 제약) 여기서 다시 정렬하지 않는다.
+    """
+    total = len(draws)
+    if not total:
+        return {}
+    buckets: Counter = Counter()
+    for d in draws:
+        nums = d.numbers
+        buckets[sum(1 for i in range(5) if nums[i + 1] - nums[i] == 1)] += 1
+    return {str(k): round(v / total, 4) for k, v in sorted(buckets.items())}
 
 
 # 동반 출현 결과의 기본 개수와 상한. 45개를 다 주면 "많이 나온 순" 이 무의미하다.
@@ -247,4 +379,81 @@ def pairs(
         "pairs": [
             {"numbers": [a, b], "count": c} for (a, b), c in items[: max(0, top)]
         ],
+    }
+
+
+def _max_gap(all_draws: Sequence[Draw], number: int) -> Optional[int]:
+    """역대 최장 미출현 간격(회차). 역대로 한 번도 안 나왔으면 None.
+
+    간격은 `rounds_since` 와 **같은 자로 잰다** — 뒤 회차 번호 빼기 앞 회차 번호다.
+    두 값이 다른 자를 쓰면 "지금 12회째 안 나왔고 최장은 21회" 라는 문장이 성립하지 않는다.
+
+    **진행 중인 미출현 구간도 후보에 넣는다.** 지금이 역대 최장 가뭄이라면 그 사실이
+    최장값으로 보여야지, 과거 기록에 가려지면 안 된다.
+
+    첫 출현 이전 구간은 세지 않는다. 데이터가 1회차부터 있더라도 "그 이전에 얼마나
+    안 나왔는가" 는 알 수 없는 값이고, 0회차라는 것은 없다.
+
+    구간이 아니라 **역대 전체** 기준이다 — "최장 21회차까지 안 나온 적이 있다" 는 사실이
+    조회 구간에 갇히면 의미가 없다 (docs/wiki/10-contracts/api-contract.md).
+    """
+    appeared = [d.round_no for d in all_draws if number in d.numbers]
+    if not appeared:
+        return None
+    gaps = [later - earlier for earlier, later in zip(appeared, appeared[1:])]
+    gaps.append(all_draws[-1].round_no - appeared[-1])
+    return max(gaps)
+
+
+def number_stats(
+    all_draws: Sequence[Draw], selected: Sequence[Draw], number: int
+) -> dict:
+    """번호 하나의 통계. 화면 하단 "내가 보고 싶은 번호" 조회용.
+
+    **이 함수가 따로 있는 이유는 `rank` 다.** "15번은 최근 50회에서 12회 나와 3위" 를
+    만들려면 45개 전부를 정렬해야 하는데, 그 집계를 브라우저에서 하면 화면과 서버의
+    숫자가 갈라진다 (docs/wiki/10-contracts/component-boundaries.md).
+
+    구간에 매인 값(`count`·`appearance_rate`·`rank`·`trend`·`companions`·
+    `recent_appearances`)과 역대 전체에 매인 값(`last_seen_round`·`rounds_since`·
+    `max_gap`)이 섞여 있다. 계약이 후자를 역대 기준으로 못박았기 때문이고, 그래서 구간이
+    비어도 후자는 실제 값을 유지한다 — 구간에 데이터가 없다는 것과 그 번호의 역사가
+    없다는 것은 다른 말이다.
+    """
+    counts = frequency(selected, include_bonus=False)
+    rounds_analyzed = len(selected)
+
+    # hot 정렬과 **같은 규칙**이다(횟수 내림차순, 동점이면 번호가 작은 쪽). 두 화면의
+    # 순위가 어긋나면 사용자는 어느 쪽도 믿지 않는다.
+    order = sorted(ALL_NUMBERS, key=lambda n: (-counts[str(n)], n))
+
+    companions = [
+        # pairs 는 오름차순 쌍을 주므로, 요청한 번호가 아닌 쪽이 상대다.
+        {"number": p["numbers"][1] if p["numbers"][0] == number else p["numbers"][0],
+         "count": p["count"]}
+        for p in pairs(selected, number=number, top=COMPANIONS_TOP)["pairs"]
+    ]
+
+    recent = [
+        {"round_no": d.round_no, "draw_date": d.draw_date}
+        for d in reversed(selected)
+        if number in d.numbers
+    ][:RECENT_APPEARANCES_LIMIT]
+
+    return {
+        "number": number,
+        "count": counts[str(number)],
+        "appearance_rate": (
+            round(counts[str(number)] / rounds_analyzed, 4) if rounds_analyzed else 0.0
+        ),
+        # 구간이 비면 모든 번호의 횟수가 0 이라 정렬은 번호순이 된다. 그것을 순위라고
+        # 내보내면 "15번은 15위" 라는 거짓이 나가므로 null 을 준다.
+        "rank": (order.index(number) + 1) if rounds_analyzed else None,
+        "rank_total": len(ALL_NUMBERS),
+        "trend": _trend(selected, number),
+        "last_seen_round": _last_seen_round(all_draws)[number],
+        "rounds_since": _rounds_since(all_draws).get(number, 0),
+        "max_gap": _max_gap(all_draws, number),
+        "companions": companions,
+        "recent_appearances": recent,
     }

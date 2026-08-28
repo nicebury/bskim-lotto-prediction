@@ -71,6 +71,36 @@ a:hover {
   color: var(--color-primary-hover);
 }
 
+/*
+ * 문단 안에 섞여 있는 인라인 링크는 밑줄로 구분한다.
+ *
+ * 전역 `a` 는 `text-decoration: none` 이다 — 카드·타일·내비게이션처럼 링크가 통째로
+ * 하나의 블록인 곳이 대부분이라 밑줄이 붙으면 지저분해지기 때문이다. 하지만 본문
+ * 문장 속에 끼어 있는 링크까지 밑줄이 없으면 **색만으로 링크임을 알리는 셈**이 되고,
+ * 이는 세션 규칙(색만으로 정보를 전달하지 않는다)과 WCAG 1.4.1 위반이다. 실제로
+ * Lighthouse `link-in-text-block` 이 걸렸다 — 링크색(#3b4fd8)과 주변 본문색의 대비가
+ * 1.31:1 이라 색맹·저시력 사용자에게는 링크가 보이지 않는다(2026-08-21 실측).
+ *
+ * 대상을 **클래스 없는** 링크로 좁힌 이유:
+ *   - `.more-link` `.btn` `.guide-card` `.tile` 은 이미 모양으로 링크임이 드러난다.
+ *   - 클래스 없는 `li > a` 는 실측 대부분이 내비게이션(`nav.footer-col`)·브레드크럼
+ *     (`ol.breadcrumb`)·뉴스 목록이다. 항목 자체가 링크 하나라 axe 도 문제 삼지 않고,
+ *     밑줄을 넣으면 푸터 메뉴가 통째로 밑줄투성이가 된다.
+ *
+ * 그래서 두 갈래로 건다.
+ *   1) `p` 안의 인라인 링크 — 어디에 있든 문장 속이다.
+ *   2) `.prose` 안의 인라인 링크 — 약관·개인정보처리방침처럼 **`<li>` 가 문장인** 글.
+ *      실제로 `/privacy` 의 외부 링크 두 개가 1) 만으로는 빠져나갔다(axe, 2026-08-21).
+ *      `.prose` 는 본문 글 전용 컨테이너라 내비게이션이 들어올 일이 없다.
+ * 새로 인라인 링크를 만들 때 클래스를 붙이면 이 규칙에서 빠지므로 주의한다.
+ */
+p a:not([class]),
+.prose a:not([class]) {
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  text-decoration-thickness: 0.07em;
+}
+
 h1,
 h2,
 h3,
@@ -316,11 +346,11 @@ ol {
 
 .btn-primary {
   background: var(--color-primary);
-  color: #fff;
+  color: var(--color-on-accent);
 }
 .btn-primary:hover {
   background: var(--color-primary-hover);
-  color: #fff;
+  color: var(--color-on-accent);
 }
 
 .btn-secondary {

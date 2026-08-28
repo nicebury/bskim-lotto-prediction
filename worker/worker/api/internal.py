@@ -127,3 +127,47 @@ async def jobs_status() -> dict:
             }
         )
     return {"jobs": jobs}
+
+
+@router.get("/jobs/logs", dependencies=[Depends(verify_job_key)])
+async def jobs_logs(
+    job_name: str | None = None,
+    status: str | None = None,
+    limit: int = 50,
+    before_id: int | None = None,
+) -> dict:
+    """잡 실행 이력 상세. 몇 시에 돌아서 몇 건을 모았고 무엇이 잘못됐는지.
+
+    `/jobs/status` 는 잡별 **최근 1건**만 준다. 장애를 조사하려면 지나간
+    실행들을 훑어야 하고, 특히 `stat_json`(단계별 건수)과 `log_list`
+    (죽지 않고 넘어간 경고들)가 거기 있다.
+
+    이 엔드포인트는 루프백 전용이고 X-Job-Key 를 요구한다. 공개 관리자 화면은
+    백엔드가 별도 계약으로 만든다 — 워커는 관리자 UI 를 제공하지 않는다
+    (worker/CLAUDE.md).
+
+    커서 페이징: 응답의 `next_before_id` 를 다음 요청의 `before_id` 로 넘긴다.
+    """
+    rows = await job_log.list_logs(
+        job_nm=job_name, status_cd=status, limit=limit, before_id=before_id
+    )
+    return {
+        "summary": await job_log.summary(),
+        "items": [
+            {
+                "run_id": r["job_log_id"],
+                "job_name": r["job_nm"],
+                "exec_type": r["exec_type_cd"],
+                "status": r["status_cd"],
+                "started_at": r["started_dttm"],
+                "finished_at": r["finished_dttm"],
+                "duration_sec": r["duration_sec"],
+                "collected_count": r["collected_cnt"],
+                "error": r["error_desc"],
+                "stat": r["stat_json"],
+                "logs": r["log_list"],
+            }
+            for r in rows
+        ],
+        "next_before_id": rows[-1]["job_log_id"] if rows else None,
+    }

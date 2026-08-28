@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Path, Query
 from .. import repository as repo
 from ..db import get_pool
 from ..domain import traits as traits_mod
-from ..schemas import LottoRound, LottoRoundDetail, RoundPage
+from ..schemas import LottoRound, LottoRoundDetail, RoundIndexResponse, RoundPage
 
 router = APIRouter(prefix="/api/lotto", tags=["lotto"])
 
@@ -31,6 +31,20 @@ async def list_rounds(
     items = await repo.list_rounds(pool, page=page, size=size)
     # 범위를 벗어난 page 는 404 가 아니라 빈 items 다. 목록의 끝은 오류가 아니다.
     return {"total": total, "page": page, "size": size, "items": items}
+
+
+@router.get("/rounds/index", response_model=RoundIndexResponse)
+async def rounds_index() -> dict:
+    """회차-날짜만 담은 경량 목록. round_no 오름차순, 페이징 없음.
+
+    기간 조회 UI 가 회차를 고를 때 날짜를 함께 보여주기 위한 것이다.
+
+    ★ **이 경로는 반드시 `/rounds/{round_no}` 보다 먼저 선언한다.** FastAPI 는 등록된
+    순서대로 매칭하므로, 뒤에 두면 `index` 라는 문자열이 `round_no` 로 해석돼 422 가
+    난다. 아래 회차 상세를 옮기거나 그 위에 새 경로를 끼울 때 이 순서를 깨지 않는다.
+    """
+    rounds = await repo.round_index(get_pool())
+    return {"total": len(rounds), "rounds": rounds}
 
 
 @router.get("/rounds/{round_no}", response_model=LottoRoundDetail)

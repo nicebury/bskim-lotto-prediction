@@ -19,7 +19,8 @@ Postgres 를 **읽어** 계산하고 JSON 으로 제공한다.
 - 외부 크롤링, 스케줄링
 - 워커의 `/internal/*` 프록시 — **백엔드는 워커의 존재를 모른다**
 - `worker/` 또는 `frontend/` 의 코드 수정
-- `backend/data/chroma_words/` 에 쓰기 (읽기 전용)
+- `backend/data/chroma_words/` 에 **직접** 쓰기. 이 사전은 `.gitignore` 되어 git 에 없고 원본 데이터도 없다 — 직접 넣은 변경은 이 PC 에만 남고 배포하면 사라진다.
+  단어를 더할 때는 `data/custom_words.json`(git 에 들어간다) 에 적고 `scripts/add_custom_words.py --apply` 로 반영한다. **실행 전 백엔드 서버를 멈춘다.** 절차는 `docs/wiki/40-domain/dream-pipeline.md`
 
 ## 매 턴 지킬 것
 
@@ -44,6 +45,7 @@ Postgres 를 **읽어** 계산하고 JSON 으로 제공한다.
 |------|------|
 | `docs/wiki/10-contracts/component-boundaries.md` | ★ **가장 먼저.** 소유 경계와 세션 간 접점 |
 | `docs/wiki/10-contracts/api-contract.md` | 엔드포인트와 **표현 규약** |
+| `docs/wiki/10-contracts/api-contract-stats.md` | 통계 전용 계약. `window`·기간 조회·구간 메타 |
 | `docs/wiki/10-contracts/db-schema.md` | 읽을 테이블과 롤 권한 |
 | `docs/wiki/40-domain/prediction-algorithm.md` | 앙상블·몬테카를로. 문서-코드 불일치 기록 |
 | `docs/wiki/40-domain/dream-pipeline.md` | 꿈해몽. 첫 요청 20초 함정 |

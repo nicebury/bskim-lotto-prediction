@@ -122,7 +122,7 @@ export function HowRecommendWorks() {
             </section>
 
             <p className="explain-foot">
-              번호를 고르는 일을 조금 더 재미있게 만들기 위한 기능이에요. 당첨을 보장하지는
+              번호를 고르는 일을 조금 더 수월하게 만들기 위한 기능이에요. 당첨을 보장하지는
               않는다는 점만 기억해 주세요.
             </p>
           </div>

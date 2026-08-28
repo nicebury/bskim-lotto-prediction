@@ -7,14 +7,22 @@ owner: backend
 status: stable
 sources: ["backend/app/routers/", "raw:작업지시서초안_보완.md#8.2", "raw:작업지시초안.md#13.3", "raw:002-작업지시서_두번째_보완.md#4.2"]
 created: 2026-07-09
-updated: 2026-07-15
+updated: 2026-08-18
 ---
 
 # 백엔드 REST API 계약
 
-> 2026-07-09 보강: 응답 스키마가 비어 있던 여섯 곳(페이지네이션 봉투, 회차 `traits`, `stats/pattern`, `hot-cold`, `dream/*`, `news`)을 확정했다. 엔드포인트·필드명·표현 규약은 바뀌지 않았다. 경위는 [[log|log.md]].
+> 2026-07-09 보강: 응답 스키마가 비어 있던 여섯 곳(페이지네이션 봉투, 회차 `traits`, `stats/pattern`, `hot-cold`, `dream/*`, `news`)을 확정했다. 엔드포인트·필드명·표현 규약은 바뀌지 않았다. 경위는 [log.md](../log.md).
 >
-> **2026-07-15 계약 변경 (002 개편)**: 세 가지를 더했다 — ① `hot-cold` 응답의 `hot`·`cold` 항목에 `appearance_rate`·`last_seen_round`·`trend` 를 추가, ② 신규 엔드포인트 `GET /api/lotto/stats/pairs`(동반 출현), ③ `GET /api/news` 에 `keyword`·`period` 파라미터 추가. **기존 필드·엔드포인트는 그대로**라 하위호환이며, 근거는 [`002-작업지시서_두번째_보완.md`](../../raw/002-작업지시서_두번째_보완.md) 4·5장, 경위는 [[log|log.md]].
+> **2026-07-15 계약 변경 (002 개편)**: 세 가지를 더했다 — ① `hot-cold` 응답의 `hot`·`cold` 항목에 `appearance_rate`·`last_seen_round`·`trend` 를 추가, ② 신규 엔드포인트 `GET /api/lotto/stats/pairs`(동반 출현), ③ `GET /api/news` 에 `keyword`·`period` 파라미터 추가. **기존 필드·엔드포인트는 그대로**라 하위호환이며, 근거는 [`002-작업지시서_두번째_보완.md`](../../raw/002-작업지시서_두번째_보완.md) 4·5장, 경위는 [log.md](../log.md).
+
+> **2026-08-18 계약 변경 (003 통계 개편)**: 통계 화면 전면 개편에 따라 다섯 가지를 더한다 — ① 전 통계 엔드포인트에 **기간 조회**(`from_round`·`to_round`) 추가와 응답의 구간 메타(`from_round`/`to_round`/`from_date`/`to_date`), ② `hot-cold` 에 `top` 파라미터, ③ 신규 `GET /api/lotto/stats/number/{n}`(번호 하나의 통계), ④ 신규 `GET /api/lotto/rounds/index`(회차-날짜 경량 목록), ⑤ `pattern` 에 `sum_histogram`·`consecutive_counts` 추가. **기존 파라미터·필드는 그대로 두는 하위호환 변경**이고, 새 필드는 전부 추가다. 프론트는 응답에 구간 메타가 없으면 구버전 백엔드로 보고 기간 UI 를 잠근다. 경위는 [log.md](../log.md). **이 다섯 가지는 2026-08-18 분할로 전부 [[api-contract-stats]] 에 있다.**
+
+> **2026-08-28 계약 변경 (꿈해몽 보강)**: `POST /api/dream/recommend` 에 요청 `exclude: number[]`(최대 39) 와 응답 `matched_words[].from_text: boolean` 을 더한다. 프론트 세션이 [[dream-pipeline]] 에 남긴 요청이고, **둘 다 추가만 하는 하위호환 변경**이다. 함께 `_stem_to_noun` 이 만든 비단어(`크함`·`꾸음`)를 검색 후보에서 걸렀다 — 응답 필드는 그대로이고 근거 없는 항목이 사라진다. 자세한 것은 [꿈해몽](#2026-08-28-계약-변경--exclude-와-from_text) 절.
+
+> **2026-08-28 계약 변경 (유튜브 영상 추가)**: 신규 리소스 `GET /api/videos` · `GET /api/videos/{id}` 를 더한다. 원천은 워커가 새로 만드는 `lotto_video` 테이블이다([[db-schema]]). **기존 엔드포인트·필드는 전혀 바뀌지 않는다.** 이 리소스에는 다른 리소스에 없는 제약이 셋 있다 — ① 응답 캐시 TTL 24시간 상한(YouTube 30일 보관 정책), ② 표시 조건 WHERE 절 필수, ③ 쇼츠 여부를 boolean 으로 노출 금지. 계획은 [`004-유튜브영상수집계획.md`](../../raw/004-유튜브영상수집계획.md), 경위는 [log.md](../log.md).
+
+> **2026-08-28 계약 변경 (운영자 전용 수집 로그)**: `POST /api/admin/login` · `POST /api/admin/logout` · `GET /api/admin/job-logs` 를 더한다. **사이트 운영자 한 사람만 보는 화면**의 데이터원이고, 공개 API 가 아니다 — 인증·`noindex`·사이트맵 제외가 계약의 일부다. 원천은 워커의 `collect_job_log` 이며 2026-08-28 에 `stat_json`·`log_list` 두 컬럼이 추가됐다([[db-schema]]). 경위는 [log.md](../log.md).
 
 이 페이지는 **계약**이다. 프론트엔드는 이 문서만 읽고 개발한다 — 백엔드 코드를 읽지 않는다. 백엔드는 이 문서를 구현한다. 어긋나면 코드가 틀린 것이다.
 
@@ -138,86 +146,19 @@ GET /api/lotto/rounds/{round_no}              # 없으면 404
 
 **회차 상세의 `traits` 에는 `hot_count` 와 `cold_count` 가 없다.** 위 여섯 필드는 그 회차의 여섯 숫자만 보면 계산되는 사실이지만, HOT/COLD 는 "어느 시점의 최근 몇 회차 기준인가" 라는 선택이 개입한다. 과거 회차 페이지에 "HOT 번호 2개 포함" 이라고 적으면 독자는 그것이 *지금* 기준인지 *그때* 기준인지 알 수 없다. 두 값은 기준 `window` 를 명시적으로 받는 [번호 추천](#번호-추천) 응답에만 등장한다.
 
-### 통계
+### 통계 → [[api-contract-stats]] 로 옮겼다
+
+빈도 · HOT/COLD · 패턴 · 동반 출현 · 번호 하나의 통계, 그리고 **기간 조회**(`from_round`·`to_round`)와 **구간 메타**는 전부 **[[api-contract-stats|통계 API 계약]]** 에 있다.
 
 ```
-GET /api/lotto/stats/frequency?window=20|50|100|all&include_bonus=false
-GET /api/lotto/stats/hot-cold?window=20|50|100|all
-GET /api/lotto/stats/pattern?window=20|50|100|all
-GET /api/lotto/stats/pairs?window=20|50|100|all&number=&top=10    # 동반 출현 (2026-07-15)
+GET /api/lotto/stats/frequency      GET /api/lotto/stats/pairs
+GET /api/lotto/stats/hot-cold       GET /api/lotto/stats/number/{n}
+GET /api/lotto/stats/pattern        GET /api/lotto/rounds/index
 ```
 
-`window` 는 최근 몇 회차를 볼지다. 초안 8.2 가 20/50/100 을 모두 요구한다. 기존 구현은 `hot_rounds=20` 으로 고정돼 있었다 (`backend/app/prediction/config.py:5`) — 신규 API 는 이를 일반화한다. `all` 은 역대 전체.
+002·003 두 번의 개편이 전부 통계로 쌓여 이 문서의 43%를 차지하게 됐고, [SCHEMA.md](../SCHEMA.md) 의 원자성 규칙에 따라 2026-08-18 에 분리했다. **옮겼을 뿐 계약의 지위는 같다** — 이 문서의 [표현 규약](#표현-규약-)과 [오류 형식](#오류-형식)은 그쪽 응답에도 그대로 적용된다.
 
-`include_bonus` 의 기본값은 `false` 다. 기존 빈도 분석은 보너스 번호를 `× 0.3` 가중으로 섞어 넣었지만 (`backend/app/prediction/analyzer/frequency.py:22`), 그것은 예측 모듈의 내부 사정이다. 사용자에게 보여주는 통계는 "보너스 포함/제외" 를 명시적으로 선택하게 한다.
-
-세 엔드포인트 모두 응답 최상위에 `window`(정수 또는 `"all"`)와 `rounds_analyzed`(실제로 집계에 쓰인 회차 수)를 담는다. `window=100` 인데 데이터가 60회차뿐이면 `rounds_analyzed: 60` 이다. 프론트는 이 두 값이 다를 수 있음을 전제로 문구를 만든다.
-
-빈도 응답은 `{"window": 20, "rounds_analyzed": 20, "include_bonus": false, "counts": {"1": 3, "2": 1, ...}}` 형태로 번호를 키로 하는 맵이다. 키는 1~45 **전부** 존재하며, 한 번도 안 나온 번호는 `0` 이다. 정규화된 점수가 아니라 **횟수**를 반환한다 — 사용자가 검증할 수 있어야 한다.
-
-hot-cold 응답은 `hot`, `cold`, `overdue` 세 배열이다. `hot` 과 `cold` 는 `window` 안의 출현 횟수 기준 **상위·하위 10개**이고, 동점이면 번호가 작은 쪽이 앞선다. `overdue` 는 마지막 출현 이후 지난 회차 수가 큰 상위 10개이며, 이 값만은 `window` 가 아니라 **역대 전체**에서 계산한다 — "최근 20회에 안 나왔다" 는 20 이상의 모든 값을 20 으로 뭉개므로 쓸모가 없다.
-
-```json
-{
-  "window": 20,
-  "rounds_analyzed": 20,
-  "hot":  [{ "number": 33, "count": 13, "appearance_rate": 0.65, "last_seen_round": 1182, "trend": "up" }],
-  "cold": [{ "number": 9,  "count": 0,  "appearance_rate": 0.0,  "last_seen_round": null, "trend": "flat" }],
-  "overdue": [{ "number": 4, "rounds_since": 37, "last_seen_round": 1147 }]
-}
-```
-
-`rounds_since` 는 최신 회차 기준이다. 최신 회차에 나온 번호는 `0` 이다. 역대 한 번도 나오지 않은 번호는 (실데이터에는 없지만) 전체 회차 수를 반환한다.
-
-**002 개편으로 `hot`·`cold` 항목에 세 필드를 더한다** (주요통계 샘플의 표 열 — 출현 횟수·출현 비율·최근 출현·추세):
-
-- **`appearance_rate`** — `count / rounds_analyzed`. `0.0~1.0` 의 **과거 출현 비율**이다. 프론트는 `65%` 처럼 표시하되 "지난 N회 중 나온 비율" 임이 드러나게 라벨한다. **이것은 다음 회차 확률이 아니다** — `probability` 로 이름 짓지 않고 `appearance_rate` 로 두는 이유이자, [[forbidden-expressions]] 가 요구하는 "사실만 반환" 이다.
-- **`last_seen_round`** — 그 번호가 **마지막으로 나온 회차 번호**(절대값, 예 `1182`). window 밖이어도 역대 전체에서 찾는다. window 안에서 한 번도 안 나왔고 역대로도 없으면 `null`.
-- **`trend`** — `"up" | "down" | "flat"`. `window` 를 회차 기준 **최근 절반 vs 이전 절반**으로 나눠 출현 횟수를 비교한다. 최근 절반이 더 많으면 `up`, 적으면 `down`, 같으면 `flat`. 홀수 window 는 가운데 회차를 최근 쪽에 넣는다. **이것도 관찰된 추세일 뿐 예측이 아니다** — UI 문구가 "오를 것" 처럼 읽히지 않게 한다. window 가 2회 미만이면 항상 `flat`.
-
-`overdue` 에는 `last_seen_round` 만 추가한다(비율·추세는 미출현 목록에 의미가 없다).
-
-#### 동반 출현 (2026-07-15 신규)
-
-주요통계 '동반 출현' 탭용. **함께 자주 나온 번호쌍**을 센다. `pair_affinity` 전략이 내부에서 쓰던 동시출현 집계를 사용자에게 노출하는 것이다.
-
-```
-GET /api/lotto/stats/pairs?window=20|50|100|all&number=&top=10
-```
-
-- `number`(선택, 1~45) — 주면 그 번호와 함께 나온 상대 번호를 많이 나온 순으로 준다. 생략하면 **전체 번호쌍 중 동시출현이 많은 순**.
-- `top`(선택, 기본 10, 최대 45) — 반환 개수.
-
-```json
-{
-  "window": 20,
-  "rounds_analyzed": 20,
-  "number": null,
-  "pairs": [
-    { "numbers": [18, 33], "count": 5 },
-    { "numbers": [12, 27], "count": 4 }
-  ]
-}
-```
-
-`numbers` 는 항상 오름차순 2개. `count` 는 `window` 안에서 그 두 번호가 **같은 회차에 함께 나온 횟수**다. `number` 를 준 경우 각 `numbers` 는 `[요청번호, 상대번호]` 가 아니라 여전히 **오름차순**이며, 응답 최상위 `number` 로 어떤 번호 기준인지 구분한다. 동시출현 역시 관찰된 사실이고, 이 값이 "이 쌍이 또 나온다" 를 뜻하지 않는다 — 확률 표현을 붙이지 않는다.
-
-pattern 응답은 역대 조합이 어떤 모양이었는지의 분포다. 비율(`0.0~1.0`)은 관찰된 **빈도의 비율**이지 다음 회차의 무엇이 아니다.
-
-```json
-{
-  "window": "all",
-  "rounds_analyzed": 1231,
-  "odd_even": { "3:3": 0.33, "4:2": 0.24 },
-  "high_low": { "3:3": 0.32, "2:4": 0.25 },
-  "consecutive_ratio": 0.492,
-  "sum_range": { "min": 100, "max": 175, "peak": 138 },
-  "tail_variety_avg": 4.72,
-  "tail_counts": { "0": 512, "1": 604 }
-}
-```
-
-`odd_even` 키는 `홀:짝`, `high_low` 키는 `고:저` 이고 **고 = 23 이상**이다 ([[prediction-algorithm]]). `sum_range` 의 `min`/`max` 는 합계의 10·90 퍼센타일, `peak` 는 중앙값이다. 분포 맵은 비율 내림차순으로 정렬해 반환한다.
+> `GET /api/lotto/rounds/index`(회차-날짜 경량 목록)도 그쪽에 있다. 회차 엔드포인트처럼 보이지만 **기간 조회 UI 전용**이라 통계와 함께 두는 편이 읽기 좋다.
 
 ### 번호 추천
 
@@ -253,7 +194,8 @@ POST /api/lotto/recommend?strategy=<name>&sets=5&seed=<int>
 
 ```
 GET  /api/dream/keywords
-POST /api/dream/recommend   { "text": "돼지가 나오는 꿈을 꿨어요" }
+POST /api/dream/recommend   { "text": "돼지가 나오는 꿈을 꿨어요",
+                              "sets_per_tier": 10, "seed": null, "exclude": [] }
 ```
 
 `/keywords` 는 `/dream/{keyword}` 정적 페이지를 생성하기 위한 목록이다 — Next.js 의 `generateStaticParams` 가 쓴다. 키워드 슬러그와 한국어 표기를 함께 준다.
@@ -273,6 +215,7 @@ POST /api/dream/recommend   { "text": "돼지가 나오는 꿈을 꿨어요" }
   "text": "돼지가 나오는 꿈을 꿨어요",
   "matched_words": [
     { "dream_word": "돼지",
+      "from_text": true,
       "matches": [ { "gubun": 1, "word": "돼지", "numbers": [5, 33, 39] } ] }
   ],
   "tiers": {
@@ -291,6 +234,33 @@ POST /api/dream/recommend   { "text": "돼지가 나오는 꿈을 꿨어요" }
 **유사도 점수를 응답에 담지 않는다.** `searcher.py` 는 L2 거리를 `0~1` 로 뒤집은 값을 들고 있지만 (`score`), 그것을 JSON 에 실으면 사용자는 확률로 읽는다. `score` 는 [금지 필드명](#표현-규약-)이다 ([[forbidden-expressions]]).
 
 **첫 요청은 느리다.** 임베딩 모델이 lazy 싱글톤으로 로드되며 약 20초가 걸린다 (`backend/app/dream/state.py`). 프론트는 이 요청에 로딩 상태를 반드시 표시한다.
+
+#### 2026-08-28 계약 변경 — `exclude` 와 `from_text`
+
+프론트 세션이 [[dream-pipeline]] 에 남긴 요청 둘을 구현하면서 더한다. **둘 다 추가만 하는 하위호환 변경**이고, 보내지 않거나 읽지 않으면 종전과 완전히 같다.
+
+**① 요청에 `exclude: number[]`(선택, 기본 `[]`)**
+
+사용자가 "이 번호는 쓰기 싫다" 고 뺀 번호다. 종전에는 이 파라미터가 없어 프론트가 **보여줄 개수의 세 배를 받아 걸러 내고** 있었다 — 풀이 좁고 여러 번호를 빼면 남는 조합이 금세 바닥나는 우회였다.
+
+- 번호는 **풀에서도 빠지고 채움에서도 빠진다.** 풀에서만 빼면 "뺐는데 또 나온다" 가 되고, 사용자에게는 제외 스위치가 고장 난 것으로 읽힌다.
+- 응답의 `tiers.tierN.pool` 에서도 빠진다. 그래야 프론트의 `pool` ↔ `numbers` 대조가 계속 성립한다.
+- 어떤 tier 의 풀이 **통째로** 제외되면 그 tier 는 `null` 이다(빈 풀과 같게 다룬다).
+- **최대 39개.** 6개를 만들려면 최소 6개가 남아야 한다(45 − 39 = 6). 40개 이상은 `422` 다 — 만들 수 없는 요청을 받아 두면 빈 결과가 나오고 화면은 원인을 알 수 없다.
+- 1~45 를 벗어난 번호도 `422`. 조용히 무시하면 사용자는 뺐다고 믿는데 그 번호가 계속 나온다.
+- `seed` 재현성은 그대로 유지된다.
+
+**② 응답 `matched_words[].from_text: boolean`**
+
+⚠ **`dream_word` 는 사용자가 적은 단어가 아닐 수 있다.** 형태소 분석 1단계의 유의어 확장 때문에 `집` 하나가 `집안`·`건물` 을 데려오고, 그 둘은 표제어와 정확히 일치해 `gubun=1` 로 내려온다. 화면이 그것을 "적어 주신 상징" 으로 세우면 사용자는 **자기가 쓰지 않은 말을 자기 말로 읽는다.**
+
+`from_text` 가 그 둘을 가른다. 판정은 원문에 대한 **단순 문자열 포함**이다 — 프론트가 이미 하던 방식과 같은 규칙을 서버로 옮긴 것이라, 화면의 분류가 조용히 달라지지 않는다. 프론트는 자기 쪽 포함 판정을 걷어내면 된다.
+
+**③ 비단어를 후보에서 거른다 (응답 변화 없음)**
+
+`_stem_to_noun` 은 어간에 '음'·'함' 을 붙여 명사형을 만드는데, 규칙이 빗나가면 `크함`·`꾸음` 처럼 **사전에도 없고 뜻도 없는 문자열**이 나온다. 그것이 벡터 검색에 들어가면 유사도만으로 엉뚱한 표제어를 끌어왔다 — 실측으로 `크함` 이 `큰북`·`큰방`·`대형` 을 데려와 번호 3개를 보태고 있었다. 사용자는 "큰" 이라고 썼을 뿐인데 그 번호의 출처를 설명할 방법이 없다.
+
+이제 **규칙이 만들어 낸 단어는 정확 일치(`gubun=1`)가 있을 때만** 쓴다. 정확 일치가 있다면 사전에 실재하는 표제어이므로 규칙이 우연히 맞은 것이고 버릴 이유가 없다. 통째로 막지 않는 이유다. `matched_words` 에서 해당 항목이 사라지므로 **응답이 짧아질 수 있으나 필드는 그대로**다.
 
 ### 뉴스
 
@@ -312,6 +282,155 @@ GET /api/news?page=1&size=20&keyword=&period=all    # size 최대 100
 `id` 는 `/api/meta/sitemap-entries` 의 `news[].id` 와 같은 값이다 — 사이트맵의 URL 과 목록의 항목을 잇는 유일한 키라서 목록에도 실어야 한다.
 
 **`lotto_news` 는 당분간 비어 있다.** 워커의 `news` 잡이 네이버 API 키를 기다리는 중이다 ([[env-vars]]). 그동안 이 엔드포인트는 `{"total": 0, "page": 1, "size": 20, "items": []}` 를 반환한다. 404 가 아니다.
+
+### 영상
+
+```
+GET /api/videos?kind=all&page=1&size=20&round=&game=      # size 최대 100
+GET /api/videos/{id}
+```
+
+응답은 [페이지네이션 봉투](#페이지네이션-봉투)이고, `items` 의 영상 객체는 이렇다.
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `id` | int | 대리키 |
+| `video_key` | string | 유튜브 영상 ID(11자). URL 조립에 쓴다 |
+| `title` | string | **원문 그대로.** 낱말을 바꾸지 않는다 |
+| `channel` | string \| null | 채널명 |
+| `thumbnail` | string \| null | 썸네일 URL. 핫링크한다 |
+| `published_at` | string | ISO 8601 (KST) |
+| `duration_sec` | int \| null | 재생시간(초). 포맷은 프론트가 한다 |
+| `views` | int \| null | 조회수 |
+| `shorts_hint` | string | `likely` \| `unlikely` \| `unknown` |
+| `round` | int \| null | 제목에서 파싱한 회차 |
+| `game` | string | `lotto` \| `pension` \| `unknown` |
+| `keywords` | string[] | |
+
+정렬은 `published_at` 내림차순, 동시각은 `id` 내림차순으로 확정한다(정렬이 불안정하면 페이지 경계에서 같은 항목이 두 번 보이거나 빠진다).
+
+**파라미터**
+
+- **`kind`**(선택, 기본 `all`) — `all` \| `normal` \| `shorts`. `shorts` 는 `shorts_hint='likely'`, `normal` 은 `'unlikely'` 만 남긴다. **`'unknown'` 은 `normal` 에도 `shorts` 에도 들어가지 않는다** — 모르는 것을 어느 한쪽으로 밀면 그 순간 추정이 확정이 된다. `all` 에서만 보인다. 그 외 값은 `422`
+- **`round`**(선택) — 회차. `game` 과 함께 써야 의미가 있다
+- **`game`**(선택) — `lotto` \| `pension`. 그 외 값은 `422`
+
+#### ★ 표시 조건 — 백엔드가 반드시 건다
+
+```sql
+WHERE privacy_status_cd = 'public'
+  AND embeddable_cd     = 'yes'
+  AND made_for_kids_cd  = 'no'
+```
+
+워커가 수집 시점에 이미 걸렀지만 갱신 주기(25일) 사이에 상태가 바뀐 행이 있을 수 있다. 비공개로 전환됐거나 임베드가 막힌 영상을 내보내면 화면에 깨진 플레이어가 뜬다. `made_for_kids` 는 YouTube 정책 III.E.4.10 의 조회 의무와 직결된다.
+
+이 세 컬럼은 **응답에 내보내지 않는다.** WHERE 절 재료일 뿐이다.
+
+#### ★ 응답 캐시 TTL 은 24시간을 넘기지 않는다
+
+`lotto_video` 의 행은 YouTube 개발자 정책 III.E.4 에 따라 30일 안에 갱신되거나 삭제된다. 백엔드가 응답을 오래 캐시하면 워커가 지운 데이터를 계속 내보내게 되고, **그 시점부터 정책 위반의 주체는 백엔드다.** 다른 리소스와 달리 이 제약이 계약에 명시된 이유다.
+
+#### ★ `shorts_hint` 를 boolean 으로 바꾸지 않는다
+
+쇼츠를 판별하는 공식 API 필드가 없어 재생시간·게시일로 **추정**한 값이다(원본 화면비를 얻을 수 없다). `is_shorts: true` 로 내보내는 순간 추정이 확정으로 둔갑하고, 프론트가 그것을 사실로 표시한다. 문자열 3-값을 그대로 전달한다.
+
+#### 회차 연결 — `game` 을 반드시 함께 본다
+
+`GET /api/videos/{id}` 는 `round` 가 있으면 그 회차의 당첨 정보를 함께 담는다(또는 프론트가 기존 회차 API 를 따로 부른다 — 어느 쪽이든 백엔드 판단).
+
+**`game='lotto'` 일 때만 `lotto_draw` 와 조인한다.** 회차 번호만 보고 조인하면 **연금복권 330회 영상에 로또 330회 당첨번호가 붙는다** — 에러 없이 조용히 틀린 번호가 화면에 뜬다. `game='pension'` 과 `'unknown'` 은 조인 대상이 아니다.
+
+`round` 가 아직 추첨 전 회차일 수 있으므로 **조인 결과가 없는 경우를 정상 경로로 다룬다.** 404 가 아니라 회차 정보 없이 응답한다.
+
+#### 빈 테이블
+
+**`lotto_video` 는 당분간 비어 있다.** 워커의 `video_*` 잡이 `YOUTUBE_API_KEY` 를 기다린다([[env-vars]]). 그동안 이 엔드포인트는 `{"total": 0, "page": 1, "size": 20, "items": []}` 를 반환한다. 404 가 아니다.
+
+### 운영자 전용 — 수집 로그
+
+**공개 API 가 아니다.** 사이트 운영자 한 사람만 쓰는 화면의 데이터원이고, 나머지 엔드포인트와 규칙이 다르다.
+
+```
+POST /api/admin/login      { "token": "..." }   → 200 + httpOnly 쿠키 / 401
+POST /api/admin/logout                          → 204 (쿠키 삭제)
+GET  /api/admin/job-logs?job_name=&status=&limit=50&before_id=
+```
+
+#### 인증
+
+**`ADMIN_TOKEN` 환경변수 하나로 한다**([[env-vars]]). 사용자 계정·비밀번호 테이블을 만들지 않는다 — 쓰는 사람이 한 명이고, 계정 시스템은 그 자체로 공격면이자 유지보수 대상이다.
+
+| 규칙 | 내용 |
+|---|---|
+| 비교 | **`secrets.compare_digest`.** `==` 를 쓰지 않는다(타이밍 공격). 워커의 `X-Job-Key` 와 같은 규약이다 |
+| 빈 값 | `ADMIN_TOKEN` 이 비어 있으면 **모든 `/api/admin/*` 가 503 을 낸다.** 빈 문자열끼리 비교하면 통과해 아무나 들어온다 — 인증이 없는 것보다 나쁘다. 인증이 있다고 착각하게 만든다 |
+| 쿠키 | `httpOnly` · `SameSite=Lax` · `Path=/` · 만료 12시간. 운영 환경에서는 `Secure` 도 |
+| 쿠키 `Secure` 판단 | **요청 스킴(`https`)에서 정한다**(2026-08-28 구현 결정). 설정 키를 하나 더 두지 않는 이유: 사람이 채워야 할 값이 늘면 로컬에서 `true` 로 뒀다가 쿠키가 안 붙는 사고가 나고, 반대로 운영에서 `false` 로 두면 평문으로 샌다. 스킴은 서버가 아는 사실이다 |
+| 쿠키 값 | **토큰 원문을 쿠키에 담지 않는다.** 서명된 세션 값(예: HMAC(token, 발급시각))을 담는다. 원문을 담으면 XSS 한 번에 영구 토큰이 샌다 |
+| 실패 | 401. **왜 틀렸는지 알려주지 않는다**(토큰이 없다/짧다/틀렸다를 구분해 주지 않는다) |
+| 브루트포스 | 로그인 실패를 IP 기준으로 세어 분당 10회를 넘으면 429. 토큰이 32바이트 랜덤이면 실질 위험은 낮지만, 로그인 엔드포인트가 공개된 이상 기본 방어는 둔다 |
+
+#### 응답
+
+```json
+{
+  "summary": [
+    {"job_name": "news", "run_cnt": 168, "success_cnt": 168, "failed_cnt": 0,
+     "running_cnt": 0, "collected_sum": 412,
+     "last_started_at": "2026-08-28T10:00:00+09:00",
+     "last_success_at": "2026-08-28T10:00:00+09:00"}
+  ],
+  "items": [
+    {
+      "run_id": 121, "job_name": "video_search", "exec_type": "manual",
+      "status": "success",
+      "started_at": "2026-08-28T10:17:02+09:00",
+      "finished_at": "2026-08-28T10:18:03+09:00",
+      "duration_sec": 61,
+      "collected_count": 50,
+      "error": null,
+      "stat": {"fetched": 119, "deduped": 113, "channel_ok": 112, "on_topic": 103,
+               "rule_clean": 70, "llm_clean": 52, "fresh": 52, "stored": 50},
+      "logs": [{"t": "2026-08-28T10:17:40+09:00", "lv": "WARNING",
+                "logger": "worker.jobs.video_channel", "msg": "채널명이 바뀌었다: ..."}]
+    }
+  ],
+  "next_before_id": 121
+}
+```
+
+`stat` 과 `logs` 는 **`null` 일 수 있다.** 2026-08-28 이전에 실행된 잡은 두 컬럼이 없었다. 프론트는 없는 경우를 정상으로 다룬다.
+
+`stat` 의 키는 **잡마다 다르고 앞으로 늘어난다.** 프론트가 키를 하드코딩해 표를 만들지 않는다 — 받은 키를 그대로 순회해 표시한다. 그래야 워커가 단계를 추가해도 화면이 따라간다.
+
+#### 페이징 — 커서
+
+목록 봉투를 쓰지 **않는다.** 잡 이력은 끊임없이 추가되어 `OFFSET` 이면 조회 중에 경계에서 같은 행이 두 번 보이거나 빠진다. `next_before_id` 를 다음 요청의 `before_id` 로 넘긴다. `total` 도 주지 않는다 — 수십만 행을 매번 세는 비용이 화면에 주는 값보다 크다.
+
+#### 프론트 규칙
+
+| 규칙 | 이유 |
+|---|---|
+| **`metadata.robots = "noindex, nofollow"`** | 검색에 노출되면 안 된다 |
+| **`sitemap.ts` 에 넣지 않는다** | 화이트리스트 방식이라 자동 제외되지만, 실수로 넣지 않는다 |
+| **`robots.txt` 에 `Disallow` 를 넣지 않는다** | 크롤을 막으면 크롤러가 `noindex` 를 못 읽어 URL 만 색인될 수 있다. 기존 `/v2` 판단과 같다 |
+| **광고를 넣지 않는다** | 운영자만 보는 화면이다 |
+| **면책·가이드 문구를 넣지 않는다** | 공개 화면이 아니다 |
+| 링크를 걸지 않는다 | 헤더·푸터 어디에도. 주소를 아는 사람만 들어온다 |
+
+#### 화면 구성 제안
+
+```
+/admin          로그인 (토큰 입력 폼 하나)
+/admin/logs     상단: 잡별 7일 요약 카드 (실행 횟수 · 성공/실패 · 수집 합계 · 마지막 성공)
+                필터: 잡 이름 · 상태
+                목록: 시각 · 잡 · 실행구분 · 상태 · 소요 · 수집건수
+                      행을 펼치면 stat 표 + logs 타임라인 + error 전문
+                하단: "더 보기" (커서 페이징)
+```
+
+**실패한 실행이 눈에 띄어야 한다** — 이 화면의 목적이 "무엇이 잘못됐는지 나중에 고치는 것"이다. 상태 배지에 색을 주고, 기본 정렬은 최신순이되 실패만 보는 필터를 한 번에 걸 수 있게 한다.
 
 ### 사이트맵 데이터
 

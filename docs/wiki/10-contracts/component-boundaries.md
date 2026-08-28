@@ -44,9 +44,9 @@ backend ──(read-only 롤)─────────▶ └─────�
 
 **한다.** 외부 소스에서 데이터를 가져와 Postgres 에 쓴다. 잡 레지스트리(`lotto`, `news`), 크론, 잡별 락, 수동 트리거, `collect_job_log` 로깅, Alembic 마이그레이션.
 
-**소유한다.** `worker/**`, `worker/migrations/`(Alembic 의 **유일한** 소유자), 그리고 `lotto_draw` · `lotto_prize` · `lotto_news` · `collect_job_log` 테이블의 스키마.
+**소유한다.** `worker/**`, `worker/migrations/`(Alembic 의 **유일한** 소유자), 그리고 `lotto_draw` · `lotto_prize` · `lotto_news` · `lotto_video` · `collect_job_log` 테이블의 스키마.
 
-**하지 않는다.** HTML 렌더링. 예측 계산. 공개 API 제공. 다른 디렉토리 코드 수정. `/internal/*` 를 `0.0.0.0` 에 바인딩하거나 nginx 에 노출. 관리자 UI. 뉴스 **원문** 저장.
+**하지 않는다.** HTML 렌더링. 예측 계산. 공개 API 제공. 다른 디렉토리 코드 수정. `/internal/*` 를 `0.0.0.0` 에 바인딩하거나 nginx 에 노출. 관리자 UI. 뉴스 **원문** 저장. 영상 **파일·자막·썸네일 이미지** 저장(메타데이터와 URL 만 담는다).
 
 **ML 의존성이 없다.** `torch` 를 추가하지 않는다. 이것이 worker 를 분리한 실질적 이득이다 — 무거운 의존성의 위험이 backend 하나로 격리된다.
 

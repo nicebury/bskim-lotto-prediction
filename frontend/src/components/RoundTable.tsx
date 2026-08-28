@@ -4,6 +4,7 @@ import type { Round } from '@/lib/api-types'
 import { formatDrawDate, formatNumber, formatWon } from '@/lib/format'
 import { LottoBall } from './LottoBall'
 import { EmptyState } from './Card'
+import { ScrollArea } from './ScrollArea'
 
 /**
  * 회차 목록 표.
@@ -17,7 +18,7 @@ export function RoundTable({ rounds }: { rounds: Round[] }) {
   }
 
   return (
-    <div className="table-scroll">
+    <ScrollArea className="table-scroll" label="회차별 당첨번호 표">
       <table className="data-table">
         <caption className="sr-only">회차별 로또 당첨번호와 1등 당첨금</caption>
         <thead>
@@ -69,6 +70,6 @@ export function RoundTable({ rounds }: { rounds: Round[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </ScrollArea>
   )
 }

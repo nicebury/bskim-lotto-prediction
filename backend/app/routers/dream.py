@@ -8,10 +8,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 
+from .. import repository as repo
 from ..config import settings
+from ..db import get_pool
+from ..domain import number_scores
 from ..dream import keywords as keywords_mod
 from ..dream import service
 from ..schemas import DreamKeywordsResponse, DreamRecommendResponse, DreamRequest
@@ -37,8 +41,42 @@ async def list_keywords() -> dict:
     return {"total": len(words), "keywords": words}
 
 
+async def _fill_scores() -> Optional[dict[int, float]]:
+    """조합의 모자란 자리를 채울 번호별 통계 점수. 만들지 못하면 `None`.
+
+    **최신 회차만 먼저 물어보고 캐시를 확인한다.** 점수는 회차가 늘 때만 바뀌므로(주 1회),
+    캐시가 살아 있으면 1,200여 행을 읽는 질의 자체를 건너뛴다.
+
+    ⚠ **DB 오류를 삼켜서 꿈해몽을 살린다.** 꿈해몽의 본래 의존은 ChromaDB 이고 Postgres 가
+    아니다. 채움 방식 하나 때문에 멀쩡히 동작하던 화면을 500 으로 만드는 것은 사용자에게
+    더 나쁘다. 대신 **ERROR 로 시끄럽게 남긴다** — 조용히 무작위로 되돌아가면 화면의
+    "통계로 채웠습니다" 안내가 사실과 어긋난 채 아무도 모르게 지나간다.
+    """
+    try:
+        pool = get_pool()
+        latest = await repo.latest_round(pool)
+        if latest is None:
+            # 워커가 아직 한 회차도 넣지 않았다. 오류가 아니라 데이터 이전 상태다.
+            return None
+
+        cached = number_scores.get_cached(latest["round_no"])
+        if cached is not None:
+            return cached
+
+        draws = await repo.all_draws(pool)
+        # 분석기 4종은 순수 파이썬 루프라 CPU 를 쥔다. 이벤트 루프에 두지 않는다.
+        return await asyncio.to_thread(number_scores.load, draws)
+    except Exception:
+        logger.exception(
+            "번호별 통계 점수를 준비하지 못했습니다. "
+            "이번 꿈해몽 요청의 부족분은 균등 무작위로 채웁니다."
+        )
+        return None
+
+
 @router.post("/recommend", response_model=DreamRecommendResponse)
 async def recommend(req: DreamRequest) -> dict:
+    fill_scores = await _fill_scores()
     try:
         return await asyncio.to_thread(
             service.recommend,
@@ -46,6 +84,8 @@ async def recommend(req: DreamRequest) -> dict:
             chroma_path=settings.chroma_path,
             sets_per_tier=req.sets_per_tier,
             seed=req.seed,
+            fill_scores=fill_scores,
+            exclude=set(req.exclude),
         )
     except FileNotFoundError as exc:
         logger.error("ChromaDB 를 찾을 수 없습니다: %s", exc)

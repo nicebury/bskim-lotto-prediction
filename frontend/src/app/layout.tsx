@@ -5,9 +5,6 @@ import './globals.css'
 
 import { AnalyticsScripts } from '@/components/analytics/AnalyticsScripts'
 import { PageViewTracker } from '@/components/analytics/PageViewTracker'
-import { Footer } from '@/components/Footer'
-import { Header } from '@/components/Header'
-import { JsonLd, organizationLd, webSiteLd } from '@/components/JsonLd'
 import { ThemeScript } from '@/components/ThemeScript'
 import {
   GOOGLE_SITE_VERIFICATION,
@@ -30,11 +27,11 @@ import { pretendard } from '@/lib/fonts'
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: `${SITE_NAME} — 로또 6/45 당첨결과·번호 통계·재미용 추천`,
+    default: `${SITE_NAME} — 로또 6/45 당첨결과·번호 통계·번호 추천`,
     template: `%s | ${SITE_NAME}`,
   },
   description:
-    '최신 로또 당첨결과, 번호 출현 통계, 복권 뉴스, 재미용 번호 추천을 한 곳에서 확인하세요.',
+    '최신 로또 당첨결과, 번호 출현 통계, 복권 뉴스, 통계와 AI 기반 번호추천을 한 곳에서 확인하세요.',
   applicationName: SITE_NAME,
   alternates: { canonical: '/' },
   openGraph: {
@@ -42,9 +39,9 @@ export const metadata: Metadata = {
     locale: 'ko_KR',
     siteName: SITE_NAME,
     url: SITE_URL,
-    title: `${SITE_NAME} — 로또 6/45 당첨결과·번호 통계·재미용 추천`,
+    title: `${SITE_NAME} — 로또 6/45 당첨결과·번호 통계·번호 추천`,
     description:
-      '최신 로또 당첨결과, 번호 출현 통계, 복권 뉴스, 재미용 번호 추천을 한 곳에서 확인하세요.',
+      '최신 로또 당첨결과, 번호 출현 통계, 복권 뉴스, 통계와 AI 기반 번호추천을 한 곳에서 확인하세요.',
     /*
       공유 카드 이미지. metadataBase 기준으로 절대화된다.
       width/height 를 명시해야 카카오톡·트위터가 자리를 미리 잡는다(공유 카드의 CLS).
@@ -86,20 +83,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <PageViewTracker />
         </Suspense>
 
-        {/* 키보드 사용자가 내비게이션을 건너뛰고 본문으로 갈 수 있게 한다. */}
-        <a className="skip-link" href="#main">
-          본문 바로가기
-        </a>
-
-        <Header siteName={SITE_NAME} />
-
-        {/* 페이지 최상위 콘텐츠는 <main> 하나다. */}
-        <main id="main">{children}</main>
-
-        <Footer siteName={SITE_NAME} />
-
-        {/* 사이트 단위 구조화 데이터. 전 페이지 공통으로 한 번만 렌더링한다. */}
-        <JsonLd data={[organizationLd(SITE_NAME, SITE_URL), webSiteLd(SITE_NAME, SITE_URL)]} />
+        {/*
+          ⚠ 헤더·푸터·구조화 데이터는 여기 없다. `(site)/layout.tsx` 로 옮겼다 —
+            운영자 화면(`admin/**`)에 푸터의 면책 문구가 따라붙으면 안 되기 때문이다
+            (계약: "면책·가이드 문구를 넣지 않는다"). 그쪽 주석에 경위를 적었다.
+        */}
+        {children}
       </body>
     </html>
   )

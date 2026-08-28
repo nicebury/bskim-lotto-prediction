@@ -36,6 +36,7 @@
 - [0010 — DB 명명 표준화, API 필드는 유지](00-decisions/0010-db-naming-standard.md) — 공개 계약을 DB 스키마에 결합시키지 않는다
 - [0011 — 상세페이지 이미지는 빌드타임 큐레이션](00-decisions/0011-build-time-image-curation.md) — 런타임 호출·워커 수집이 아니라 사람이 골라 커밋한다
 - [0012 — 몬테카를로 추천은 한 번에 하나만](00-decisions/0012-serialize-monte-carlo.md) — 동시 실행이 n² 로 무너진다. 알고리즘이 아니라 실행 방식을 고친다
+- [0013 — 꿈 소재별 해몽 풀이는 프론트 상수로 둔다](00-decisions/0013-dream-meanings-in-frontend.md) — 색인 대상 10개뿐인 원고를 위해 계약을 늘리지 않는다
 
 ## 10-contracts — 세션 간 계약 ★
 
@@ -44,8 +45,9 @@
 - [component-boundaries](10-contracts/component-boundaries.md) — ★ **세션이 가장 먼저 읽는다.** 누가 무엇을 소유하고 무엇을 하지 않는가
 - [db-schema](10-contracts/db-schema.md) — Postgres DDL, **DB↔API 매핑표**, 롤 권한. `ALTER DEFAULT PRIVILEGES` 함정
 - [db-naming-standard](10-contracts/db-naming-standard.md) — 표준단어·도메인 접미어·제약 명명규칙. 새 컬럼을 만들 때 읽는다
-- [api-contract](10-contracts/api-contract.md) — 백엔드 REST 엔드포인트와 **표현 규약**(확률 필드명 금지)
-- [worker-jobs](10-contracts/worker-jobs.md) — `lotto`·`news` 잡의 크론·락·수동 트리거 스펙
+- [api-contract](10-contracts/api-contract.md) — 백엔드 REST 엔드포인트와 **표현 규약**(확률 필드명 금지). 회차·추천·꿈해몽·뉴스·사이트맵
+- [api-contract-stats](10-contracts/api-contract-stats.md) — 통계 전용 계약. `window`·**기간 조회**·구간 메타·정렬 규약. 2026-08-18 에 위에서 분리
+- [worker-jobs](10-contracts/worker-jobs.md) — `lotto`·`news`·`video_*` 잡의 크론·락·수동 트리거 스펙. 2026-08-28 에 영상 잡 3종 추가
 - [env-vars](10-contracts/env-vars.md) — 컴포넌트별 `env.sample`, **`.env` 열람 금지**, 사용자에게 요청할 미확정 값
 
 ## 20-design — 디자인 시스템
@@ -54,7 +56,7 @@
 - [responsive-rules](20-design/responsive-rules.md) — 브레이크포인트 3단, mobile-first, 터치 타겟 44px, CLS 방지
 - [components](20-design/components.md) — 볼·카드·헤더·캐러셀·광고 슬롯 사양
 - [accessibility](20-design/accessibility.md) — a11y 체크리스트. 색만으로 정보를 전달하지 않기
-- [home-v2-concept](20-design/home-v2-concept.md) — ⚗ **새 메인 시안 `/v2`.** 45칸 격자 시그니처·다크 캔버스·`hb-` 격리 규칙. 운영 홈과 비교용
+- [home-v2-concept](20-design/home-v2-concept.md) — ✕ **미채택 시안. 코드는 2026-08-21 에 삭제됐다**(`24ad827` 에 남아 있다). 격리 기법(`body:has()` 스코프·트랙 넘침)만 참고용으로 남긴다
 
 ## 30-seo — 검색·광고·분석
 
@@ -77,10 +79,12 @@
 - [migration-sqlite-to-postgres](50-ops/migration-sqlite-to-postgres.md) — 1,231행 1회 이관. 검증 SQL 과 롤백
 - [wsl-drvfs-pitfall](50-ops/wsl-drvfs-pitfall.md) — ⚠ `/mnt/d` 에서 디렉토리 rename 시 파일이 사라진 것처럼 보인다. `rm -rf` 하기 전에 읽는다
 - [deployment](50-ops/deployment.md) — ⚠ **미정.** 결정해야 할 질문 목록
+- [크롤링 방어](50-ops/crawling-defense.md) — 당첨번호는 막을 대상이 아니다. 진짜 열린 곳은 HTML 이 아니라 공개된 백엔드 API 다
 
 ## 90-external — 외부 의존
 
 - [naver-search-api](90-external/naver-search-api.md) — 일일 쿼터 **25,000**. 신선도 필터와 3중 중복 제거. ⚠ 재배포 약관은 미확인
+- [youtube-data-api](90-external/youtube-data-api.md) — ⚠ **`search.list` 하루 100회 · 데이터 30일 보관 제한.** 쇼츠 판별 불가와 RSS 를 쓰지 않는 이유
 - [dhlottery-blocked](90-external/dhlottery-blocked.md) — ⚠ **수집 정책 미결.** 네이버 `robots.txt` 전면 금지 확인, 백필 중단. 위젯이 등위별·판매점까지 준다는 사실도 여기
 - [trademark-check](90-external/trademark-check.md) — ⚠ **KIPRIS 상표 검색·도메인 미확인**
 - [pexels-image-usage](90-external/pexels-image-usage.md) — Pexels License 사실, 빌드타임 큐레이션, 인물 배제. 저작권 최종 판단은 사용자
@@ -95,8 +99,11 @@
 |--------|----------|-------|
 | **등위별(`lotto_prize`) · 판매점 수집** | ⚠ **수집 정책·법적 검토.** 네이버 `robots.txt` 가 전면 금지(`Disallow: /`)임을 확인. 데이터베이스제작자 권리 검토 필요. (1등 정보 백필은 완료) | [dhlottery-blocked](90-external/dhlottery-blocked.md) |
 | 공개 (막지는 않음) | 네이버 뉴스 **재배포 약관·출처 표기** 확인 | [naver-search-api](90-external/naver-search-api.md) |
+| **뉴스 32일 결손 복구** | ⚠ **1회성 백필 여부 판단.** 워커가 멈춘 2026-07-16~08-16 뉴스가 0건이고 크론으로는 채워지지 않는다. 백필은 위 재배포 약관 판단에 걸린다 | [naver-search-api](90-external/naver-search-api.md) |
+| **영상 수집 시작** | `YOUTUBE_API_KEY` 발급. Cloud Console → YouTube Data API v3 활성화 → API 키(제한 걸기) | [youtube-data-api](90-external/youtube-data-api.md) · [env-vars](10-contracts/env-vars.md) |
+| 공개 (막지는 않음) | 유튜브 30일 보관 정책의 "갱신" 정의, 애드센스와 III.G.1.d 해석 | [youtube-data-api](90-external/youtube-data-api.md) |
 | 도메인 구매 | KIPRIS 상표 검색 | [trademark-check](90-external/trademark-check.md) |
-| Phase 4 | GA4 · 네이버 애널리틱스 · 서치콘솔 계정 | [analytics](30-seo/analytics.md) |
+| Phase 4 | ⚠ **사용자만 채울 수 있는 값 6종.** GA4 측정 ID · 네이버 애널리틱스 ID · 구글/네이버 소유확인 문자열 · 도메인(`NEXT_PUBLIC_SITE_URL`) · 문의 메일 · (승인 후) 애드센스 클라이언트. **코드는 전부 준비돼 있고 목 값으로 동작을 검증했다**(2026-08-21) — 값만 `.env_frontend` 에 넣으면 된다 | [analytics](30-seo/analytics.md) · [env-vars](10-contracts/env-vars.md) |
 | Phase 5 | 배포 환경 결정 · ChromaDB 보관 방법 | [deployment](50-ops/deployment.md) |
 
 Postgres 롤은 준비됐고(2026-07-09), 네이버 API 키와 일일 쿼터(25,000)도 확인되어 `news` 잡이 확정 크론으로 동작한다.
@@ -105,13 +112,23 @@ Postgres 롤은 준비됐고(2026-07-09), 네이버 API 키와 일일 쿼터(25,
 
 **Phase 2(backend) 는 구현·검증 완료다** (2026-07-09). [[api-contract]] 의 전 엔드포인트가 200 을 반환하고, `sets=3&seed=1` 두 호출이 바이트 단위로 같으며, `app_reader` 의 쓰기가 권한으로 거부된다. 단위 40 + 통합 27 테스트 통과. 개발 DB(1,231회차·뉴스 75건)에 직접 붙어 전 엔드포인트 200 을 확인했다. 기동 시 접속 롤이 `app_reader` 이고 쓰기 권한이 없음을 백엔드가 스스로 검증한다.
 
-**백엔드는 V2(002) 이후 전면 재검증됐다** (2026-08-12). 계약의 전 엔드포인트를 개발 DB(1,232회차·뉴스 172건)에 붙여 응답 키·정렬·필드 정의·금지 필드명까지 자동 검사해 **위반 0건**. 이 과정에서 **추천 API 가 동시 요청에서 n² 로 무너지던 원인을 찾아 고쳤다** — 동시 4건 62.6초 → 10.1초([[0012-serialize-monte-carlo]]). 알고리즘은 건드리지 않았고 `seed` 결과가 수정 전과 바이트 단위로 같다. 테스트 94개 통과.
+**백엔드는 V2(002) 이후 전면 재검증됐다** (2026-08-12). 계약의 전 엔드포인트를 개발 DB(1,232회차·뉴스 172건)에 붙여 응답 키·정렬·필드 정의·금지 필드명까지 자동 검사해 **위반 0건**. 이 과정에서 **추천 API 가 동시 요청에서 n² 로 무너지던 원인을 찾아 고쳤다** — 동시 4건 62.6초 → 10.1초([[0012-serialize-monte-carlo]]). 알고리즘은 건드리지 않았고 `seed` 결과가 수정 전과 바이트 단위로 같다. 테스트 94개 통과. **003 통계 개편의 백엔드 선행 5건도 구현·검증했다** (2026-08-18) — 기간 조회(`from_round`~`to_round`)와 구간 메타 4종, `hot-cold` 의 `top`, 신규 `GET /stats/number/{n}`·`GET /rounds/index`, `pattern` 의 `sum_histogram`·`consecutive_counts`. 전부 추가만 하는 하위호환 변경이고 워커·DB 는 건드리지 않았다. 계약 전수 자동검사 위반 0건, 테스트 145개 통과.
+
+**백엔드가 2026-08-28 계약 변경 세 건을 전부 구현했다.** 계약 선언 19개 엔드포인트 대비 **누락 0·계약에 없는 구현 0**. **계약 전수검사를 테스트로 만들어 저장소에 남겼다**(`tests/test_contract_conformance.py`) — 종전에는 한 번 돌리고 버려 다시 돌릴 수 없었다. 모든 응답에서 금지 필드명·DB 컬럼명 누출·비KST 시각을 훑어 **위반 0건**.
+
+**① 유튜브 영상 계약을 구현했다** (2026-08-28). `GET /api/videos` · `GET /api/videos/{id}` 가 200 을 반환한다 — 워커가 `lotto_video` 마이그레이션을 이미 돌려 놓아 **실제 스키마에 대해** 검증했고(0행, `app_reader` SELECT 정상), `ALTER DEFAULT PRIVILEGES` 함정에는 걸리지 않았다. 계약이 이 리소스에만 건 제약 셋(**캐시 24시간 상한** · **표시 조건 WHERE** · **`shorts_hint` boolean 금지**)을 전부 코드로 강제했고 테스트가 잡는다. 회차 연결은 **백엔드가 `game='lotto'` 일 때만** 조인해 담기로 정했다 — 프론트에 맡기면 그 검사를 잊을 위험이 옮겨갈 뿐 사라지지 않는다. **② 꿈해몽에 `exclude`(최대 39)와 `from_text` 를 더했다**(프론트 요청 2건). `_stem_to_noun` 이 만든 비단어(`크함`·`꾸음`)를 검색 후보에서 걸렀다 — 전부 하위호환이다. `dream-pipeline.md` 의 백엔드 요청 블록 둘은 완료 기록으로 닫았다.
+
+**③ 운영자 전용 수집 로그 API 를 구현했다**(`/api/admin/login`·`/logout`·`/job-logs`). 계약을 다시 훑다가 빠뜨린 것을 발견해 채웠다. ⚠ **`ADMIN_TOKEN`·`ADMIN_SESSION_SECRET` 을 사용자가 채워야 화면이 열린다**(`openssl rand -hex 32` 를 두 번, 서로 다른 값으로). 비어 있는 동안 `/api/admin/*` 는 503 이고 공개 API 는 정상이다 — 빈 값을 통과시키지 않는 이유는 `compare_digest("", "")` 가 **True** 이기 때문이다.
 
 **Phase 3(frontend) 는 구현 완료다** (2026-07-09). 초안 5.1 의 URL 22개, 애드센스 정책 페이지 4종, [[api-contract]] 정합. 백엔드가 없어도 빌드·렌더가 통과하고(조회 실패 시 폴백), 계약을 그대로 흉내낸 목 백엔드로 렌더링을 확인했다. 남은 것은 Phase 4 의 측정 ID·도메인이다.
 
-**375px 실측 방법을 확보했다** (2026-08-12). 종전에 "헤드리스 브라우저 설치에 `sudo` 가 필요해 불가"로 남겼던 항목이다. Windows 크롬 헤드리스는 `--window-size=375` 를 줘도 **창을 512px 아래로 줄이지 않아**(실측 `VIEWPORT=512x1102`) 정상 레이아웃이 잘린 것처럼 보인다. 512 창 안에 폭 375 짜리 `<iframe>` 을 띄운 로컬 HTML 을 캡처하면 그 안쪽이 정확히 375 CSS px 뷰포트가 된다 — 설치가 필요 없다. 절차는 [log.md](log.md) 의 2026-08-12 항목 참조. **Lighthouse 는 여전히 미측정이다.**
+**375px 실측 방법을 확보했다** (2026-08-12). 종전에 "헤드리스 브라우저 설치에 `sudo` 가 필요해 불가"로 남겼던 항목이다. Windows 크롬 헤드리스는 `--window-size=375` 를 줘도 **창을 512px 아래로 줄이지 않아**(실측 `VIEWPORT=512x1102`) 정상 레이아웃이 잘린 것처럼 보인다. 512 창 안에 폭 375 짜리 `<iframe>` 을 띄운 로컬 HTML 을 캡처하면 그 안쪽이 정확히 375 CSS px 뷰포트가 된다 — 설치가 필요 없다. 절차는 [log.md](log.md) 의 2026-08-12 항목 참조.
 
-**새 메인 시안 `/v2` 를 추가했다** (2026-08-12). 운영 홈(`/`)은 그대로 두고 **두 안을 비교해 하나를 고르기 위한** 화면이다. 45칸 격자 하나가 페이지를 관통하는 다크 시안이며, 검색에는 노출하지 않는다. 기존 `frontend/` 파일 수정 0건 — `src/app/v2/` 디렉터리 하나를 지우면 원상복구된다. 컨셉과 규칙은 [[home-v2-concept]].
+**Lighthouse·접근성·375px 을 전부 실측했고 미결이 아니다** (2026-08-21). 헤드리스 크롬은 WSL 에 설치하지 않고 **Windows 쪽 node·크롬을 `cmd.exe /c` 로** 부른다(절차: `frontend/README.md`). 14개 페이지 **SEO 100 · 접근성 100 · 모범사례 100 · CLS 0.000**, 성능 83~92. axe(WCAG 2.2 AA) 20개 페이지 × 라이트·다크 위반 0건, 375px 가로 넘침 0건. ⚠ 그 과정에서 **측정 자체의 함정 둘**을 확인했다 — `next dev` 가 켜져 있으면 `next start` 가 개발용 청크를 서빙해 성능 수치가 무의미해지고, 백엔드가 꺼져 있으면 통계 화면이 껍데기만 렌더돼 아무것도 검증하지 못한다(목 백엔드로 데이터를 넣자 결함이 새로 드러났다).
+
+**워커가 33일 멈춰 있었고 복구했다** (2026-08-18). 잡 이력이 7/15 20:29 에서 끊겨 있었다 — 크론 버그가 아니라 개발 PC 에서 워커 프로세스가 떠 있지 않았던 것이다. 기동하자 계약의 catch-up 이 즉시 발화해 **1233~1237 다섯 회차를 전부 수집**했고 다섯 회차 모두 독립 언론 보도와 일치했다. **DB 기준 회차가 1,232 → 1,237 로 바뀌었다** — 백엔드·프론트가 003 통계 화면을 검증할 때 이 수를 쓴다. 뉴스는 263건(7/15 → 8/18). 다만 **2026-07-16~08-16 의 뉴스 32일치는 영구 결손**이다: `news` 는 catch-up 대상이 아니고 신선도 필터가 하루 넘은 기사를 버려 크론으로 메워지지 않는다. 뉴스 목록에 그 구멍이 보이면 수집 코드의 버그가 아니다. 계약의 "놓친 뉴스는 다음 주기에 어차피 검색된다" 는 서술은 **틀린 것으로 확인돼 정정**했다([[worker-jobs]]).
+
+**새 메인 시안 `/v2` 는 삭제됐다** (2026-08-21). 2026-08-12 에 비교용으로 만들었으나 사용자가 쓰지 않기로 했고(2026-08-18) 삭제를 지시했다. 삭제 전 전수 조사에서 v2 는 `@/lib/*` 를 쓰기만 하는 leaf 였고 바깥에서 참조하는 곳이 0건이라 라우트 하나(`/v2`)만 사라졌다 — 공유 청크 해시까지 동일. 코드는 `24ad827` 에 남아 있다. 거기서 얻은 **격리 기법과 함정 두 가지**(`body:has()` 스코프 오버라이드, grid 암시적 트랙이 max-content 로 넘치는 문제)는 재사용 가치가 있어 [[home-v2-concept]] 에 남겼다.
 
 ---
 

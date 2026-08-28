@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { browserRecommend } from '@/lib/api'
 import type { RecommendSet, RecommendStrategy } from '@/lib/api-types'
@@ -22,7 +22,11 @@ export interface CarouselItem {
  * 초기 조합은 **서버가 렌더링**한다 — JS 를 끈 상태에서도 번호와 성향이 보여야 한다.
  * "다시 생성"만 브라우저에서 백엔드를 부른다.
  *
- * 모바일은 scroll-snap 터치 스와이프, 데스크톱은 좌우 화살표 버튼(키보드 이동 가능).
+ * 모바일은 세로 스택(가로 스크롤 없음), 데스크톱은 가로 캐러셀 + 좌우 화살표(키보드 이동 가능).
+ *
+ * ⚠ 화살표는 **그 방향에 실제로 더 있을 때만** 낸다. 끝에 닿았는데도 화살표가 남아 있으면
+ *   눌러도 아무 일이 없어 "고장" 으로 읽힌다. 판정 규칙은 `ScrollArea` 와 같다
+ *   (→ docs/wiki/20-design/components.md).
  * 자동 재생은 넣지 않는다 — 넣는다면 prefers-reduced-motion 에서 타이머 자체를 걸지
  * 않아야 한다(→ docs/wiki/20-design/responsive-rules.md).
  *
@@ -30,6 +34,26 @@ export interface CarouselItem {
  */
 export function RecommendCarousel({ items }: { items: CarouselItem[] }) {
   const trackRef = useRef<HTMLUListElement>(null)
+  const [canLeft, setCanLeft] = useState(false)
+  const [canRight, setCanRight] = useState(false)
+
+  // 1px 여유는 소수점 스크롤 위치 때문이다 — 끝까지 밀어도 값이 딱 떨어지지 않는다.
+  const sync = useCallback(() => {
+    const track = trackRef.current
+    if (!track) return
+    setCanLeft(track.scrollLeft > 1)
+    setCanRight(track.scrollLeft + track.clientWidth < track.scrollWidth - 1)
+  }, [])
+
+  useEffect(() => {
+    const track = trackRef.current
+    if (!track) return
+    sync()
+    // 모바일에서는 세로 스택이라 넘치지 않는다. 창 폭이 바뀌면 그 판정도 뒤집힌다.
+    const observer = new ResizeObserver(sync)
+    observer.observe(track)
+    return () => observer.disconnect()
+  }, [sync])
 
   const scrollBy = (direction: 1 | -1) => {
     const track = trackRef.current
@@ -41,18 +65,24 @@ export function RecommendCarousel({ items }: { items: CarouselItem[] }) {
   }
 
   return (
-    <div className="carousel">
-      <button
-        type="button"
-        className="carousel-arrow is-prev"
-        aria-label="이전 추천 카드 보기"
-        aria-controls="reco-track"
-        onClick={() => scrollBy(-1)}
-      >
-        <span aria-hidden="true">‹</span>
-      </button>
+    <div
+      className="carousel"
+      data-more-left={canLeft ? '' : undefined}
+      data-more-right={canRight ? '' : undefined}
+    >
+      {canLeft && (
+        <button
+          type="button"
+          className="carousel-arrow is-prev"
+          aria-label="이전 추천 카드 보기"
+          aria-controls="reco-track"
+          onClick={() => scrollBy(-1)}
+        >
+          <Chevron direction="left" />
+        </button>
+      )}
 
-      <ul id="reco-track" ref={trackRef} className="carousel-track">
+      <ul id="reco-track" ref={trackRef} className="carousel-track" onScroll={sync}>
         {items.map((item) => (
           <li key={item.strategy} className="carousel-item">
             <RecommendCard item={item} />
@@ -60,16 +90,37 @@ export function RecommendCarousel({ items }: { items: CarouselItem[] }) {
         ))}
       </ul>
 
-      <button
-        type="button"
-        className="carousel-arrow is-next"
-        aria-label="다음 추천 카드 보기"
-        aria-controls="reco-track"
-        onClick={() => scrollBy(1)}
-      >
-        <span aria-hidden="true">›</span>
-      </button>
+      {canRight && (
+        <button
+          type="button"
+          className="carousel-arrow is-next"
+          aria-label="다음 추천 카드 보기"
+          aria-controls="reco-track"
+          onClick={() => scrollBy(1)}
+        >
+          <Chevron direction="right" />
+        </button>
+      )}
     </div>
+  )
+}
+
+/** `ScrollArea` 와 같은 갈매기. 같은 일을 하는 버튼은 같은 모양이라야 같은 기능으로 읽힌다. */
+function Chevron({ direction }: { direction: 'left' | 'right' }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={direction === 'left' ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6'} />
+    </svg>
   )
 }
 

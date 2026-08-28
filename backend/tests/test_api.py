@@ -214,3 +214,136 @@ async def test_꿈해몽_키워드(client: httpx.AsyncClient):
     body = response.json()
     assert body["total"] > 0
     assert body["keywords"][0]["slug"] == body["keywords"][0]["word"]
+
+
+# ── 003 통계 개편 ────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/lotto/stats/frequency",
+        "/api/lotto/stats/hot-cold",
+        "/api/lotto/stats/pattern",
+        "/api/lotto/stats/pairs",
+        "/api/lotto/stats/number/15",
+    ],
+)
+async def test_전_통계_응답에_구간_메타가_있다(client: httpx.AsyncClient, path: str):
+    """프론트는 이 키의 존재로 백엔드 버전을 감지한다. 하나라도 빠지면 기간 UI 가 잠긴다."""
+    response = await client.get(f"{path}?window=20")
+    assert response.status_code == 200
+    body = response.json()
+    assert body.keys() >= {"window", "rounds_analyzed", "from_round", "to_round", "from_date", "to_date"}
+    assert body["window"] == 20
+    if body["rounds_analyzed"]:
+        assert body["from_round"] <= body["to_round"]
+        assert body["from_date"] <= body["to_date"]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/lotto/stats/frequency",
+        "/api/lotto/stats/hot-cold",
+        "/api/lotto/stats/pattern",
+        "/api/lotto/stats/pairs",
+        "/api/lotto/stats/number/15",
+    ],
+)
+async def test_기간_조회는_window_를_null_로_만든다(client: httpx.AsyncClient, path: str):
+    response = await client.get(f"{path}?window=20&from_round=1100&to_round=1120")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["window"] is None
+    assert (body["from_round"], body["to_round"]) == (1100, 1120)
+    assert body["rounds_analyzed"] == 21
+
+
+@pytest.mark.parametrize(
+    "query",
+    ["from_round=1100", "to_round=1100", "from_round=200&to_round=100"],
+    ids=["from_만", "to_만", "역순"],
+)
+async def test_잘못된_기간은_422(client: httpx.AsyncClient, query: str):
+    response = await client.get(f"/api/lotto/stats/frequency?{query}")
+    assert response.status_code == 422
+
+
+async def test_데이터_밖_범위는_잘린_실제값을_돌려준다(client: httpx.AsyncClient):
+    response = await client.get("/api/lotto/stats/frequency?from_round=1&to_round=999999")
+    assert response.status_code == 200
+    body = response.json()
+    latest = (await client.get("/api/lotto/latest")).json()["round_no"]
+    assert body["to_round"] == latest  # 요청한 999999 가 아니다
+
+
+async def test_없는_구간은_404_가_아니라_빈_결과_200(client: httpx.AsyncClient):
+    response = await client.get("/api/lotto/stats/hot-cold?from_round=900000&to_round=999999")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["rounds_analyzed"] == 0
+    assert body["from_round"] is None and body["to_date"] is None
+    assert body["hot"] == [] and body["cold"] == []
+
+
+async def test_hot_cold_의_top(client: httpx.AsyncClient):
+    default = (await client.get("/api/lotto/stats/hot-cold?window=20")).json()
+    assert len(default["hot"]) == 10  # 기본값은 하위호환을 위해 10 이다
+
+    wide = (await client.get("/api/lotto/stats/hot-cold?window=20&top=15")).json()
+    assert len(wide["hot"]) == len(wide["cold"]) == len(wide["overdue"]) == 15
+
+    for bad in ("top=0", "top=46"):
+        assert (await client.get(f"/api/lotto/stats/hot-cold?{bad}")).status_code == 422
+
+
+async def test_번호_통계(client: httpx.AsyncClient):
+    response = await client.get("/api/lotto/stats/number/15?window=50")
+    assert response.status_code == 200
+    body = response.json()
+
+    assert body["number"] == 15
+    assert body["rank_total"] == 45
+    assert 1 <= body["rank"] <= 45
+    assert body["trend"] in ("up", "down", "flat")
+    assert len(body["companions"]) <= 5
+    assert len(body["recent_appearances"]) <= 20
+    # 금지 필드가 섞여 들어오지 않았는지 응답 전체에서 확인한다.
+    assert not ({"probability", "score", "hit_rate", "accuracy"} & body.keys())
+
+
+async def test_번호_통계의_순위가_hot_cold_와_일치한다(client: httpx.AsyncClient):
+    """두 화면이 같은 순위를 보여야 사용자가 대조해 검증할 수 있다."""
+    hot = (await client.get("/api/lotto/stats/hot-cold?window=50&top=45")).json()["hot"]
+    top_number = hot[0]["number"]
+
+    body = (await client.get(f"/api/lotto/stats/number/{top_number}?window=50")).json()
+    assert body["rank"] == 1
+    assert body["count"] == hot[0]["count"]
+
+
+@pytest.mark.parametrize("n", [0, 46])
+async def test_범위_밖_번호는_422(client: httpx.AsyncClient, n: int):
+    assert (await client.get(f"/api/lotto/stats/number/{n}")).status_code == 422
+
+
+async def test_패턴의_새_필드(client: httpx.AsyncClient):
+    body = (await client.get("/api/lotto/stats/pattern?window=all")).json()
+
+    assert sum(body["sum_histogram"].values()) == body["rounds_analyzed"]
+    # 계약이 명시한 불변식 — 어긋나면 백엔드 버그다.
+    zero = body["consecutive_counts"].get("0", 0.0)
+    assert abs((1 - zero) - body["consecutive_ratio"]) < 1e-4
+
+
+async def test_회차_날짜_목록(client: httpx.AsyncClient):
+    """`/rounds/index` 가 `/rounds/{round_no}` 에 잡아먹히지 않아야 한다."""
+    response = await client.get("/api/lotto/rounds/index")
+    assert response.status_code == 200
+    body = response.json()
+
+    assert body["total"] == len(body["rounds"])
+    round_nos = [r["round_no"] for r in body["rounds"]]
+    assert round_nos == sorted(round_nos)  # 오름차순
+    assert body["rounds"][0].keys() == {"round_no", "draw_date"}  # 경량 목록이다

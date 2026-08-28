@@ -97,7 +97,7 @@ function FrequencyPanel({
   return (
     <div>
       <Card as="article" title={`번호별 출현 횟수 (${windowLabel(window)})`}>
-        <FrequencyChart counts={data.counts} variant="scroll" />
+        <FrequencyChart counts={data.counts} />
         <p className="muted" style={{ fontSize: 'var(--fs-xs)', marginTop: 'var(--space-3)' }}>
           가로로 스크롤해 1번부터 45번까지 볼 수 있습니다. 가장 많이 나온 번호는{' '}
           {sorted[0].number}번({formatNumber(sorted[0].count)}회), 가장 적게 나온 번호는{' '}

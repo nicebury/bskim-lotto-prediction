@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Set
 
@@ -68,6 +69,27 @@ _SYNONYM_EXPAND: dict[str, list[str]] = {
 _WS_RE = re.compile(r"\s+")
 
 
+@dataclass(frozen=True, slots=True)
+class Candidate:
+    """검색 후보 하나와 그 유래.
+
+    유래를 함께 돌려주는 이유가 둘 있다.
+
+    - `derived` — `_stem_to_noun` 은 어간에 '음'·'함' 을 붙여 명사형을 만드는데, 규칙이
+      빗나가면 `크함`·`꾸음` 처럼 **사전에도 없고 뜻도 없는 문자열**이 나온다. 그것이
+      벡터 검색에 들어가면 유사도만으로 엉뚱한 표제어를 끌어오고(실측: `크함` → `큰북`·
+      `큰방`·`대형`), 그 번호가 조합에 그대로 섞인다. 호출부가 걸러낼 수 있어야 한다.
+    - `from_text` — 사용자가 **직접 적은 단어**인지 여부. 형태소 분석 1단계의 유의어
+      확장 때문에 `집` 하나가 `집안`·`건물` 을 데려오는데, 화면이 그것을 "적어 주신
+      상징" 으로 세우면 사용자는 자기가 쓰지 않은 말을 자기 말로 읽는다.
+    """
+
+    word: str
+    from_text: bool
+    derived: bool
+
+
+
 def _load_mappings() -> dict[str, str]:
     if not _MAPPINGS_PATH.exists():
         return {}
@@ -123,6 +145,14 @@ class DreamAnalyzer:
     def analyze(self, sentence: str) -> list[str]:
         """꿈 텍스트 → 검색 후보 단어 리스트.
 
+        유래가 필요하면 `analyze_detailed` 를 쓴다. 이 함수는 단어만 필요한 호출부를
+        위해 남겨 둔 얇은 래퍼다 — 두 함수가 다른 규칙으로 갈라지지 않게 한 쪽만 구현한다.
+        """
+        return [c.word for c in self.analyze_detailed(sentence)]
+
+    def analyze_detailed(self, sentence: str) -> list[Candidate]:
+        """꿈 텍스트 → 검색 후보 + 각 후보의 유래(`Candidate`).
+
         3단계 추출:
         1. 원문 어절에서 매핑/유의어 확장
         2. kiwipiepy 형태소 분석 + 매핑 + stem 규칙
@@ -133,10 +163,10 @@ class DreamAnalyzer:
 
         raw_words = _WS_RE.split(sentence.strip())
         tokens = self._kiwi.analyze(sentence, top_n=1)[0][0]
-        result: list[str] = []
+        result: list[Candidate] = []
         seen: Set[str] = set()
 
-        def _add(word: str) -> None:
+        def _add(word: str, *, derived: bool = False) -> None:
             if not word or word in seen:
                 return
             if len(word) == 1 and word not in _ONE_LETTER_WHITELIST:
@@ -144,7 +174,12 @@ class DreamAnalyzer:
             if word in _STOPWORDS:
                 return
             seen.add(word)
-            result.append(word)
+            # `from_text` 판정은 단순 문자열 포함이다. 프론트가 같은 방식으로 하고 있던
+            # 것을 서버로 옮기는 것이므로 규칙을 바꾸지 않는다 — 바꾸면 화면의 분류가
+            # 조용히 달라진다.
+            result.append(
+                Candidate(word=word, from_text=word in sentence, derived=derived)
+            )
 
         # 1차: 원문 어절 — 매핑 + 유의어 확장
         for rw in raw_words:
@@ -172,13 +207,17 @@ class DreamAnalyzer:
                     form, form + "다", form + "ㄴ", form + "은",
                     form + "운", form + "인",
                 )
+                # 매핑에 있으면 실재하는 단어다. 규칙으로 만들어 낸 경우만 derived 다.
                 word = mapped if mapped else self._stem_to_noun(form, tag)
+                derived = mapped is None
             elif form in self._mappings:
                 word = self._mappings[form]
+                derived = False
             else:
                 word = form
+                derived = False
 
-            _add(word)
+            _add(word, derived=derived)
             # 유의어 확장 (형태소 결과에도 적용)
             if word in _SYNONYM_EXPAND:
                 for syn in _SYNONYM_EXPAND[word]:

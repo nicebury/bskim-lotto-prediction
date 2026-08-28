@@ -19,6 +19,7 @@ import {
 import { FrequencyChart } from './FrequencyChart'
 import { LottoBall } from './LottoBall'
 import { MoreLink } from './Card'
+import { ScrollArea } from './ScrollArea'
 
 /**
  * 주요 통계 패널 (002 StatBoard).
@@ -111,7 +112,7 @@ export function StatBoard({
         </div>
 
         {frequency && Object.keys(frequency.counts).length > 0 ? (
-          <FrequencyChart counts={frequency.counts} variant="fit" />
+          <FrequencyChart counts={frequency.counts} />
         ) : (
           <p className="empty-state">빈도 데이터를 불러오지 못했습니다.</p>
         )}
@@ -152,7 +153,7 @@ function RankTable({
   }
 
   return (
-    <div className="table-scroll">
+    <ScrollArea className="table-scroll" label="자주 나온 번호 순위 표">
       <table className="stat-table">
         <thead>
           <tr>
@@ -201,7 +202,7 @@ function RankTable({
         아닙니다.
         {tone === 'cold' && ' 막대·순위는 적게 나온 순입니다.'}
       </p>
-    </div>
+    </ScrollArea>
   )
 }
 
@@ -210,7 +211,7 @@ function OverdueTable({ data }: { data: HotColdResult | null }) {
   if (items.length === 0) return <p className="empty-state">통계를 불러오지 못했습니다.</p>
 
   return (
-    <div className="table-scroll">
+    <ScrollArea className="table-scroll" label="오래 안 나온 번호 표">
       <table className="stat-table">
         <thead>
           <tr>
@@ -244,7 +245,7 @@ function OverdueTable({ data }: { data: HotColdResult | null }) {
       <p className="stat-table-note">
         마지막 출현 이후 지난 회차 수입니다. 오래 나오지 않았다고 나올 차례가 된 것은 아닙니다.
       </p>
-    </div>
+    </ScrollArea>
   )
 }
 
@@ -262,7 +263,7 @@ function PairsTable({ data }: { data: PairsResult | null }) {
   }
 
   return (
-    <div className="table-scroll">
+    <ScrollArea className="table-scroll" label="함께 나온 번호쌍 표">
       <table className="stat-table">
         <thead>
           <tr>
@@ -290,7 +291,7 @@ function PairsTable({ data }: { data: PairsResult | null }) {
       <p className="stat-table-note">
         같은 회차에 함께 나온 횟수입니다. 이 쌍이 다시 나온다는 뜻은 아닙니다.
       </p>
-    </div>
+    </ScrollArea>
   )
 }
 
@@ -320,19 +321,30 @@ function Rank({ index }: { index: number }) {
   return <span className="rank-num">{rank}</span>
 }
 
-/** 추세 셀. 색과 기호를 동시에 쓴다(색만으로 전달 금지). 값이 없으면 '—'. */
+/**
+ * 추세 셀. 색과 기호를 동시에 쓴다(색만으로 전달 금지). 값이 없으면 '—'.
+ *
+ * ⚠ 뜻을 `aria-label` 로 주지 않는다. **role 없는 `<span>` 에는 `aria-label` 을 붙일 수
+ *   없다** — ARIA 규격이 금지하고 브라우저·스크린리더가 무시한다. 즉 배지의 뜻이 아무에게도
+ *   전달되지 않으면서 통과한 것처럼 보인다(Lighthouse `aria-prohibited-attr`, 2026-08-21).
+ *   같은 파일의 RankCell 이 이미 쓰는 방식대로 기호는 `aria-hidden`, 뜻은 `.sr-only`
+ *   텍스트로 준다. `role="img"` 를 붙여도 규격은 만족하지만, 표 셀 안에서 굳이 이미지로
+ *   선언할 이유가 없고 sr-only 쪽이 이 파일의 기존 관례다.
+ */
 function TrendCell({ trend }: { trend?: 'up' | 'down' | 'flat' }) {
   if (!trend) {
     return (
-      <span className="trend trend-flat" aria-label="추세 정보 없음">
-        —
+      <span className="trend trend-flat">
+        <span aria-hidden="true">—</span>
+        <span className="sr-only">추세 정보 없음</span>
       </span>
     )
   }
   const d = TREND_DISPLAY[trend]
   return (
-    <span className={`trend trend-${d.tone}`} aria-label={`추세: ${d.label}`}>
+    <span className={`trend trend-${d.tone}`}>
       <span aria-hidden="true">{d.symbol}</span>
+      <span className="sr-only">추세: {d.label}</span>
     </span>
   )
 }

@@ -27,6 +27,7 @@ export function NumberActions({
   strategyLabel,
   subtitle,
   compact = false,
+  sourcePath = '/lotto/recommend',
 }: {
   numbers: number[]
   strategyLabel: string
@@ -34,6 +35,12 @@ export function NumberActions({
   subtitle?: string
   /** 좁은 카드용. 3열 균등 배치 + 짧은 라벨. */
   compact?: boolean
+  /**
+   * 공유 문구에 붙일 사이트 경로.
+   * ⚠ 이 번호가 **어느 화면에서 나왔는지** 가리켜야 한다. 꿈해몽 번호를 공유했는데
+   *   링크가 번호추천으로 가면 받은 사람이 같은 결과를 찾을 수 없다.
+   */
+  sourcePath?: string
 }) {
   const [busy, setBusy] = useState<Action | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -53,7 +60,7 @@ export function NumberActions({
     strategyLabel,
     subtitle,
     siteName: SITE_NAME,
-    url: `${SITE_URL}/lotto/recommend`,
+    url: `${SITE_URL}${sourcePath}`,
   }
 
   const onCopy = async () => {
@@ -108,12 +115,20 @@ export function NumberActions({
         <span>복사</span>
       </button>
 
+      {/*
+        ⚠ aria-label 은 화면에 보이는 글자("이미지 저장" / compact 면 "저장")를 **그대로
+        품고 있어야** 한다(WCAG 2.5.3 Label in Name). 음성으로 "이미지 저장" 이라고 말하는
+        사용자는 보이는 글자를 읽어서 말하는데, 접근성 이름이 "이미지로 저장" 이면 조사 하나
+        때문에 그 명령이 이 버튼에 닿지 않는다. 실제로 걸렸다(Lighthouse
+        `label-content-name-mismatch`, 2026-08-21). '로' 를 빼서 두 표기를 일치시켰다.
+        ⚠ <span> 문구를 바꾸면 이 라벨도 함께 고친다.
+      */}
       <button
         type="button"
         className="action-btn"
         onClick={onImage}
         disabled={busy !== null}
-        aria-label={`${strategyLabel} 번호 이미지로 저장`}
+        aria-label={`${strategyLabel} 번호 이미지 저장`}
       >
         <ImageIcon />
         <span>{busy === 'image' ? '만드는 중…' : compact ? '저장' : '이미지 저장'}</span>

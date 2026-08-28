@@ -52,7 +52,15 @@ def recommend(
     chroma_path: Path,
     sets_per_tier: int = 10,
     seed: Optional[int] = None,
+    fill_scores: Optional[dict[int, float]] = None,
+    exclude: Optional[set[int]] = None,
 ) -> dict:
+    """`fill_scores` 는 조합의 **모자란 자리**를 채울 때만 쓰인다.
+
+    꿈에서 나온 번호가 6개 이상이면 채울 자리가 없어 이 값은 결과에 영향을 주지 않는다.
+    `None` 이면 종전대로 균등 무작위로 채운다 — 라우터가 점수를 만들지 못한 경우다
+    (docs/wiki/40-domain/dream-pipeline.md).
+    """
     analyzer = get_analyzer()
     searcher = get_searcher(chroma_path)
 
@@ -60,22 +68,45 @@ def recommend(
     # gubun 별 번호 풀을 만들기 위한 평탄화 목록. generator 가 tier 를 누적한다.
     flat_matches: list[dict] = []
 
-    for word in analyzer.analyze(text):
-        exact, containing, similar = searcher.search(word)
+    for cand in analyzer.analyze_detailed(text):
+        exact, containing, similar = searcher.search(cand.word)
+
+        # ★ `_stem_to_noun` 이 만들어 낸 문자열은 **정확 일치가 있을 때만** 쓴다.
+        #
+        # `크함`·`꾸음` 처럼 사전에도 없고 뜻도 없는 문자열이 벡터 검색에 들어가면,
+        # 유사도만으로 엉뚱한 표제어를 끌어온다 — 실측으로 `크함` 이 `큰북`·`큰방`·
+        # `대형` 을 데려와 번호 3개를 보태고 있었다. 사용자는 "큰" 이라고 썼을 뿐인데
+        # 그 번호가 어디서 왔는지 설명할 방법이 없다.
+        #
+        # 정확 일치가 있다면 그것은 사전에 실재하는 표제어이므로 규칙이 우연히 맞은
+        # 것이고, 버릴 이유가 없다. 그래서 통째로 막지 않고 이 조건만 건다.
+        if cand.derived and not exact:
+            continue
+
         matches = [*exact, *containing, *similar]
         if not matches:
             # 사전에 없는 단어는 응답에서 아예 뺀다. 빈 `matches` 를 남기면 프론트가
             # "매칭됨" 목록에 근거 없는 단어를 렌더링한다.
             continue
         matched_words.append(
-            {"dream_word": word, "matches": [_match_to_dict(m) for m in matches]}
+            {
+                "dream_word": cand.word,
+                # 사용자가 직접 적은 단어인지. 유의어 확장으로 딸려온 `집안`·`건물` 을
+                # "적어 주신 상징" 으로 세우면 자기가 쓰지 않은 말을 자기 말로 읽게 된다.
+                "from_text": cand.from_text,
+                "matches": [_match_to_dict(m) for m in matches],
+            }
         )
         flat_matches.extend(
             {"gubun": m.gubun, "lotto_number": m.lotto_number} for m in matches
         )
 
     tiers = generator.build_tier_sets(
-        flat_matches, sets_per_tier=sets_per_tier, seed=seed
+        flat_matches,
+        sets_per_tier=sets_per_tier,
+        seed=seed,
+        fill_scores=fill_scores,
+        exclude=exclude,
     )
 
     return {

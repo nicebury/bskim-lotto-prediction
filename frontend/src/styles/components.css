@@ -58,22 +58,35 @@
   }
 }
 
-/* 구간 색. 밝은 볼(노랑·초록) 위 숫자는 어두운 글자를 써 대비를 확보한다. */
+/*
+ * 구간 색. **배경은 동행복권 공식 5색 그대로이고 숫자 색만 어둡게 쓴다.**
+ *
+ * 종전에는 노랑·초록만 어두운 글자였고 파랑·빨강·회색은 흰 글자였다. 그런데 실측해 보니
+ * 흰 글자는 다섯 색 **전부** AA(4.5:1) 미달이다 — 파랑 1.88 · 빨강 2.66 · 회색 2.32 ·
+ * 노랑 1.62 · 초록 1.65 (2026-08-21 Lighthouse). 어두운 글자(--ball-fg-dark)는 다섯 색
+ * 전부 6.28~10.32 로 통과한다.
+ *
+ * 배경색을 손대지 않는 이유는 [[0009-official-ball-colors-over-mockup]] 이다 — 사용자는
+ * 색만 보고 구간을 안다. 반대로 **숫자 색은 그 매핑에 아무 역할도 하지 않으므로** 바꿔도
+ * 규약을 깨지 않는다. 접근성 문서가 "볼에는 항상 숫자가 보인다. 색 없이도 어떤 번호인지
+ * 읽힌다" 를 근거로 삼고 있는데, 흰 숫자로는 그 전제가 성립하지 않았다.
+ * ⚠ --ball-fg(흰색)는 볼 숫자에 쓰지 않는다. 진한 서비스 타일(--svc-*) 위 글리프 전용이다.
+ */
 .ball-range-1 {
   background: var(--ball-1-10);
   color: var(--ball-fg-dark);
 }
 .ball-range-2 {
   background: var(--ball-11-20);
-  color: var(--ball-fg);
+  color: var(--ball-fg-dark);
 }
 .ball-range-3 {
   background: var(--ball-21-30);
-  color: var(--ball-fg);
+  color: var(--ball-fg-dark);
 }
 .ball-range-4 {
   background: var(--ball-31-40);
-  color: var(--ball-fg);
+  color: var(--ball-fg-dark);
 }
 .ball-range-5 {
   background: var(--ball-41-45);
@@ -858,7 +871,7 @@ a.tile:hover .tile-glyph {
 .page-btn.is-current {
   background: var(--color-primary);
   border-color: var(--color-primary);
-  color: #fff;
+  color: var(--color-on-accent);
   font-weight: var(--fw-bold);
 }
 
@@ -1264,7 +1277,7 @@ a.tile:hover .tile-glyph {
   height: 30px;
   border-radius: var(--radius-pill);
   background: var(--color-primary);
-  color: #fff;
+  color: var(--color-on-accent);
 }
 
 .insight-label {
@@ -1342,7 +1355,11 @@ a.tile:hover .tile-glyph {
 .bar-chart {
   display: flex;
   align-items: flex-end;
+  /* ⚠ 이 gap 은 `.chart-axis` 의 gap 과 같아야 눈금이 막대와 정확히 겹친다. */
   gap: 2px;
+  cursor: pointer;
+  /* 포커스 링이 막대에 바싹 붙지 않게 살짝 띄운다. */
+  border-radius: var(--radius-sm);
   /* CLS 방지: 데이터가 없어도 높이를 예약한다. */
   min-height: 96px;
   height: 96px;
@@ -1357,16 +1374,34 @@ a.tile:hover .tile-glyph {
 }
 
 /*
- * scroll 모드(통계 상세): 45개 막대를 넓게 펼쳐 자기 컨테이너에서만 가로 스크롤.
- * fit 모드(StatBoard): 컨테이너 폭에 꽉 맞춘다 — 가로 스크롤 없음(레이아웃 안 틀어짐).
+ * ⚠ 가로 스크롤 래퍼(`.bar-chart-scroll`)를 없앴다. 45개를 1168px 로 펼쳐 스크롤하게
+ *   했더니 **readout 이 함께 흘러가** 오른쪽 끝 막대를 짚었을 때 몇 번인지 알 수 없었고
+ *   (사용자 지적), 아래 눈금도 막대와 어긋났다. 차트는 항상 컨테이너 폭에 맞춘다.
+ *   → components/FrequencyChart.tsx
  */
-.bar-chart-scroll {
-  overflow-x: auto;
-  padding-bottom: var(--space-2);
+
+/*
+ * 차트 전체가 하나의 조작면이다 — 막대 하나하나가 컨트롤이 아니다.
+ *
+ * 컨테이너 폭에 45개를 맞추므로 375px 에서 막대 하나가 6px 안팎이다. 그 폭으로는 터치
+ * 타겟 24×24 를 어떤 값으로도 만들 수 없고, 넓히면 가로 스크롤이 생겨 readout 이 흘러
+ * 가 버린다. 그래서 포인터 좌표를 번호로 환산한다 — 조작 대상이 전폭짜리 하나뿐이라
+ * 규칙을 지키면서 호버·탭이 모두 동작한다(→ FrequencyChart.tsx).
+ */
+/*
+ * ⚠ 막대가 포인터 이벤트를 가로채면 안 된다.
+ * 가져가면 `onPointerMove` 의 target 이 막대가 되어 좌표 계산은 그대로 맞지만, 막대와
+ * 막대 사이 gap(2px)에서는 이벤트가 컨테이너로만 와 **움직임이 끊겨 보인다.** 전부
+ * 컨테이너가 받게 통일한다.
+ */
+.bar-chart .bar {
+  pointer-events: none;
 }
 
-.bar-chart-scroll .bar-chart {
-  min-width: 640px;
+/* 선택된 막대를 또렷하게. 색만으로 알리지 않도록 위쪽 readout 이 번호와 횟수를 함께 낸다. */
+.bar-chart .bar.is-active {
+  outline: 2px solid var(--color-text);
+  outline-offset: 1px;
 }
 
 /* 선택된 막대 정보 표시(호버·클릭·포커스 공통). 높이 고정으로 CLS 방지. */
@@ -1387,14 +1422,14 @@ a.tile:hover .tile-glyph {
   border-radius: var(--radius-pill);
   font-size: var(--fs-xs);
   font-weight: var(--fw-bold);
-  color: var(--ball-fg);
-}
-
-/* readout 볼도 구간 색을 쓴다 — 위 .ball-range-* 규칙이 background 를 준다. */
-.freq-readout-ball.ball-range-1,
-.freq-readout-ball.ball-range-5 {
+  /* ⚠ .ball-range-* 와 특정도가 같은데 이 규칙이 뒤에 있어 **이쪽이 이긴다.**
+     흰색으로 두면 위에서 고친 볼 숫자색이 여기서만 되살아난다(실제로 그랬다). */
   color: var(--ball-fg-dark);
 }
+
+/* readout 볼도 구간 색을 쓴다 — 위 .ball-range-* 규칙이 background 와 글자색을 모두 준다.
+   종전에는 1·5 구간만 어두운 글자로 덮어썼는데, 이제 다섯 구간이 전부 어두운 글자라
+   이 덮어쓰기가 필요 없다(남겨 두면 "여기만 다르다" 는 잘못된 신호가 된다). */
 
 .freq-readout strong {
   font-weight: var(--fw-bold);
@@ -1440,13 +1475,39 @@ a.tile:hover .tile-glyph {
   background: var(--ball-41-45);
 }
 
+/*
+ * 아래 눈금.
+ *
+ * ⚠ `justify-content: space-between` 을 쓰지 않는다. 여섯 개를 균등하게 흩뿌리면
+ *   **막대 위치와 어긋난다** — 10번 막대의 중심은 전체 폭의 21.1% 지점인데 space-between
+ *   은 20% 자리에 놓고, 라벨마다 글자 폭이 달라 더 밀린다. 막대와 **같은 45열 격자**를
+ *   써야 10번 막대 밑에 10 이 온다. 열 번호는 컴포넌트가 `gridColumn` 으로 지정한다.
+ * ⚠ gap 은 `.bar-chart` 와 같은 값이어야 열이 정확히 겹친다.
+ */
 .chart-axis {
-  display: flex;
-  justify-content: space-between;
-  margin-top: var(--space-1);
+  display: grid;
+  grid-template-columns: repeat(45, minmax(0, 1fr));
+  gap: 2px;
+  margin: var(--space-1) 0 0;
   font-size: var(--fs-xs);
   color: var(--color-text-subtle);
+  font-variant-numeric: tabular-nums;
 }
+
+/*
+ * 라벨은 자기 칸(6~24px)보다 넓다. 칸 중앙에 맞추고 넘치는 부분은 양옆으로 흘려보낸다 —
+ * 칸을 넓히면 격자가 막대와 어긋나므로 그럴 수 없다.
+ */
+.chart-axis > span {
+  justify-self: center;
+  white-space: nowrap;
+}
+
+/*
+ * ⚠ 양 끝 라벨도 **가운데 정렬**이다. 안쪽으로 붙이면(start/end) 1번과 45번만 막대 중심에서
+ *   5~7px 어긋난다 — 나머지가 0px 로 맞는데 양 끝만 틀리면 오히려 눈에 띈다. 라벨이 차트
+ *   경계를 몇 px 넘더라도 카드 안쪽 여백에 들어가므로 잘리지 않는다.
+ */
 
 /* 패턴 요약 행 */
 .kv-list {
@@ -1549,6 +1610,38 @@ a.tile:hover .tile-glyph {
   }
   .carousel-arrow.is-next {
     right: calc(var(--space-6) * -1);
+  }
+
+  /*
+   * 가장자리 페이드. 화살표만으로는 "여기서 끝" 인지 "더 있는데 잘린" 것인지 알 수 없다 —
+   * 잘린 카드가 반쯤 비쳐야 이어진다는 것이 보인다. `ScrollArea` 와 같은 규칙으로,
+   * 남은 쪽에만 그린다.
+   */
+  .carousel::before,
+  .carousel::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: var(--space-2);
+    width: var(--space-6);
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .carousel[data-more-left]::before {
+    left: 0;
+    background: linear-gradient(to left, transparent, var(--color-bg));
+  }
+
+  .carousel[data-more-right]::after {
+    right: 0;
+    background: linear-gradient(to right, transparent, var(--color-bg));
+  }
+
+  /* 남지 않은 쪽은 아예 그리지 않는다 — 끝에 닿았는데 페이드가 남으면 거짓말이 된다. */
+  .carousel:not([data-more-left])::before,
+  .carousel:not([data-more-right])::after {
+    content: none;
   }
 }
 
@@ -1741,7 +1834,7 @@ a.tile:hover .tile-glyph {
   height: 20px;
   border-radius: var(--radius-pill);
   background: var(--color-primary);
-  color: #fff;
+  color: var(--color-on-accent);
 }
 
 /* 보조 라벨. 위계가 낮으므로 굵기와 색을 함께 낮춘다. */
@@ -2082,7 +2175,7 @@ a.tile:hover .tile-glyph {
   height: 22px;
   border-radius: var(--radius-pill);
   background: var(--color-success);
-  color: #fff;
+  color: var(--color-on-accent);
   font-size: 13px;
   font-weight: var(--fw-bold);
 }
@@ -2188,10 +2281,20 @@ a.tile:hover .tile-glyph {
   gap: var(--space-1);
 }
 
-/* 안 맞은 볼: 색을 죽이고 흐리게. 색만이 아니라 채도·명도로도 '못 맞음' 을 전달한다. */
+/*
+ * 안 맞은 볼: **회색조로만** 죽인다. 색(채도)이 '못 맞음' 을 전달하고, 볼 안의 숫자는
+ * 맞은 볼과 똑같이 또렷하게 남는다.
+ *
+ * ⚠ 예전에는 `opacity: 0.35` 를 함께 걸었는데, 투명도는 글자와 배경을 **함께** 바탕색
+ *   쪽으로 끌어당겨 둘의 대비를 무너뜨린다 — 숫자가 1.53~1.81:1 로 사실상 안 읽혔다
+ *   (axe color-contrast, 2026-08-21). 투명도를 0.9 까지 올려도 빨간 볼(21~30)은 4.48 로
+ *   여전히 미달이라 **값을 조절해서 풀 수 있는 문제가 아니다.** 회색조만 남기면 다섯 색
+ *   전부 5.22~9.66 으로 통과한다.
+ * ⚠ 이 블록에 opacity 를 다시 넣지 않는다. 더 흐리게 만들고 싶으면 대비를 지키는 다른
+ *   채널(테두리 점선 등)을 쓴다.
+ */
 .rank-explain-balls .is-miss {
   filter: grayscale(1);
-  opacity: 0.35;
 }
 
 .rank-explain-plus {
@@ -2506,3 +2609,3437 @@ a.tile:hover .tile-glyph {
   font-size: var(--fs-xs);
   color: var(--color-text-subtle);
 }
+
+/* ════════════════════════════════════════════════════════════
+ * 통계 화면 003 개편
+ *
+ * 세 화면(많이·안 나온 / 출현 빈도 / 조합 패턴)이 공유하는 조회 컨트롤과, 화면별 시각화.
+ * 값은 전부 서버가 계산한 것이고 여기서는 길이·밝기로 옮기기만 한다.
+ * ════════════════════════════════════════════════════════════ */
+
+/* ── 통계 3종 이동 카드 ────────────────────────────────
+ * 탭으로 만들었더니 너무 작아 눈에 띄지 않는다는 지적이 있었다(사용자). 예전 허브의 카드
+ * 형태로 되돌리되 세 화면 어디에나 둔다 — 이동 수단이자 "여기서 무엇을 볼 수 있는가" 를
+ * 알려 주는 안내다.
+ * ──────────────────────────────────────────────────────── */
+
+.stat-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 104px;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  color: var(--color-text);
+  text-decoration: none;
+  transition: box-shadow var(--dur) var(--ease-out), transform var(--dur) var(--ease-out);
+}
+
+/* 파스텔 배경은 서비스 색 체계를 그대로 쓴다(가이드 카드와 같은 언어). */
+.stat-card[data-accent='stats'] { background: var(--svc-stats-bg); }
+.stat-card[data-accent='lotto'] { background: var(--svc-lotto-bg); }
+.stat-card[data-accent='reco'] { background: var(--svc-reco-bg); }
+
+.stat-card:hover {
+  color: var(--color-text);
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stat-card:hover {
+    transform: none;
+  }
+}
+
+/*
+ * 현재 보고 있는 화면. 링크가 아니라 <div> 로 렌더되고(자기 자신으로 가는 링크는 눌러도
+ * 아무 일이 없다), 테두리를 굵혀 구분한다. 색만으로 알리지 않도록 "지금 보는 중" 문구와
+ * sr-only 안내를 함께 둔다.
+ */
+.stat-card[data-current] {
+  border-width: 2px;
+  border-color: var(--color-primary);
+  cursor: default;
+}
+
+.stat-card[data-current]:hover {
+  box-shadow: none;
+  transform: none;
+}
+
+/* 아이콘 + 제목을 한 줄에. 제목이 두 줄로 접혀도 아이콘은 첫 줄에 붙어 있어야 한다. */
+.stat-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/*
+ * 아이콘 타일. 파스텔 카드 위에 흰 타일을 얹어 아이콘이 배경에 묻히지 않게 한다.
+ * 색은 서비스 색을 그대로 쓰되 `currentColor` 로 아이콘에 전달한다 —
+ * SVG 안에 hex 를 박으면 다크 모드에서 따로 고쳐야 한다.
+ */
+.stat-card-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.stat-card-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.stat-card-icon[data-accent='stats'] { color: var(--svc-stats); }
+.stat-card-icon[data-accent='lotto'] { color: var(--svc-lotto); }
+.stat-card-icon[data-accent='reco'] { color: var(--svc-reco); }
+
+@media (min-width: 640px) {
+  .stat-card-icon {
+    width: 44px;
+    height: 44px;
+  }
+  .stat-card-icon svg {
+    width: 24px;
+    height: 24px;
+  }
+}
+
+.stat-card-title {
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-title);
+}
+
+.stat-card-summary {
+  flex: 1;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+  line-height: var(--lh-body);
+}
+
+/*
+ * "보러 가기 →". 카드에서 **누를 수 있다는 것을 알리는 유일한 문구**라 작으면 안 된다는
+ * 지적이 있었다(사용자). 기존 --fs-xs 의 1.5배로 키우고 굵기도 한 단계 올린다.
+ * ⚠ 값을 직접 박지 않고 calc 로 유도한다 — 타이포 스케일이 바뀌면 같이 따라가야 한다.
+ * 대비는 파스텔 3색 위에서 5.29~5.66 으로 AA 여유가 있다(2026-08-21 계산).
+ */
+.stat-card-cue {
+  font-size: calc(var(--fs-xs) * 1.5);
+  font-weight: var(--fw-bold);
+  color: var(--color-primary);
+  line-height: var(--lh-tight);
+}
+
+.stat-card[data-current] .stat-card-cue {
+  color: var(--color-text-muted);
+}
+
+@media (min-width: 640px) {
+  .stat-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ── 조회 조건 바 ─────────────────────────────────────── */
+
+/*
+ * 조회 조건 한 덩어리. 배경 없이 두었더니 화면이 휑하고 어디까지가 조건 설정인지 흐렸다.
+ * 카드로 감싸 무게를 주고, 화면별 추가 컨트롤(표시 개수·보너스)도 이 안에 들어온다.
+ */
+.statbar {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+/*
+ * 조회 버튼. 태그용 `.chip`(11px)을 그대로 썼더니 너무 작다는 지적이 있었다 — 그쪽은
+ * 뉴스 키워드처럼 **읽기만 하는 라벨**이고 이쪽은 **누르는 컨트롤**이라 크기가 달라야 한다.
+ * 터치 타겟 44px 를 채우고 글자도 본문 크기에 맞춘다.
+ */
+.scope-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
+}
+
+.scope-chip:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+/* 선택 상태는 색만이 아니라 aria-pressed 로도 전달한다(컴포넌트 참조). */
+.scope-chip[data-active] {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-on-accent);
+  font-weight: var(--fw-semibold);
+}
+
+.scope-chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.statbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.statbar-label {
+  /* 라벨과 버튼 줄이 좌우로 갈리지 않게 최소 폭을 준다(넓은 화면에서 정렬이 맞는다). */
+  min-width: 68px;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+}
+
+.statbar-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.statbar-note {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+/*
+  기간 입력은 접힌 상태가 기본이다. `hidden` 이 아니라 CSS 로 접는 이유는 열고 닫을 때
+  레이아웃이 튀지 않게 하기 위해서다.
+*/
+.statbar-range {
+  display: none;
+}
+
+.statbar-range[data-open] {
+  display: block;
+}
+
+.statbar-fields {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-2);
+}
+
+.statbar-field {
+  display: grid;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.statbar-field .input {
+  /* select 에 1,200여 개 option 이 들어가도 폭은 컨테이너를 넘지 않는다. */
+  width: 100%;
+  min-width: 0;
+}
+
+.statbar-submit {
+  min-height: 44px;
+}
+
+.statbar-error {
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--color-danger);
+}
+
+.statbar-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  font-size: var(--fs-sm);
+  color: var(--color-text);
+}
+
+@media (min-width: 640px) {
+  .statbar-fields {
+    grid-template-columns: 1fr 1fr auto;
+    align-items: end;
+  }
+}
+
+/* ── 조회 구간 캡션 ───────────────────────────────────── */
+
+.scope-caption {
+  margin: var(--space-4) 0 var(--space-3);
+  font-size: var(--fs-sm);
+  color: var(--color-text);
+}
+
+.scope-caption-date,
+.scope-caption-count {
+  color: var(--color-text-muted);
+  font-weight: var(--fw-regular);
+}
+
+.scope-caption-busy {
+  color: var(--color-primary);
+}
+
+/* ── 보드 공통 ────────────────────────────────────────── */
+
+.statboard-v3 {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.stat-blocks {
+  display: grid;
+  gap: var(--space-6);
+  margin-top: var(--space-4);
+}
+
+.stat-block {
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  /* grid 자식이 내용 때문에 트랙을 밀어내지 않게 한다. */
+  min-width: 0;
+}
+
+.stat-block > h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-semibold);
+}
+
+.stat-error {
+  margin: var(--space-3) 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  font-size: var(--fs-sm);
+}
+
+/* 표 안의 숫자는 자릿수가 흔들리지 않게 고정폭으로. */
+.stat-num {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+
+.stat-sub {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+/* ── 하단 안내 절 — 표본 해부 ───────────────────────────
+ * ⚠ 클래스 접두어가 `spec-` 인 이유: `.guide-card`/`.guide-grid` 는 **가이드 문서로
+ *   가는 링크 카드**(components/GuideCard.tsx)가 이미 쓰고 있다. 같은 이름을 쓰면
+ *   나중에 선언된 쪽이 이겨 홈·/guide·/lotto 의 파스텔 링크 카드가 통째로 깨진다
+ *   (실제로 깨뜨렸다가 잡았다, 2026-08-21).
+ * 줄글 대신 화면 조각에 라벨을 붙이는 구조(→ components/GuideSection.tsx).
+ * 통계·추천·꿈해몽·뉴스 등 기능 화면이 같은 클래스를 공유한다.
+ * ──────────────────────────────────────────────────────── */
+
+/*
+ * 안내 절 전체를 한 덩어리로 묶는 상자.
+ *
+ * 참조 시안(docs/raw/번호통계_화면예시.png)이 이 절을 강조 테두리로 감싸 "여기부터
+ * 설명" 임을 알린다. 그 장치가 없으면 표본 카드들이 본문의 다른 카드와 구분되지 않는다.
+ * 안쪽 카드가 파스텔이므로 바깥은 흰색이라야 색이 겹치지 않는다.
+ */
+.page-guide,
+.faq {
+  padding: var(--space-5);
+  border: 1px solid color-mix(in oklab, var(--color-primary) 25%, transparent);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+@media (min-width: 640px) {
+  .page-guide,
+  .faq {
+    padding: var(--space-6);
+  }
+}
+
+.page-guide-lede {
+  margin: 0 0 var(--space-4);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+}
+
+/*
+ * 표본 카드 격자.
+ *
+ * ⚠ 모바일 1열만 두면 데스크톱에서 오른쪽이 통째로 빈다 — 통계 표에서 이미 지적받은
+ *   문제다(2026-08-18). 640px 에서 2열로 펴고, 카드가 홀수라 마지막이 혼자 남으므로
+ *   그 하나만 전폭으로 늘린다. 1024px 에서는 3열이라 그 보정이 필요 없다.
+ * ⚠ minmax(0, 1fr) 이 아니면 안쪽 표본(가로로 긴 표 한 줄)이 열을 밀어 격자가 넘친다.
+ */
+.spec-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+@media (min-width: 640px) {
+  .spec-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-4);
+  }
+  .spec-grid > .spec-card:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 1024px) {
+  .spec-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .spec-grid > .spec-card:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+}
+
+.spec-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+/*
+ * 카드 파스텔 — `.guide-card`(가이드 링크 카드)와 같은 data-accent 문법이다.
+ *
+ * ★ `--spec-ink` 는 **제목과 아이콘이 공유하는 잉크색**이다. 참조 시안은 제목을
+ *   `--svc-*` 원색으로 쓰는데, 실측하면 여섯 색 **전부 AA 미달**이다
+ *   (reco 1.91 · lotto 2.65 · dream 2.92 · news 3.09 · pension 2.19 · stats 3.64).
+ *   그래서 `--color-text` 와 섞어 어둡게 만든다.
+ *
+ * ★ 비율이 accent 마다 다른 이유: 원색의 밝기가 달라 같은 비율로는 안 맞는다. 전부 60%
+ *   로 통일하면 라이트에서 reco 4.14 · pension 4.45 로 미달한다.
+ *
+ * ★ **한 줄이 라이트·다크를 동시에 만족한다.** `--color-text` 가 라이트 #1a1d2e /
+ *   다크 #e6e9ef 로 뒤집히므로, 같은 식이 라이트에서는 어둡게 다크에서는 밝게 섞인다.
+ *   테마별 값을 따로 둘 필요가 없다.
+ * ⚠ 비율을 올리면(원색에 가까워지면) 대비가 **떨어진다.** 미달이 나오면 낮춘다.
+ */
+.spec-card[data-accent='news'] {
+  background: var(--svc-news-bg);
+  border-color: color-mix(in oklab, var(--svc-news) 22%, transparent);
+  --spec-ink: color-mix(in oklab, var(--svc-news) 70%, var(--color-text));
+}
+.spec-card[data-accent='lotto'] {
+  background: var(--svc-lotto-bg);
+  border-color: color-mix(in oklab, var(--svc-lotto) 22%, transparent);
+  --spec-ink: color-mix(in oklab, var(--svc-lotto) 64%, var(--color-text));
+}
+.spec-card[data-accent='reco'] {
+  background: var(--svc-reco-bg);
+  border-color: color-mix(in oklab, var(--svc-reco) 22%, transparent);
+  --spec-ink: color-mix(in oklab, var(--svc-reco) 50%, var(--color-text));
+}
+.spec-card[data-accent='stats'] {
+  background: var(--svc-stats-bg);
+  border-color: color-mix(in oklab, var(--svc-stats) 22%, transparent);
+  --spec-ink: color-mix(in oklab, var(--svc-stats) 80%, var(--color-text));
+}
+.spec-card[data-accent='dream'] {
+  background: var(--svc-dream-bg);
+  border-color: color-mix(in oklab, var(--svc-dream) 22%, transparent);
+  --spec-ink: color-mix(in oklab, var(--svc-dream) 68%, var(--color-text));
+}
+.spec-card[data-accent='pension'] {
+  background: var(--svc-pension-bg);
+  border-color: color-mix(in oklab, var(--svc-pension) 22%, transparent);
+  --spec-ink: color-mix(in oklab, var(--svc-pension) 54%, var(--color-text));
+}
+
+.spec-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/*
+ * 아이콘 타일. 파스텔 위에 원색 글리프를 바로 얹으면 비텍스트 3:1 을 못 넘기므로
+ * 흰 타일에 올린다(`.stat-card-icon` 과 같은 문법).
+ */
+.spec-card-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--spec-ink, var(--color-primary));
+}
+
+.spec-card-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+@media (min-width: 640px) {
+  .spec-card-icon {
+    width: 36px;
+    height: 36px;
+  }
+  .spec-card-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+}
+
+.spec-card-head h3 {
+  margin: 0;
+  flex: 1;
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-title);
+  color: var(--spec-ink, var(--color-text));
+}
+
+/* 표본의 숫자가 위쪽 실제 표와 다른 이유를 밝히는 표식. 색이 아니라 글자가 정보다. */
+.spec-tag {
+  flex: 0 0 auto;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+}
+
+/*
+ * 화면에서 떼어 온 조각을 놓는 자리.
+ * ⚠ 조각 안에서는 실제 컴포넌트 클래스(.ball, .trend, .bar 등)를 그대로 쓴다 — 흉내 낸
+ *   모양을 새로 만들면 진짜가 바뀔 때 설명만 낡는다.
+ */
+.spec-body {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  /*
+   * ⚠ 파스텔 카드 위에 놓이므로 **흰 배경**이라야 한다. 두 가지 이유다.
+   *   ① 조각이 "진짜 화면에서 떼어 온 것" 처럼 떠 보인다.
+   *   ② `.spec-rank` 가 `--color-text-subtle` 을 쓰는데, 그 색은 중립 배경 전용이다
+   *      (파스텔 위에서는 대비 미달 → tokens.css 주석). 흰 배경이 그 제약을 지켜 준다.
+   */
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  font-size: var(--fs-sm);
+}
+
+/* 표본 안의 순위 숫자. 실제 표의 순위 칸과 같은 무게로 보이게 한다. */
+.spec-rank {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  color: var(--color-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * 라벨 + 설명 목록.
+ *
+ * ⚠ **dl 자체가 2열 grid 다.** 종전에는 dt/dd 를 감싼 <div> 마다 grid 를 따로 만들었는데,
+ *   그러면 `max-content` 가 **줄마다 따로 계산돼** 라벨 칸 폭이 제각각이 되고 설명 글이
+ *   시작하는 x 좌표가 들쑥날쑥해진다(사용자 지적). dl 을 격자로 두면 라벨 칸이 카드
+ *   안에서 하나로 공유돼 모든 줄의 글머리가 맞는다.
+ * ⚠ 그래서 마크업에서 감싸는 <div> 를 없앴다. 다시 넣으면 정렬이 도로 깨진다.
+ */
+.spec-notes {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-2) var(--space-3);
+  align-items: baseline;
+  margin: 0;
+}
+
+/* 라벨은 칩이다 — 화면에 실제로 보이는 말이라는 신호. 흰 배경이라 파스텔 위에서도 또렷하다. */
+.spec-notes dt {
+  justify-self: start;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--color-primary);
+  white-space: nowrap;
+}
+
+.spec-notes dd {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+  /* 긴 낱말이 좁은 칸을 밀어내지 않게. 375px 에서 라벨 칸과 겹치는 것을 막는다. */
+  overflow-wrap: anywhere;
+}
+
+/*
+ * 표본으로는 설명할 수 없는 것(왜 그런 모양인지, 무엇을 뜻하지 않는지).
+ * 격자 아래 전폭. 강조색 배경을 써서 '결론' 임을 알린다.
+ */
+/*
+ * 카드 맨 아래 한 줄로 붙는 구체적인 예.
+ * 설명이 추상적으로 끝나지 않게 실제 값을 하나 보여 준다("예: 6 ÷ 20 = 30%").
+ * 점선 구분선을 쓰는 이유 — 실선은 카드를 둘로 잘라 보이게 하는데 이건 같은 설명의 꼬리다.
+ */
+.spec-example {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  padding-top: var(--space-3);
+  border-top: 1px dashed color-mix(in oklab, var(--color-text-muted) 30%, transparent);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+}
+
+.spec-example > span {
+  flex: 0 0 auto;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  font-weight: var(--fw-bold);
+  color: var(--spec-ink, var(--color-primary));
+}
+
+/*
+ * 결론 블록 — 표본으로는 설명할 수 없는 것(왜 그런 모양인지, 무엇을 뜻하지 않는지).
+ * 아이콘을 왼쪽에 고정하고 글이 그 오른쪽으로 흐른다.
+ */
+.spec-note {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+  margin-top: var(--space-4);
+  padding: var(--space-5);
+  border-radius: var(--radius-card);
+  background: var(--color-primary-soft);
+}
+
+/* `.insight-icon` 과 같은 문법 — 원형 강조 배경 위 흰 글리프. */
+.spec-note-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  color: var(--color-on-accent);
+}
+
+.spec-note-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.spec-note h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-title);
+}
+
+.spec-note p {
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: var(--color-text);
+}
+
+.spec-note p:last-child {
+  margin-bottom: 0;
+}
+
+/* 큰 숫자 하나로 규모를 보여 주는 줄(예: 8,145,060). 문장보다 먼저 눈에 들어와야 한다. */
+.spec-figure {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-2);
+}
+
+.spec-figure strong {
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-black);
+  letter-spacing: var(--ls-hero);
+  line-height: var(--lh-tight);
+  font-variant-numeric: tabular-nums;
+}
+
+.spec-figure span {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+}
+
+/*
+ * 표본용 축소 조각들.
+ *
+ * ⚠ 진짜 컴포넌트를 그대로 넣을 수 없는 것만 여기서 흉내 낸다 — 막대차트는 45개가
+ *   한 덩어리라 세 개만 떼어 올 수 없고, 히트맵 칸은 격자 안에서만 크기가 정해진다.
+ *   볼(.ball)·추세 배지(.trend)는 진짜를 그대로 쓴다.
+ * ⚠ 흉내 낸 조각은 진짜와 **같은 토큰**을 쓴다. 여기서 새 색을 만들면 원본이 바뀔 때
+ *   설명 그림만 낡는다.
+ */
+.spec-minibars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 32px;
+  flex: 0 0 auto;
+}
+
+.spec-minibar {
+  display: block;
+  width: 10px;
+  border-radius: 2px 2px 0 0;
+  background: color-mix(in oklab, var(--color-primary) 32%, transparent);
+}
+
+/* 가장 흔한 항목 하나만 진하게 — 패턴 카드의 강조 규칙과 같다. */
+.spec-minibar.is-top {
+  background: var(--color-primary);
+}
+
+/* 번호대 색을 쓰는 막대(빈도 화면 설명)는 볼과 같은 5구간 색을 그대로 받는다. */
+.spec-minibar.bar-range-1 { background: var(--ball-1-10); }
+.spec-minibar.bar-range-2 { background: var(--ball-11-20); }
+.spec-minibar.bar-range-3 { background: var(--ball-21-30); }
+.spec-minibar.bar-range-4 { background: var(--ball-31-40); }
+.spec-minibar.bar-range-5 { background: var(--ball-41-45); }
+
+/* 히트맵 칸 한 개. 진짜 격자와 같은 방식으로 --heat 를 배경 진하기에 쓴다. */
+.spec-heatcell {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--color-primary) calc(var(--heat, 0) * 100%), transparent);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+/* 체크박스 표본. 켜진 상태만 보이면 되므로 상태 전환은 만들지 않는다. */
+.spec-checkbox {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: var(--color-primary);
+  color: var(--color-on-accent);
+  flex: 0 0 auto;
+}
+
+.spec-checkbox svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* ── 번호추천: 기준 선택 · 추천 개수 · 전체 내보내기 ─────
+ * → components/RecommendStudio.tsx · BulkActions.tsx
+ * ──────────────────────────────────────────────────────── */
+
+/*
+ * 기준 선택 줄.
+ *
+ * ⚠ 종전에는 `.tabs`(알약 트랙 + overflow-x:auto)를 썼는데 **모바일에서 아래에 가로
+ *   스크롤바가 생겨** 메뉴가 아니라 잘린 목록처럼 보였다(사용자 지적). 이제 스크롤바를
+ *   감추고 손가락으로 미는 구조로 둔다 — 넘치는 것 자체는 막을 수 없다(기준이 여섯 개고
+ *   라벨이 길다). 대신 **오른쪽 가장자리에 페이드**를 둬 더 있다는 것을 알린다.
+ * ⚠ 640px 이상에서는 줄바꿈해 한눈에 다 보인다. 밀 일이 없으므로 페이드도 끈다.
+ */
+.strategy-picker-wrap {
+  position: relative;
+  /*
+   * 화살표가 첫·마지막 칩을 덮지 않게 자리를 비운다. 화살표는 넘칠 때만 나타나므로
+   * 평소에는 이 여백만 남는데, 여백이 있어야 "가장자리가 잘려 있다" 는 인상이 산다.
+   */
+  padding-inline: var(--space-1);
+}
+
+.strategy-picker {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  padding-bottom: var(--space-1);
+  /* 손가락으로 밀 때 버튼 왼쪽 모서리에 맞춰 멈춘다. mandatory 는 중간에서 튕겨 답답하다. */
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.strategy-picker::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * 더 있다는 신호 셋 — **하나로는 부족했다.**
+ * 처음에는 오른쪽 페이드만 뒀는데 "그냥 보면 메뉴 3개만 있는 것처럼 보인다" 는 지적을
+ * 받았다. 이제 셋이 함께 말한다.
+ *   ① 페이드 — 내용이 이어진다는 것
+ *   ② 좌우 화살표 — 더 있다 + 실제로 옮기는 수단(→ RecommendStudio.tsx)
+ *   ③ 안내 문구 — 화살표를 못 알아보는 사용자를 위해
+ *
+ * ⚠ 페이드를 넓게 두면 **다음 칩을 통째로 덮어** 오히려 "여기가 끝" 처럼 보인다.
+ *   `--space-6` 로 좁혀 잘린 칩이 반쯤 비치게 한다 — 잘린 것이 보이는 것이 가장 강한 신호다.
+ * ⚠ `data-more` 가 붙어 있을 때만 그린다. 끝까지 민 뒤에도 페이드가 남으면 거짓말이 된다.
+ * ⚠ 페이드는 **스크롤 컨테이너가 아니라 바깥 래퍼**에 건다. 스크롤되는 요소 안에
+ *   absolute 로 두면 내용과 함께 흘러가 가장자리에 머물지 못한다.
+ */
+.strategy-picker-wrap[data-more]::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: var(--space-1);
+  width: var(--space-6);
+  pointer-events: none;
+  background: linear-gradient(to right, transparent, var(--color-bg));
+}
+
+/* ── 좌우 이동 화살표 ─────────────────────────────────── */
+
+.strategy-nav {
+  display: grid;
+  place-items: center;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  /* 터치 타겟. 캐러셀 화살표(`.carousel-arrow`)와 같은 규격이다. */
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  box-shadow: var(--shadow-card);
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
+.strategy-nav:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+/* 칩 줄에 살짝 겹쳐 놓는다 — 완전히 밖으로 빼면 좁은 화면에서 카드를 넘친다. */
+.strategy-nav.is-prev {
+  left: calc(var(--space-2) * -1);
+}
+.strategy-nav.is-next {
+  right: calc(var(--space-2) * -1);
+}
+
+/* ── 안내 문구 ────────────────────────────────────────── */
+
+/*
+ * ⚠ 항상 자리를 차지하고 보이기만 토글한다. `canRight` 는 마운트 뒤에 정해지므로
+ *   없다가 생기면 아래가 밀린다(CLS). 자리를 비워 두는 편이 흔들리는 것보다 낫다.
+ */
+.strategy-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--color-primary);
+  visibility: hidden;
+}
+
+.strategy-hint[data-show] {
+  visibility: visible;
+}
+
+.strategy-chip {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  /* 터치 타겟 44px. 기준을 바꾸면 결과가 새로 생성되므로 오탭이 비싸다. */
+  min-height: 44px;
+  padding-inline: var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--color-text);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+
+.strategy-chip:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+/* 선택 상태는 색만이 아니라 aria-pressed 로도 전달된다(컴포넌트 참조). */
+.strategy-chip[data-active] {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-on-accent);
+  font-weight: var(--fw-semibold);
+}
+
+.strategy-chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@media (min-width: 640px) {
+  .strategy-picker {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+  /* 줄바꿈해 여섯 개가 다 보인다. 신호 셋 모두 할 일이 없다. */
+  .strategy-picker-wrap[data-more]::after,
+  .strategy-nav,
+  .strategy-hint {
+    display: none;
+  }
+}
+
+/* ── 추천 개수 ─────────────────────────────────────────── */
+
+.set-count {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: var(--space-4);
+}
+
+.set-count-label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+}
+
+/*
+ * 1~10 열 개. 좁은 화면에서는 줄바꿈해 두 줄이 된다.
+ * ⚠ 칸을 44px 밑으로 줄이지 않는다. 숫자 하나짜리 버튼이라 작게 만들고 싶어지지만
+ *   손가락으로 정확히 짚어야 하는 컨트롤이다.
+ */
+.set-count-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.set-count-chip {
+  min-width: 44px;
+  min-height: 44px;
+  padding-inline: var(--space-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.set-count-chip:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.set-count-chip[data-active] {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-on-accent);
+  font-weight: var(--fw-bold);
+}
+
+.set-count-chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ── 전체 내보내기 ─────────────────────────────────────── */
+
+/*
+ * 조합 목록 **위**에 둔다. 아래에 두면 열 조합을 다 지나쳐 내려가야 만난다.
+ * 개별 버튼(`.number-actions`)과 모양이 같아야 같은 기능으로 읽힌다.
+ */
+.bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-2);
+}
+
+.bulk-actions-label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+}
+
+.bulk-actions-buttons {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.bulk-actions-buttons .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding-inline: var(--space-4);
+  font-size: var(--fs-sm);
+}
+
+.bulk-actions .action-feedback {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+@media (min-width: 640px) {
+  .bulk-actions {
+    justify-content: space-between;
+  }
+  .bulk-actions .action-feedback {
+    flex-basis: auto;
+  }
+}
+
+/* ── 추천 기준 여섯 가지 ────────────────────────────────
+ * 참조 시안(docs/raw/추천알고리즘설명화면.png)의 문법 — 번호 배지 + 제목 + 설명 + 요약 칩.
+ * 화려하게 만들지 않는다. 여기는 읽는 곳이지 고르는 곳이 아니다(고르는 것은 위 칩이다).
+ * ──────────────────────────────────────────────────────── */
+
+.strategy-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+@media (min-width: 1024px) {
+  .strategy-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-4);
+  }
+}
+
+.strategy-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+/* 번호 배지. `.insight-icon`(1272) 과 같은 문법 — 원형 강조 배경 위 반전 글자. */
+.strategy-num {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  color: var(--color-on-accent);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * 통제군인 '완전 랜덤' 만 배지를 다르게 둔다.
+ * 목록 맨 앞에 두는 이유가 "다른 방식의 비교 기준" 이라는 것인데, 다른 다섯과 똑같이
+ * 생기면 그냥 첫 번째 항목으로만 읽힌다(→ lib/strategies.ts 주석).
+ */
+.strategy-item[data-control] .strategy-num {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-muted);
+}
+
+.strategy-item h3 {
+  margin: 0 0 var(--space-1);
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-title);
+}
+
+.strategy-short {
+  display: inline-block;
+  margin-bottom: var(--space-2);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-soft);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-primary);
+}
+
+.strategy-item p {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+}
+
+/* ── 가로로 넘치는 영역의 '더 있다' 신호 ────────────────
+ *
+ * 탭 알약 트랙에는 **JS 없이 되는 스크롤 그림자**를 쓴다.
+ *
+ * ⚠ 표(`.table-scroll`)와 히스토그램(`.hist`)에는 이 기법을 **쓸 수 없다.** 표의 행과
+ *   차트의 막대가 불투명해서 컨테이너 배경이 한 점도 보이지 않기 때문이다. 처음에 셋을
+ *   묶어 걸었다가 그림자가 아예 안 나타나 되돌렸다. 그쪽은 `ScrollArea` 가 화살표와
+ *   페이드로 처리한다 — 마우스로는 가로 스크롤이 안 되므로 PC 에서는 화살표가 유일한
+ *   수단이기도 하다.
+ *
+ * 원리: 배경 이미지 네 장을 겹친다.
+ *   ①·② 양 끝을 덮는 **불투명 사각형**(`background-attachment: local`) — 내용과 함께
+ *        스크롤하므로 그 끝에 닿으면 그림자를 가려 버린다.
+ *   ③·④ 양 끝의 **그림자**(`scroll`) — 컨테이너에 고정된다.
+ * 결과: 왼쪽에 더 있으면 왼쪽 그림자가, 오른쪽에 더 있으면 오른쪽 그림자가 보인다.
+ * 끝까지 밀면 덮개가 그림자를 가려 저절로 사라진다. 상태 계산도 리렌더도 없다.
+ *
+ * ⚠ 덮개 색이 그 영역의 실제 배경과 같아야 한다. 다르면 양 끝에 색 띠가 보인다.
+ */
+.tabs {
+  /* 덮개 색은 그 영역의 실제 배경과 같아야 한다. 탭 트랙은 흰색이 아니다. */
+  --scroll-shadow-bg: var(--color-surface-2);
+  background-image:
+    linear-gradient(to right, var(--scroll-shadow-bg) 40%, transparent),
+    linear-gradient(to left, var(--scroll-shadow-bg) 40%, transparent),
+    radial-gradient(farthest-side at 0 50%, rgb(26 29 46 / 0.14), transparent),
+    radial-gradient(farthest-side at 100% 50%, rgb(26 29 46 / 0.14), transparent);
+  background-position: left center, right center, left center, right center;
+  background-repeat: no-repeat;
+  background-size: 44px 100%, 44px 100%, 16px 100%, 16px 100%;
+  background-attachment: local, local, scroll, scroll;
+}
+
+/* ── 가로 스크롤 껍데기 ──────────────────────────────────
+ * → components/ScrollArea.tsx (신호가 왜 셋인지는 거기 주석)
+ * ──────────────────────────────────────────────────────── */
+
+.scroll-area {
+  position: relative;
+}
+
+/*
+ * 가장자리 페이드. 남은 쪽에만 그린다 — 끝까지 민 뒤에도 남아 있으면 거짓말이 된다.
+ * ⚠ 폭을 넓게 두면 다음 열을 통째로 덮어 오히려 "여기가 끝" 처럼 보인다. 잘린 내용이
+ *   반쯤 비치는 것이 가장 강한 신호다.
+ */
+.scroll-area::before,
+.scroll-area::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--space-6);
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.scroll-area::before {
+  left: 0;
+  background: linear-gradient(to left, transparent, var(--scroll-fade-bg, var(--color-surface)));
+}
+
+.scroll-area::after {
+  right: 0;
+  background: linear-gradient(to right, transparent, var(--scroll-fade-bg, var(--color-surface)));
+}
+
+.scroll-area[data-more-left]::before,
+.scroll-area[data-more-right]::after {
+  opacity: 1;
+}
+
+/*
+ * 화살표 레일.
+ * ⚠ 영역 전체를 덮되 클릭은 통과시킨다(`pointer-events: none`). 버튼만 다시 켠다.
+ * ⚠ 버튼을 `.scroll-area` 에 `top: 50%` 로 직접 붙이면 **영역 높이의 한가운데**에 놓인다.
+ *   회차 표처럼 세로로 8,000px 인 표에서는 그 지점이 화면 밖이라 화살표를 볼 수 없다.
+ *   레일 안에서 sticky 로 세워 두면 레일이 화면에 걸쳐 있는 동안 늘 화면 중앙에 머문다.
+ */
+.scroll-area-rail {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  pointer-events: none;
+}
+
+/* 화살표 — 기준 선택(`.strategy-nav`)과 같은 규격이라야 같은 기능으로 읽힌다. */
+.scroll-area-nav {
+  display: grid;
+  place-items: center;
+  position: sticky;
+  /* 버튼 높이(40px)의 절반을 빼서 화면 정중앙에 맞춘다. */
+  top: calc(50vh - 20px);
+  pointer-events: auto;
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  box-shadow: var(--shadow-card);
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
+.scroll-area-nav:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+/*
+ * 살짝 안쪽에 겹쳐 놓는다. 완전히 밖으로 빼면 좁은 화면에서 카드를 넘치고,
+ * `body` 는 절대 가로로 스크롤되지 않아야 한다(→ docs/wiki/20-design/responsive-rules.md).
+ */
+.scroll-area-nav.is-prev {
+  margin-left: var(--space-1);
+}
+
+/* 왼쪽 버튼이 없을 때도 오른쪽 끝에 붙어 있어야 한다. */
+.scroll-area-nav.is-next {
+  margin-left: auto;
+  margin-right: var(--space-1);
+}
+
+/*
+ * ⚠ 항상 자리를 차지하고 보이기만 토글한다. 넘침 여부는 마운트 뒤에 정해지므로
+ *   없다가 생기면 아래가 밀린다(CLS).
+ */
+.scroll-area-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--color-primary);
+  visibility: hidden;
+}
+
+.scroll-area-hint[data-show] {
+  visibility: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-area::before,
+  .scroll-area::after {
+    transition: none;
+  }
+}
+
+/* ── 꿈해몽 번호 ────────────────────────────────────────
+ * → components/DreamStudio.tsx
+ * ──────────────────────────────────────────────────────── */
+
+.dream-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.dream-label-row label {
+  font-weight: var(--fw-semibold);
+}
+
+/* 남은 글자 수. 상한에 가까워지면 색으로 한 번 더 알린다. */
+.dream-counter {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.dream-counter[data-low] {
+  color: var(--color-warning);
+  font-weight: var(--fw-semibold);
+}
+
+.dream-help {
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+}
+
+/* ── 분석 결과 ─────────────────────────────────────────── */
+
+.dream-result {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.dream-analysis-lede {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.dream-words {
+  margin-top: var(--space-3);
+}
+
+.dream-words-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--color-primary);
+}
+
+.dream-words ul {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * 단어 하나 + 그 단어에서 나온 번호들.
+ * ⚠ 단어 칸 폭을 `max-content` 로 두면 줄마다 달라져 번호 시작점이 들쑥날쑥해진다
+ *   (표본 카드에서 이미 겪었다). 목록 전체를 하나의 2열 격자로 둔다.
+ */
+.dream-words ul {
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-3);
+}
+
+.dream-words li {
+  display: contents;
+}
+
+.dream-word {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+
+/* ── 펼침 묶음 ─────────────────────────────────────────── */
+
+.dream-disclosure {
+  margin-top: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  overflow: hidden;
+}
+
+.dream-disclosure[open] {
+  border-color: color-mix(in oklab, var(--color-primary) 40%, transparent);
+  background: var(--color-surface);
+}
+
+.dream-disclosure > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  /* 터치 타겟 */
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  list-style: none;
+}
+
+.dream-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.dream-disclosure > summary:hover {
+  background: var(--color-primary-soft);
+}
+
+.dream-disclosure-title {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+/* 몇 개가 접혀 있는지. 숫자가 있으면 펼칠 값어치를 가늠할 수 있다. */
+.dream-disclosure-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding-inline: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  color: var(--color-on-accent);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * ⚠ 갈매기만 두지 않는다. "펼쳐 보기" 라는 **말**을 함께 낸다 — 아이콘만으로는 접혀
+ *   있다는 것을 알아보지 못하는 사용자가 있다(사용자 요구).
+ */
+.dream-disclosure-cue {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-primary);
+}
+
+.dream-disclosure-cue svg {
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.dream-disclosure[open] .dream-disclosure-cue svg {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dream-disclosure-cue svg {
+    transition: none;
+  }
+}
+
+/* 펼침 여부에 따라 '펼쳐 보기' 와 '접기' 중 하나만 보인다. */
+.dream-disclosure-close,
+.dream-disclosure[open] .dream-disclosure-open {
+  display: none;
+}
+
+.dream-disclosure[open] .dream-disclosure-close {
+  display: inline;
+}
+
+.dream-disclosure > .dream-words {
+  margin: 0;
+  padding: 0 var(--space-3) var(--space-3);
+}
+
+/* ── 추천 범위 ─────────────────────────────────────────── */
+
+.dream-tier {
+  display: grid;
+  gap: var(--space-2);
+}
+
+@media (min-width: 640px) {
+  .dream-tier {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/*
+ * 범위 선택은 **세로로 쌓는다.** 이름이 길어(‘일치 + 포함 + 유사한 단어’) 가로로 늘어
+ * 놓으면 좁은 화면에서 잘리거나 밀린다. 기준 선택(`.strategy-chip`)과 달리 항목이 셋뿐이라
+ * 세로로 쌓아도 길지 않다.
+ */
+.dream-tier-btn {
+  min-height: 44px;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.dream-tier-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.dream-tier-btn[data-active] {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-on-accent);
+  font-weight: var(--fw-semibold);
+}
+
+.dream-tier-note {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+}
+
+/* ── 이 범위의 번호 · 제외 스위치 ─────────────────────── */
+
+.dream-pool {
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+
+.dream-pool-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.dream-pool-label {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--color-text-muted);
+}
+
+.dream-pool-reset {
+  /* 터치 타겟. 문구가 짧아 세로 여백으로 높이를 만든다. */
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
+.dream-pool-reset:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.dream-pool-hint {
+  margin: var(--space-2) 0 var(--space-3);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+}
+
+.dream-pool-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * 번호 하나 = 제외 스위치.
+ * ⚠ **44px 터치 타겟.** 볼(36px)만 두면 모바일에서 오탭이 잦고, 여기서 오탭하면 결과가
+ *   통째로 바뀌므로 비싸다(→ docs/wiki/20-design/accessibility.md).
+ */
+.dream-pool-item {
+  display: grid;
+  place-items: center;
+  /* 취소선(::after)의 기준. 아래 [data-off] 규칙이 이것에 기댄다. */
+  position: relative;
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: none;
+  cursor: pointer;
+}
+
+/*
+ * ⚠ hover 를 outline 으로 내지 않는다. 볼의 outline 은 이미 **어느 갈래에서 온
+ *   번호인지**를 말하고 있어(아래 `[data-origin]`), hover 가 그것을 덮어써 버린다.
+ */
+.dream-pool-item:hover {
+  background: var(--color-primary-soft);
+}
+
+/*
+ * 뺀 번호. ⚠ 흐림(색)만으로 알리지 않는다 — 취소선을 함께 긋는다. `aria-pressed` 가
+ * 스크린리더에 상태를 말해 준다(→ accessibility.md 색 단독 사용 금지).
+ */
+.dream-pool-item[data-off] .ball {
+  opacity: 0.35;
+  filter: grayscale(1);
+  /* 갈래 표식도 함께 죽인다. 뺀 번호에까지 색이 남아 있으면 목록이 시끄럽다. */
+  outline-color: color-mix(in oklab, var(--color-text-muted) 40%, transparent);
+}
+
+.dream-pool-item[data-off]::after {
+  content: '';
+  position: absolute;
+  width: 34px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--color-text);
+  transform: rotate(-45deg);
+}
+
+/* ── 번호가 어디서 왔는지 ─────────────────────────────────
+ *
+ * ⚠ **글자로 말한다.** 테두리 색만으로 나누면 색을 구별하지 못하는 사용자에게 아무 정보도
+ *   남지 않고, 나머지 사람도 범례를 외워야 한다. 색과 선 모양은 거들 뿐이다.
+ * ⚠ 볼 자체의 색은 건드리지 않는다 — 공식 5구간 색이다
+ *   (→ docs/wiki/00-decisions/0009-official-ball-colors-over-mockup.md).
+ * ──────────────────────────────────────────────────────── */
+
+[data-origin='exact'] {
+  --origin-ink: var(--color-primary);
+  --origin-line: solid;
+}
+[data-origin='contain'] {
+  --origin-ink: color-mix(in oklab, var(--color-primary) 70%, var(--color-text));
+  --origin-line: dashed;
+}
+[data-origin='similar'] {
+  --origin-ink: color-mix(in oklab, var(--svc-dream) 58%, var(--color-text));
+  --origin-line: dotted;
+}
+[data-origin='related'] {
+  --origin-ink: var(--color-text-muted);
+  --origin-line: dotted;
+}
+/* 채운 자리는 꿈에서 온 것이 아니므로 테두리를 두르지 않는다. 글자로만 말한다. */
+[data-origin='filled'] {
+  --origin-ink: var(--color-text-muted);
+  --origin-line: none;
+}
+
+/*
+ * 번호 목록에도 조합과 **같은 표식**을 준다. 여기서 갈래를 보고 뺄 번호를 고르게 된다 —
+ * "비슷한 단어에서 온 번호는 빼고 싶다" 같은 판단이 이 표식 없이는 불가능하다.
+ * 글자 라벨은 두지 않는다. 최대 20개가 늘어서므로 붙이면 빽빽해진다. 대신 선 모양
+ * (실선·파선·점선)이 색과 별개로 갈래를 말하고, 바로 아래 범례가 그것을 풀어 준다.
+ */
+.dream-pool-item .ball {
+  outline: 2px var(--origin-line, none) var(--origin-ink, transparent);
+  outline-offset: 2px;
+}
+
+/* 조합 안의 볼 여섯 개 + 출처 라벨. 6열 격자라 라벨이 볼 바로 아래에 정렬된다. */
+.dream-set-balls {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--space-1);
+  justify-items: center;
+}
+
+.dream-ball {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  position: relative;
+}
+
+.dream-ball .ball {
+  /* 테두리가 볼 밖으로 그려지므로 자리를 비워 둔다. */
+  outline: 2px var(--origin-line, none) var(--origin-ink, transparent);
+  outline-offset: 2px;
+}
+
+.dream-ball-tag {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--origin-ink);
+}
+
+/* ── 범례 ─────────────────────────────────────────────── */
+
+.dream-legend {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3);
+  list-style: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+
+@media (min-width: 640px) {
+  .dream-legend {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.dream-legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+}
+
+/* 조합 안에서 보게 될 라벨과 **똑같은 모양**이라야 눈이 잇는다. */
+.dream-legend-swatch {
+  flex: 0 0 auto;
+  min-width: 34px;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px var(--origin-line, solid) var(--origin-ink);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  line-height: 1;
+  text-align: center;
+  color: var(--origin-ink);
+}
+
+.dream-sets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ── 회차 번호 이력 ──────────────────────────────────────
+ * → components/RoundNumberHistory.tsx
+ * ──────────────────────────────────────────────────────── */
+
+/*
+ * 회차마다 달라지는 요약 문장. 이 절의 값어치가 여기 있으므로 본문보다 크게 세운다.
+ */
+.round-history-lede {
+  margin: 0 0 var(--space-4);
+  font-size: var(--fs-md);
+  line-height: var(--lh-body);
+  font-weight: var(--fw-medium);
+  color: var(--color-text);
+}
+
+.round-history {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 여섯 줄이라 데스크톱에서 한 열로 두면 오른쪽이 크게 빈다. */
+@media (min-width: 768px) {
+  .round-history {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.round-history-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+
+/*
+ * ⚠ `min-width: 0` 이 없으면 flex 아이템이 내용 폭 아래로 줄지 않아 좁은 화면에서 카드를
+ *   넘긴다. 문장이 길어 실제로 넘쳤다.
+ */
+.round-history-body {
+  min-width: 0;
+}
+
+.round-history-main {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: var(--color-text);
+}
+
+/* 가운뎃점 앞뒤로 숨 쉴 자리. 두 사실이 한 줄에 붙어 있으면 하나로 읽힌다. */
+.round-history-sep {
+  color: var(--color-text-subtle);
+}
+
+.round-history-sub {
+  margin: var(--space-1) 0 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+}
+
+/* ── 유튜브 영상 ─────────────────────────────────────────
+ * → components/video/*, app/videos/*
+ * ──────────────────────────────────────────────────────── */
+
+/* ── 출처 표시 (YouTube 정책 III.F.2) ──────────────────── */
+
+/*
+ * ⚠ 이것은 장식이 아니라 **의무**다. 썸네일이 들어가는 모든 곳에 붙는다 — 홈 카드까지다.
+ *   눈에 안 띄게 숨기지 않는다(→ components/video/YouTubeAttribution.tsx).
+ */
+.yt-credit {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: var(--space-3) 0 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+}
+
+.yt-credit[data-compact] {
+  margin-top: var(--space-2);
+}
+
+.yt-credit svg {
+  flex: 0 0 auto;
+}
+
+.yt-credit a {
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.yt-credit a:hover {
+  color: var(--color-primary);
+}
+
+/* ── 갈래 선택 ────────────────────────────────────────── */
+
+.video-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+/* 링크지만 버튼처럼 보인다. 실제로 링크인 이유는 JS 없이도 동작해야 하기 때문이다. */
+.video-kind {
+  display: inline-grid;
+  place-items: center;
+  min-height: 44px;
+  padding-inline: var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--color-text);
+}
+
+.video-kind:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.video-kind[data-active] {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-on-accent);
+  font-weight: var(--fw-semibold);
+}
+
+/* 쇼츠 판별이 추정임을 밝히는 문구. 걸러 본 사람에게만 필요하므로 필터를 켰을 때만 낸다. */
+.video-kind-note {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+}
+
+/* ── 카드 ─────────────────────────────────────────────── */
+
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.video-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.video-card:hover {
+  border-color: var(--color-primary);
+}
+
+/*
+ * 썸네일 자리.
+ * ⚠ **`aspect-ratio` 로 높이를 예약한다.** 외부 이미지는 도착 시각이 불확정이라 예약하지
+ *   않으면 그대로 CLS 가 된다(완료 기준 CLS < 0.1). 16:9 는 유튜브 썸네일의 비율이다.
+ * ⚠ 쇼츠라고 비율을 바꾸지 않는다. `shorts_hint` 는 추정이고, 추정으로 레이아웃을 바꾸면
+ *   틀렸을 때 화면이 이상해진다.
+ */
+.video-card-thumb {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 9;
+  background: var(--color-surface-2);
+}
+
+.video-card-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* 썸네일 URL 이 없는 영상. 빈 칸을 남기되 무너지지 않게 한다. */
+.video-card-noimg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, var(--color-surface-2), var(--color-border));
+}
+
+/*
+ * 재생시간 배지.
+ * ⚠ 플레이어 위가 아니라 **썸네일 위**다. 정책이 금지하는 것은 플레이어 오버레이다.
+ */
+.video-card-duration {
+  position: absolute;
+  right: var(--space-2);
+  bottom: var(--space-2);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: rgb(26 29 46 / 0.82);
+  color: #fff;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+
+.video-card-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: var(--space-3);
+}
+
+/*
+ * 제목.
+ * ⚠ **낱말을 지우지 않는다.** 줄 수만 제한한다 — 말줄임(`…`)은 되지만 우리가 문장을
+ *   고치는 것은 YouTube 정책 위반이다(→ forbidden-expressions.md 외부 텍스트 절).
+ */
+.video-card-title {
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-body);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.video-card-title a {
+  color: var(--color-text);
+}
+
+.video-card-title a:hover {
+  color: var(--color-primary);
+}
+
+.video-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+/* 항목 사이 가운뎃점. 마지막 뒤에는 붙이지 않는다. */
+.video-card-meta > span + span::before {
+  content: '· ';
+  color: var(--color-text-subtle);
+}
+
+/* 출처 표시를 카드 맨 아래에 붙인다. 카드 높이가 달라도 자리가 흔들리지 않는다. */
+.video-card-body .yt-credit {
+  margin-top: auto;
+  padding-top: var(--space-2);
+}
+
+/* ── 쪽 이동 ──────────────────────────────────────────── */
+
+.video-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.video-pager-now {
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+/* ── 상세: 임베드 ─────────────────────────────────────── */
+
+/*
+ * ⚠ YouTube 자료 사용 프레임워크(RMF)의 요구를 CSS 로 못박는다.
+ *   ① 최소 200×200px — `min-width`·`min-height`
+ *   ② 오버레이 금지 — 이 요소 위에 아무것도 얹지 않는다. 배지도 버튼도 두지 않는다
+ *   ③ 자동재생 금지 — iframe src 에 `autoplay` 를 넣지 않는다(컴포넌트 쪽)
+ * ⚠ `aspect-ratio` 로 높이를 예약한다. iframe 이 늦게 뜨며 아래를 밀면 그대로 CLS 다.
+ */
+.video-embed {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  min-width: 200px;
+  min-height: 200px;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  background: #000;
+}
+
+.video-embed iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+/* ── 상세: 제목·메타 ──────────────────────────────────── */
+
+/*
+ * ⚠ 이 `h1` 에는 **남이 쓴 문장**이 들어간다. 원문 그대로 싣되, 바로 아래 출처 표시가
+ *   누가 쓴 것인지 밝힌다. 우리 문장처럼 보이게 두지 않는다.
+ */
+.video-title {
+  margin: var(--space-4) 0 0;
+  font-size: var(--fs-h2);
+  line-height: var(--lh-heading);
+}
+
+.video-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.video-meta > span + span::before {
+  content: '· ';
+  color: var(--color-text-subtle);
+}
+
+/* ── 운영자 화면 ─────────────────────────────────────────
+ * → app/admin/**
+ *
+ * ⚠ 공개 화면이 아니다. 여기 규칙을 다른 화면에 재사용하지 않는다 — 이 화면은 **밀도가
+ *   가독성보다 앞선다.** 운영자가 한 눈에 많이 보려는 화면이라 여백을 아낀다.
+ * ⚠ 그래도 대비와 터치 타겟은 지킨다. 운영자도 사람이고, axe 는 여기도 검사한다.
+ * ──────────────────────────────────────────────────────── */
+
+.admin-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin: var(--space-6) 0 var(--space-4);
+}
+
+.admin-head h1 {
+  margin: 0;
+  font-size: var(--fs-h2);
+}
+
+.admin-login {
+  max-width: 380px;
+}
+
+.admin-login label {
+  font-weight: var(--fw-semibold);
+}
+
+.admin-login .btn {
+  width: 100%;
+}
+
+/* 오류 자리를 늘 비워 둔다. 없다가 생기면 버튼이 아래로 밀린다(CLS). */
+.admin-error {
+  min-height: 1.4em;
+  margin: var(--space-3) 0;
+  font-size: var(--fs-sm);
+  color: var(--color-danger);
+}
+
+/* ── 잡별 요약 ────────────────────────────────────────── */
+
+.admin-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-summary-card {
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+/*
+ * ⚠ 실패가 하나라도 있으면 카드째 눈에 띄어야 한다. 이 화면의 목적이 "무엇이 잘못됐는지
+ *   찾는 것" 이다. 색만으로 알리지 않고 아래 '실패 N' 글자가 함께 뜬다.
+ */
+.admin-summary-card[data-failed] {
+  border-color: var(--color-danger);
+  background: var(--color-danger-soft, var(--color-surface));
+}
+
+.admin-summary-job {
+  margin: 0;
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-sm);
+}
+
+.admin-summary-run {
+  margin: var(--space-1) 0 var(--space-2);
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+.admin-summary-fail {
+  color: var(--color-danger);
+}
+
+.admin-summary-kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px var(--space-2);
+  margin: 0;
+  font-size: var(--fs-xs);
+}
+
+.admin-summary-kv dt {
+  color: var(--color-text-muted);
+}
+
+.admin-summary-kv dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 마지막 성공이 없는 잡. 한 번도 성공한 적 없다는 뜻이라 눈에 띄어야 한다. */
+.admin-summary-kv dd[data-none] {
+  color: var(--color-danger);
+  font-weight: var(--fw-semibold);
+}
+
+/* ── 필터 ─────────────────────────────────────────────── */
+
+.admin-filters {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.admin-filter > span {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--color-text-muted);
+}
+
+.admin-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.admin-chip {
+  /* 터치 타겟. 밀도를 아끼되 44px 은 지킨다. */
+  min-height: 36px;
+  padding-inline: var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  font-size: var(--fs-xs);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.admin-chip:hover {
+  border-color: var(--color-primary);
+}
+
+.admin-chip[data-active] {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-on-accent);
+  font-weight: var(--fw-semibold);
+}
+
+/* ── 실행 목록 ────────────────────────────────────────── */
+
+.admin-runs {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-run {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+/* 실패한 실행은 테두리로 먼저 알린다. 배지 글자가 그것을 말로 확인해 준다. */
+.admin-run[data-status='failed'] {
+  border-color: var(--color-danger);
+}
+
+.admin-run > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  list-style: none;
+}
+
+.admin-run > summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-run > summary:hover {
+  background: var(--color-surface-2);
+}
+
+.admin-run-status {
+  flex: 0 0 auto;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+}
+
+.admin-run-status[data-status='success'] {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.admin-run-status[data-status='failed'] {
+  background: var(--color-danger);
+  color: var(--color-on-accent);
+}
+
+.admin-run-job {
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-sm);
+}
+
+.admin-run-time,
+.admin-run-meta {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 오른쪽 끝으로 민다. 위 규칙과 합치지 않는 것은 `.admin-run-time` 에는 걸면 안 되기 때문이다. */
+.admin-run-meta {
+  margin-left: auto;
+}
+
+.admin-run-body {
+  padding: 0 var(--space-3) var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+/*
+ * 오류 전문.
+ * ⚠ 줄바꿈과 들여쓰기를 살린다 — 스택트레이스는 그래야 읽힌다.
+ * ⚠ 긴 줄은 가로로 스크롤한다. 강제로 접으면 어디서 끊겼는지 알 수 없다. `body` 는
+ *   넘치지 않는다(자기 안에서만 스크롤).
+ */
+.admin-run-error {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+  white-space: pre;
+  overflow-x: auto;
+  color: var(--color-text);
+}
+
+/* 단계별 통과 건수. 키가 잡마다 다르므로 폭을 내용에 맡긴다. */
+.admin-stat {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+}
+
+.admin-stat > div {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+
+.admin-stat dt {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+.admin-stat dd {
+  margin: 2px 0 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 로그 타임라인 ────────────────────────────────────── */
+
+.admin-logs {
+  display: grid;
+  gap: var(--space-1);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-logs > li {
+  display: grid;
+  grid-template-columns: max-content max-content 1fr;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-body);
+}
+
+.admin-log-time {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-log-level {
+  font-weight: var(--fw-bold);
+  color: var(--color-warning);
+}
+
+/* ERROR·CRITICAL 은 WARNING 과 달라 보여야 한다. 색과 굵기를 함께 쓴다. */
+.admin-logs > li[data-level='ERROR'] .admin-log-level,
+.admin-logs > li[data-level='CRITICAL'] .admin-log-level {
+  color: var(--color-danger);
+}
+
+.admin-log-msg {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.admin-run-none,
+.admin-empty {
+  margin: var(--space-3) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.admin-more {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-4);
+  min-height: 44px;
+  align-items: center;
+}
+
+.admin-busy {
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+/* ── 자주 묻는 질문 ─────────────────────────────────────
+ * <details>/<summary> 기반(→ components/Faq.tsx). 종전에는 인라인 style 로 그렸는데,
+ * 그러면 다크 모드·반응형을 손댈 수 없고 편집 지점이 컴포넌트에 흩어진다.
+ * ──────────────────────────────────────────────────────── */
+
+.faq-list {
+  display: grid;
+  gap: var(--space-2);
+  /*
+   * ⚠ **이 한 줄이 없으면 옆 질문이 같이 펼쳐진 것처럼 보인다.**
+   *   1024px 이상에서 이 목록은 2열 grid 가 되는데, grid 항목의 기본 정렬은 `stretch` 라
+   *   같은 행의 두 칸이 **항상 같은 높이**가 된다. 한쪽을 펼치면 반대쪽 상자도 그만큼
+   *   늘어나고, 그 안은 비어 있으니 "누르지도 않은 질문이 빈 채로 열렸다" 로 읽힌다
+   *   (사용자 지적). 각 항목이 제 내용만큼만 차지하게 못박는다.
+   */
+  align-items: start;
+}
+
+.faq-item {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+/* 펼쳐진 항목은 테두리를 강조색으로 — 색만이 아니라 <details> 의 상태가 이미 전달된다. */
+/*
+ * 펼친 항목. 종전에는 테두리 색 하나만 바뀌어 열렸는지 알아보기 어려웠다.
+ * 배경과 왼쪽 막대를 함께 바꿔 상태가 분명해진다(색 하나에만 기대지 않는다).
+ */
+/*
+ * 펼친 항목. 테두리와 배경으로만 알린다.
+ * ⚠ 왼쪽 세로 막대(`box-shadow: inset 3px 0 0`)를 넣었다가 걷어냈다 — 장식이 과하다는
+ *   지적(사용자). 상태는 배경 하나로 충분히 읽히고, <details> 가 이미 말해 준다.
+ */
+.faq-item[open] {
+  border-color: color-mix(in oklab, var(--color-primary) 45%, transparent);
+  background: var(--color-primary-soft);
+}
+
+.faq-item > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  /* 터치 타겟 44px. padding 만으로는 짧은 질문에서 모자란다. */
+  min-height: 44px;
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  /* 기본 삼각형을 지운다 — 오른쪽 갈매기(.faq-chevron)가 대신한다. */
+  list-style: none;
+}
+
+.faq-item > summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq-item > summary:hover {
+  background: var(--color-surface-2);
+}
+
+.faq-question {
+  flex: 1;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-body);
+}
+
+.faq-chevron {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  /* 질문 글자를 밀어내지 않을 만큼만. 크기는 SVG 속성으로도 못박혀 있다(Faq.tsx). */
+  width: 16px;
+  height: 16px;
+  color: var(--color-text-subtle);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.faq-chevron svg {
+  width: 14px;
+  height: 14px;
+}
+
+.faq-item[open] > summary .faq-chevron {
+  transform: rotate(180deg);
+  color: var(--color-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .faq-chevron {
+    transition: none;
+  }
+}
+
+/* 답변. 왼쪽 세로선이 질문과 시각적으로 이어 준다 — 어느 질문의 답인지 눈으로 따라간다. */
+/* ⚠ 답변 왼쪽 세로선도 함께 걷어냈다(위 주석과 같은 이유). 들여쓰기만으로 잇는다. */
+.faq-answer {
+  margin: 0 var(--space-4) var(--space-4);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+}
+
+.faq-intro {
+  margin: 0 0 var(--space-4);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+}
+
+/*
+ * ⚠ **2열로 나누지 않는다.** 넓은 화면에서 두 열로 폈더니 질문이 좌우로 흩어져 읽는
+ *   순서가 흐려졌고, 무엇보다 grid 가 같은 행의 높이를 맞추는 탓에 한쪽을 펼치면 반대쪽
+ *   빈 상자가 같이 늘어나 보였다. 한 줄씩 세로로 쌓는다(사용자 지시).
+ *   `align-items: start` 는 1열에서도 무해하므로 그대로 둔다.
+ */
+@media (min-width: 1024px) {
+  .faq-list {
+    gap: var(--space-3);
+  }
+}
+
+/* ── 도움말 ───────────────────────────────────────────── */
+
+.help-tip {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+}
+
+.help-tip-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 50%;
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+}
+
+/* 시각 크기는 22px 지만 히트 영역은 44px 를 채운다(터치 타겟 규약). */
+.help-tip-btn::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+}
+
+.help-tip-btn[aria-expanded='true'] {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+/*
+  접힌 상태에서도 DOM 에 남긴다 — 이 설명 자체가 페이지의 콘텐츠 가치이고, 검색엔진과
+  스크린리더가 읽을 수 있어야 한다. 그래서 display:none 을 쓰지 않는다.
+*/
+.help-tip-body {
+  position: absolute;
+  left: 0;
+  top: calc(100% + var(--space-2));
+  z-index: 5;
+  width: min(320px, 78vw);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-pop);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+  /* 접힘: 화면에서 감추되 접근성 트리에는 남긴다. */
+  clip-path: inset(50%);
+  opacity: 0;
+  pointer-events: none;
+  /*
+    화면 밖으로 나가지 않게 가로로 미는 양. 값은 HelpTip 이 열릴 때 재서 넣는다.
+    ⚠ CSS 만으로는 정할 수 없다 — 버튼이 제목 줄의 어디에 있는지에 달렸고, 그건 글자
+      수와 화면 폭에 따라 매번 달라진다. 375px 에서 최대 203px 잘렸다(2026-08-21 실측).
+      `left` 를 바꾸지 않고 transform 으로 미는 이유는 리플로우를 만들지 않기 위해서다.
+  */
+  transform: translateX(var(--tip-shift, 0px));
+}
+
+.help-tip-body[data-open] {
+  clip-path: none;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ── 번호 하나 조회 ───────────────────────────────────── */
+
+.num-inspector {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.num-inspector-lede {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+/*
+  45개 선택 버튼. 볼 자체는 작지만 버튼이 44px 를 채워 터치 타겟 규약을 지킨다
+  (→ docs/wiki/20-design/responsive-rules.md).
+*/
+.num-pick {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: var(--space-1);
+}
+
+.num-pick-btn {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease-out);
+}
+
+.num-pick-btn:hover {
+  background: var(--color-surface-2);
+}
+
+.num-pick-btn[data-active] {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.num-result {
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+/* 표보다 문장을 먼저 보여준다 — 숫자를 사용자가 스스로 해석하게 두지 않는다. */
+.num-headline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-4);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+
+.num-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.num-badge {
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--color-text-muted);
+}
+
+/* 배지 색은 보조 신호일 뿐이다 — 라벨의 말이 정보를 다 전달한다. */
+.num-badge[data-tone='hot'] {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+.num-badge[data-tone='cold'] {
+  border-color: var(--color-info);
+  color: var(--color-info);
+}
+.num-badge[data-tone='up'] {
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+.num-badge[data-tone='down'] {
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+}
+
+.num-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-3);
+  margin: 0 0 var(--space-5);
+}
+
+.num-facts > div {
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+}
+
+.num-facts dt {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+.num-facts dd {
+  margin: 4px 0 0;
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.num-section {
+  margin-top: var(--space-5);
+}
+
+.num-section h3 {
+  margin: 0 0 var(--space-3);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+}
+
+.num-companions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.num-companions li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.num-rounds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.num-rounds-hint {
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+/*
+ * 회차 칩. **누를 수 있다는 것이 정지 상태에서 보여야 한다.**
+ * 종전에는 회색 테두리 + 검은 글자라 호버하기 전에는 그냥 나열된 라벨처럼 보였다
+ * (사용자 지적). 호버는 마우스에만 있는 신호라 터치 사용자에게는 아무것도 알리지 못한다.
+ * 그래서 기본 상태에서 링크색 테두리·글자와 이동 화살표(›)를 함께 둔다.
+ */
+.num-rounds a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding-inline: var(--space-3);
+  border: 1px solid color-mix(in oklab, var(--color-primary) 40%, transparent);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: border-color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+
+.num-rounds a:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+/* 날짜는 보조 정보다. 링크색을 그대로 쓰면 회차 번호와 무게가 같아진다. */
+.num-rounds time {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+  color: var(--color-text-muted);
+}
+
+/* 이동 표식. 색·모양 둘 다로 알리고, 뜻은 링크의 aria-label 이 문장으로 준다. */
+.num-rounds-go {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-bold);
+  line-height: 1;
+  opacity: 0.8;
+}
+
+/* ── 빈도: 히트맵 + 번호대 ────────────────────────────── */
+
+.freq-views {
+  display: grid;
+  gap: var(--space-6);
+  margin-top: var(--space-4);
+}
+
+.heat-figure {
+  margin: 0;
+}
+
+/*
+ * 격자 폭 상한.
+ *
+ * 칸은 남는 폭을 10등분해 가지므로 컨테이너가 넓으면 한없이 커진다 — 1280px 화면에서
+ * 칸이 97px 였다(볼이 무너져 있어서 눈에 띄지 않았을 뿐이다). 볼을 칸에 맞춘 뒤에는 그대로
+ * 두면 번호판이 화면을 뒤덮는다. 상한을 두어 **볼이 대략 --ball-lg(44~52px) 크기**에서
+ * 멈추게 한다. 좁은 화면에서는 상한에 닿지 않으므로 아무 영향이 없다.
+ */
+/*
+ * ⚠ 폭 상한을 두지 않는다. **카드 폭을 그대로 채운다.**
+ *   종전에 620px 로 묶었더니 넓은 화면에서 번호판이 카드 왼쪽에 몰려 보였다(사용자 지적).
+ *   칸이 커지는 만큼 볼도 커지지만, 아래에서 볼 비율을 낮춰 히트 배경이 드러나게 했다.
+ */
+.heat-grid {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.heat-row {
+  display: grid;
+  /* 라벨 + 10칸. 고정 폭을 쓰지 않아 375px 에서도 넘치지 않는다. */
+  grid-template-columns: max-content repeat(10, minmax(0, 1fr));
+  gap: 3px;
+  align-items: center;
+}
+
+.heat-label {
+  padding-right: 4px;
+  /* '01–10' 처럼 자릿수를 맞춰 두었으므로 고정폭 숫자로 그려야 행마다 폭이 같다. */
+  font-variant-numeric: tabular-nums;
+  font-size: 0.58rem;
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-subtle);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/*
+ * 칸 배경의 진하기 하나로 빈도를 표현한다. `--heat` 는 최댓값 대비 0~1 로 정규화한 값이고
+ * 서버 응답을 컴포넌트가 옮긴 것이다.
+ *
+ * ⚠ 볼 색(`--ball-*`)은 절대 건드리지 않는다. 빈도를 볼에 칠하면 공식 5구간 색이 왜곡되어
+ *   사용자가 색만 보고 구간을 아는 학습된 매핑이 깨진다(→ 00-decisions/0009).
+ *   그래서 빈도는 **볼 뒤 칸**에만 칠한다.
+ *
+ * 칸은 사각형이고 볼은 원이라 네 모서리가 늘 배경으로 남는다 — 링이 얇아도 진하기가 읽힌다.
+ * 0회는 아예 색을 얹지 않아 '나오지 않았다' 는 사실이 분명해진다.
+ */
+.heat-cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  /* 볼(원)보다 각지게 두어 모서리를 남긴다. */
+  border-radius: 6px;
+  /* 볼 안 숫자를 **칸 크기에 비례**시키기 위한 기준. → .heat-cell .ball 의 cqw */
+  container-type: inline-size;
+  /*
+   * 볼이 칸을 꽉 채우지 않게 하는 여백. % 라 칸 크기가 변해도 비율이 유지된다.
+   *
+   * ⚠ **이 값이 히트맵의 가독성을 정한다.** 7% 였을 때 볼이 칸의 86% 를 덮어 "볼이 너무
+   *   커서 히트맵 자체가 안 보인다" 는 지적을 받았다. 볼을 40% 줄여(86% → 52%) 칸 배경이
+   *   드러나게 했다. 볼 안 숫자는 `.heat-cell .ball` 의 cqw 비율이 함께 따라간다.
+   * ⚠ 모바일에서는 칸이 24px 라 같은 비율이면 볼이 12px 로 읽을 수 없다. 그래서
+   *   좁은 화면에서는 여백을 덜 준다(아래 미디어쿼리).
+   */
+  padding: 24%;
+  background: color-mix(in oklab, var(--color-primary) calc(var(--heat, 0) * 100%), transparent);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+/*
+ * ★ 볼이 칸을 **채우게** 한다.
+ *
+ * ⚠ `.heat-cell .ball { width: 100% }` 만으로는 안 된다 — 실제로 안 되고 있었다.
+ *   LottoBall 은 `.ball-hit > .ball-wrap > .ball` 3중 구조인데, 가운데 `.ball-wrap` 이
+ *   `display: inline-grid` 라 **자기 내용(=볼)에 맞춰 크기가 정해진다.** 그 안에서 볼이
+ *   다시 `100%` 를 요구하면 서로를 기준으로 삼는 순환이 되어 볼이 글자 크기까지 쪼그라든다.
+ *   실측: 칸 24px 에 볼 **5px**, 데스크톱은 칸 97px 에 볼 8px 이었다(2026-08-21).
+ *   그래서 두 껍데기를 먼저 칸에 맞춰 늘려야 한다. `place-items: stretch` 가 핵심이다.
+ * ⚠ `.ball-hit` 의 min-width/height 44px 도 여기서는 풀어야 한다 — 격자를 밀어낸다.
+ */
+.heat-cell .ball-hit,
+.heat-cell .ball-wrap {
+  display: grid;
+  place-items: stretch;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+/*
+ * 볼은 칸을 그대로 채운다.
+ *
+ * 글자는 뷰포트(vw)가 아니라 **칸 폭(cqw)** 에 비례시킨다. vw 로 묶으면 격자가 상한
+ * (620px)에 닿은 뒤에도 화면 폭만 따라가서, 볼은 그대로인데 글자만 커지거나 반대로
+ * 상한에 걸려 큰 볼 안에 작은 숫자가 떠 있게 된다. 칸을 기준으로 삼으면 어느 화면에서도
+ * 볼과 숫자의 비율이 같다(→ .heat-cell 의 container-type).
+ * 36% 는 두 자리 숫자('45')가 볼 안에 여유 있게 들어가는 값이다. clamp 의 하한은 아주
+ * 좁은 화면에서 글자가 사라지지 않게, 상한은 상한 폭에서 과하지 않게 잡았다.
+ */
+.heat-cell .ball {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  /* 볼이 작아진 만큼(52%) 글자도 함께 줄인다. 36cqw × 0.6 ≈ 21cqw. */
+  font-size: clamp(0.45rem, 21cqw, 1rem);
+  /*
+    ⚠ 볼 둘레에 배경색 링을 둘러 칸 배경과 분리한다. 이게 없으면 **파란 볼(11~20)이 진한
+    파란 히트 배경에 묻혀** 번호가 보이지 않는다(실측). 히트 색과 볼 색이 우연히 같은
+    계열일 때 생기는 문제라, 히트 색을 무엇으로 바꾸든 링은 필요하다.
+  */
+  box-shadow: 0 0 0 2px var(--color-surface);
+}
+
+/*
+ * 좁은 화면 보정.
+ * 375px 에서 칸은 24px 안팎이라 여백 24% 면 볼이 12px 로 줄어 숫자를 읽을 수 없다.
+ * 칸이 작을수록 볼이 칸을 더 채워야 한다 — 넓은 화면과 반대 방향의 보정이다.
+ */
+@media (max-width: 639px) {
+  .heat-cell {
+    padding: 10%;
+  }
+  .heat-cell .ball {
+    font-size: clamp(0.45rem, 32cqw, 1rem);
+  }
+}
+
+.heat-caption {
+  margin: var(--space-3) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+.band-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.band-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.band-label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.band-bar {
+  display: block;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  overflow: hidden;
+}
+
+.band-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+}
+
+/* 번호대 막대는 볼 공식 5구간 색을 그대로 쓴다 — 같은 색이 같은 구간을 뜻해야 한다. */
+.band-range-1 { background: var(--ball-1-10); }
+.band-range-2 { background: var(--ball-11-20); }
+.band-range-3 { background: var(--ball-21-30); }
+.band-range-4 { background: var(--ball-31-40); }
+.band-range-5 { background: var(--ball-41-45); }
+
+.band-value {
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── 패턴 카드 ────────────────────────────────────────── */
+
+.pattern-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+/*
+ * ⚠ 카드마다 왼쪽에 색 띠를 두었다가 뺐다. 홀짝이 보라색이고 고저가 초록색일 **이유가
+ *   없었다** — 뜻 없는 색은 장식일 뿐이고, 그런 장식이 화면을 템플릿처럼 보이게 한다
+ *   (사용자 지적). 카드는 중립으로 두고, 구분은 제목과 결론 한 줄이 맡는다.
+ *   색은 카드 안에서 **가장 흔한 항목 하나**를 가리키는 데만 쓴다.
+ */
+.pattern-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+/* 이 카드가 말하는 한 가지. 훑는 사람은 이 줄만 읽어도 결론을 얻는다. */
+.pattern-card-lead {
+  margin: 0 0 var(--space-4);
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.pattern-card-lead strong {
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.pattern-card-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-semibold);
+}
+
+.pattern-card-body {
+  flex: 1;
+}
+
+.pattern-card-foot {
+  margin: var(--space-4) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px dashed var(--color-border);
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+@media (min-width: 640px) {
+  .pattern-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ── 비율 막대 (홀짝·고저·연속번호) ───────────────────── */
+
+.dist-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dist-row {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.dist-label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.dist-note {
+  margin-left: 6px;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+  color: var(--color-text-muted);
+}
+
+.dist-bar {
+  display: block;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  overflow: hidden;
+}
+
+.dist-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  /* 기본은 옅은 톤. 색이 여러 개면 무엇이 중요한지 알 수 없다. */
+  background: color-mix(in oklab, var(--color-primary) 32%, transparent);
+}
+
+/* 가장 흔한 모양 하나만 진하게 — 색이 사실을 가리킨다. */
+.dist-row[data-top] .dist-bar-fill {
+  background: var(--color-primary);
+}
+
+.dist-row[data-top] .dist-label,
+.dist-row[data-top] .dist-value {
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+}
+
+.dist-value {
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── 합계 히스토그램 ──────────────────────────────────── */
+
+/*
+  가로로 길어지므로 자기 컨테이너 안에서만 스크롤한다. body 는 절대 넘기지 않는다
+  (→ docs/wiki/20-design/responsive-rules.md).
+*/
+.hist {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 150px;
+  /* 마지막 칸의 눈금 라벨이 컬럼 밖으로 삐져나가 잘리므로 오른쪽에 여유를 둔다(실측). */
+  padding: 0 var(--space-4) var(--space-5) 0;
+  overflow-x: auto;
+  position: relative;
+}
+
+.hist-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  flex: 1 0 18px;
+  height: 100%;
+  position: relative;
+}
+
+.hist-bar {
+  display: block;
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+  background: color-mix(in oklab, var(--color-primary) 32%, transparent);
+}
+
+/* 가장 많은 회차가 몰린 구간. 종 모양의 꼭대기가 어디인지 바로 보인다. */
+.hist-col[data-top] .hist-bar {
+  background: var(--color-primary);
+}
+
+.hist-label {
+  position: absolute;
+  bottom: calc(var(--space-5) * -1);
+  font-size: 0.6rem;
+  color: var(--color-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 눈금이 촘촘하면 겹친다. 좁은 화면에서는 한 칸 걸러 하나만 표시한다. */
+.hist-col:nth-child(even) .hist-label {
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .hist-col:nth-child(even) .hist-label {
+    display: block;
+  }
+}
+
+/* ── 끝자리 분포 ──────────────────────────────────────── */
+
+.tail-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tail-row {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.tail-label {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.tail-bar {
+  display: block;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  overflow: hidden;
+}
+
+.tail-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: color-mix(in oklab, var(--color-primary) 32%, transparent);
+}
+
+.tail-row[data-top] .tail-bar-fill {
+  background: var(--color-primary);
+}
+
+.tail-row[data-top] .tail-label,
+.tail-row[data-top] .tail-value {
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+}
+
+.tail-value {
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+/* ── 순위 표 (003) ────────────────────────────────────────
+ * 여섯 열(순위·번호·출현·비율·최근 출현·추세)은 375px 에 들어가지 않는다. 기본 .stat-table
+ * 의 `min-width: 360px` + `nowrap` 을 그대로 두면 마지막 열이 늘 잘려 보인다(실측).
+ * 그래서 이 변형에서만 폭을 풀고, 넓어지면 원래 크기로 돌아간다. mobile-first.
+ * ──────────────────────────────────────────────────────── */
+
+.stat-table-rank {
+  min-width: 0;
+  font-size: var(--fs-xs);
+}
+
+.stat-table-rank td {
+  padding: var(--space-2) 5px;
+  /* '1232회 · 2회 전' 처럼 긴 값이 두 줄로 접히게 한다. */
+  white-space: normal;
+}
+
+/*
+ * 머리글은 접히면 안 된다. 표를 2열로 나눈 뒤 '순위'·'출현' 이 글자마다 줄바꿈돼
+ * 세로로 늘어졌다(실측). 두 글자짜리 라벨이라 접어서 얻을 폭도 없다.
+ */
+.stat-table-rank th {
+  padding: var(--space-2) 5px;
+  white-space: nowrap;
+}
+
+/* 숫자 열은 접히면 오히려 읽기 나빠 한 줄로 유지한다. */
+.stat-table-rank .stat-num {
+  white-space: nowrap;
+}
+
+/*
+ * 좁은 화면에서 추세는 기호(↑↓—)만 보인다. `display:none` 이 아니라 시각적으로만 감추는
+ * 방식을 쓴다 — 라벨을 아예 지우면 기호의 뜻이 스크린리더에 전달되지 않고, 텍스트를 따로
+ * 복제하면 두 번 읽힌다.
+ */
+.stat-table-rank .trend-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/*
+ * 기본 `.trend` 는 `inline-grid` 라 자식(기호·라벨)이 각각 한 행을 차지한다 — 기호 아래에
+ * 라벨이 떨어져 배지가 두 줄로 쪼개졌다(실측). 이 표에서는 둘을 한 줄에 놓아야 하므로
+ * flex 로 바꾼다. 다른 화면의 `.trend` 는 건드리지 않는다.
+ */
+.stat-table-rank .trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+@media (min-width: 640px) {
+  .stat-table-rank {
+    font-size: var(--fs-sm);
+  }
+
+  .stat-table-rank th,
+  .stat-table-rank td {
+    padding: var(--space-2);
+  }
+
+  .stat-table-rank .trend-label {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+  }
+}
+
+/* ── 순위 표 폭 배분 · 블록 배치 (사용자 피드백) ──────────
+ * 표가 카드 폭을 다 채우지 못해 내용이 왼쪽에 몰려 보였다. 텍스트 열 하나가 남는 공간을
+ * 흡수하게 하면 나머지 열이 좌우로 퍼진다. `width: 99%` 는 "남는 만큼 가져가라" 는
+ * 관용 표현이다(100% 로 두면 다른 열이 최소 폭으로 짓눌린다).
+ * ──────────────────────────────────────────────────────── */
+
+/* 여섯 열 표: 5번째(최근 출현)가 늘어난다. */
+.stat-table-rank td:nth-child(5),
+.stat-table-rank th:nth-child(5) {
+  width: 99%;
+}
+
+/* 네 열 표: 마지막(마지막 출현)이 늘어난다. 위 규칙은 5번째 열이 없어 적용되지 않는다. */
+.stat-table-overdue td:nth-child(4),
+.stat-table-overdue th:nth-child(4) {
+  width: 99%;
+}
+
+/*
+ * 넓은 화면에서 세 블록을 세로로만 쌓으면 오른쪽이 통째로 비어 화면이 한쪽으로 쏠려
+ * 보인다. 앞의 두 표(같은 여섯 열)를 나란히 놓고, 열 수가 다른 세 번째는 전폭으로 둔다.
+ */
+@media (min-width: 1024px) {
+  .stat-blocks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stat-blocks > .stat-block:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+}
+
+/*
+ * 추세 범례. 표 아래에 항상 보인다(팝업이 스크롤 컨테이너에 잘려 대체한 것).
+ * 안에 들어가는 `.trend` 배지는 표에서 쓰는 것과 **같은 모양**이라 눈으로 바로 대응된다.
+ */
+.trend-legend {
+  margin: var(--space-3) 0 0;
+  font-size: var(--fs-xs);
+  line-height: 1.9;
+  color: var(--color-text-muted);
+}
+
+.trend-legend .trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  /* 배지 뒤에 쉼표가 오므로 오른쪽 여백은 최소로 — 안 그러면 "배지 , 같으면" 처럼 벌어진다. */
+  margin-left: 3px;
+  margin-right: 1px;
+  font-size: var(--fs-xs);
+  vertical-align: middle;
+}
+
+/*
+ * 카드가 다섯 장이라 2열에서 마지막 한 장만 홀로 남아 오른쪽이 빈다.
+ * 끝자리 카드는 열 개 행이라 전폭이 오히려 읽기 좋다.
+ */
+@media (min-width: 640px) {
+  .pattern-grid > .pattern-card:nth-child(5) {
+    grid-column: 1 / -1;
+  }
+}
+
+/*
+ * 뉴스 목록이 스트리밍으로 도착하기 전까지 자리를 잡아 두는 껍데기.
+ * 높이를 예약하지 않으면 목록이 늦게 채워질 때 아래 광고·설명이 통째로 밀린다(CLS).
+ * 값은 필터 + 결과 문구 + 20건 카드가 차지하던 실제 높이에서 왔다.
+ */
+.news-skeleton {
+  min-height: 640px;
+}
+

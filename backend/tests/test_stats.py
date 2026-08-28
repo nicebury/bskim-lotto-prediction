@@ -42,8 +42,8 @@ def test_overdue_는_window_가_아니라_역대_전체에서_계산한다():
     "20" 이 되어 정보가 사라진다. hot/cold 만 window 를 탄다.
     """
     draws = make_draws(120)
-    narrow = stats.hot_cold(draws, window=5)
-    wide = stats.hot_cold(draws, window=None)
+    narrow = stats.hot_cold(draws, stats.slice_window(draws, 5))
+    wide = stats.hot_cold(draws, draws)
 
     assert narrow["rounds_analyzed"] == 5
     assert wide["rounds_analyzed"] == 120
@@ -72,7 +72,7 @@ def test_최신_회차에_나온_번호의_rounds_since_는_0():
         (1, (1, 2, 3, 4, 5, 6), 45),
         (2, (10, 11, 12, 13, 14, 15), 45),
     )
-    result = stats.hot_cold(draws, window=None)
+    result = stats.hot_cold(draws, draws)
     overdue = {item["number"]: item["rounds_since"] for item in result["overdue"]}
     assert overdue.get(10, 0) == 0 or 10 not in overdue  # 상위 10개에 들지 못할 수도 있다
 
@@ -84,14 +84,14 @@ def test_최신_회차에_나온_번호의_rounds_since_는_0():
 def test_동점이면_번호가_작은_쪽이_먼저():
     """정렬이 불안정하면 같은 요청이 다른 순서를 내고 사용자는 데이터가 바뀐 줄 안다."""
     draws = _draws((1, (1, 2, 3, 4, 5, 6), 45))
-    result = stats.hot_cold(draws, window=None)
+    result = stats.hot_cold(draws, draws)
     assert [item["number"] for item in result["hot"][:6]] == [1, 2, 3, 4, 5, 6]
 
 
 def test_hot_cold_집합은_hot_cold_응답과_같은_번호를_준다():
     """추천의 hot_count 와 통계 화면의 HOT 목록이 어긋나면 둘 다 신뢰를 잃는다."""
     draws = make_draws(60)
-    response = stats.hot_cold(draws, 20)
+    response = stats.hot_cold(draws, stats.slice_window(draws, 20))
     hot, cold = stats.hot_cold_sets(draws, 20)
 
     assert hot == {item["number"] for item in response["hot"]}
@@ -130,16 +130,19 @@ def test_appearance_rate_는_출현_비율이다():
         (3, (1, 20, 21, 22, 23, 24), 45),
         (4, (30, 31, 32, 33, 34, 35), 45),
     )
-    result = stats.hot_cold(draws, window=None)
+    result = stats.hot_cold(draws, draws)
     hot = {item["number"]: item for item in result["hot"]}
     # 1번은 4회 중 3회 나왔다 → 0.75
     assert hot[1]["appearance_rate"] == 0.75
     assert hot[1]["count"] == 3
 
 
-def test_appearance_rate_는_회차가_없으면_0():
-    result = stats.hot_cold([], window=20)
-    assert all(item["appearance_rate"] == 0.0 for item in result["hot"])
+def test_회차가_없으면_hot_cold_는_빈_배열이다():
+    """45개를 0회로 채워 내보내면 화면에 "1번 0회 · 1위" 가 뜬다 — 정렬의 부산물이지 사실이 아니다."""
+    result = stats.hot_cold([], [])
+    assert result["hot"] == []
+    assert result["cold"] == []
+    assert result["rounds_analyzed"] == 0
 
 
 def test_last_seen_round_는_마지막_출현_회차_번호다():
@@ -148,7 +151,7 @@ def test_last_seen_round_는_마지막_출현_회차_번호다():
         (101, (1, 10, 11, 12, 13, 14), 45),
         (102, (20, 21, 22, 23, 24, 25), 45),
     )
-    result = stats.hot_cold(draws, window=None)
+    result = stats.hot_cold(draws, draws)
     seen = {item["number"]: item["last_seen_round"] for item in result["hot"] + result["cold"]}
     assert seen[1] == 101   # 1번은 101회에 마지막
     assert seen[2] == 100   # 2번은 100회에만
@@ -162,7 +165,7 @@ def test_last_seen_round_는_마지막_출현_회차_번호다():
 def test_last_seen_round_는_회차번호이지_인덱스가_아니다():
     """회차가 1부터 시작하지 않아도 절대 회차 번호를 그대로 준다."""
     draws = _draws((500, (7, 8, 9, 10, 11, 12), 45))
-    result = stats.hot_cold(draws, window=None)
+    result = stats.hot_cold(draws, draws)
     seen = {item["number"]: item["last_seen_round"] for item in result["hot"]}
     assert seen[7] == 500
 
@@ -177,7 +180,7 @@ def test_trend_최근_절반이_많으면_up():
         (5, (1, 30, 31, 32, 33, 34), 45),
         (6, (1, 35, 36, 37, 38, 39), 45),
     )
-    result = stats.hot_cold(draws, window=None)
+    result = stats.hot_cold(draws, draws)
     trend = {item["number"]: item["trend"] for item in result["hot"] + result["cold"]}
     assert trend[1] == "up"     # 뒤 3회에만
     assert trend[10] == "down"  # 앞 3회에만
@@ -204,7 +207,7 @@ def test_trend_회차가_2개_미만이면_flat():
 
 def test_overdue_에_last_seen_round_가_붙는다():
     draws = make_draws(60)
-    result = stats.hot_cold(draws, window=20)
+    result = stats.hot_cold(draws, stats.slice_window(draws, 20))
     for item in result["overdue"]:
         assert "last_seen_round" in item
         # rounds_since 와 last_seen_round 는 같은 출처라 정합해야 한다

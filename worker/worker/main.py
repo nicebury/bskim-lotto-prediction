@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from . import job_log, scheduler
+from . import job_log, log_capture, scheduler
 from .api.internal import router as internal_router
 from .config import settings
 from .db import ping
@@ -25,6 +25,10 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)-7s [%(name)s] %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# 잡 실행 중의 WARNING 이상을 collect_job_log.log_list 에 담는 핸들러.
+# 잡 밖의 로그(기동·HTTP 액세스)는 버퍼가 없어 그냥 통과한다.
+log_capture.install()
 
 
 @asynccontextmanager
@@ -46,6 +50,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         settings.NEWS_CRON,
         "활성" if settings.naver_news_enabled else "비활성(키 없음)",
     )
+    logger.info(
+        "  영상API=%s / LLM보조판정=%s(%s) / 화이트리스트 채널 %d개",
+        "활성" if settings.youtube_enabled else "비활성(키 없음)",
+        "활성" if settings.llm_judge_enabled else "비활성",
+        settings.MODEL,
+        len(settings.youtube_channel_keys),
+    )
     if settings.WORKER_HOST not in ("127.0.0.1", "localhost", "::1"):
         # 죽이지는 않는다 — 실제 바인딩은 uvicorn 인자가 결정하므로 이 값이
         # 곧 노출을 뜻하지는 않는다. 다만 눈에 띄게 남긴다.
@@ -56,6 +67,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     await ping()
     await job_log.cleanup_stale()
+    # 보존 기간을 넘긴 이력 정리. 실패해도 기동을 막지 않는다 —
+    # 이력이 안 지워지는 것보다 워커가 안 뜨는 것이 나쁘다.
+    try:
+        await job_log.cleanup_old()
+    except Exception:  # noqa: BLE001
+        logger.exception("오래된 잡 이력 정리에 실패했다. 기동은 계속한다.")
     scheduler.start()
 
     yield

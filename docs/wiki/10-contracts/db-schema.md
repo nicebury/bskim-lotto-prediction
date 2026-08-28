@@ -20,13 +20,14 @@ updated: 2026-07-09
 
 ---
 
-## 테이블 네 개
+## 테이블 다섯 개
 
 | 물리명 | 논리명 | 비고 |
 |--------|--------|------|
 | `lotto_draw` | 로또 회차별 당첨결과 | `round_no` 자연키 PK |
 | `lotto_prize` | 등위별 당첨정보 | **당분간 비어 있다** |
 | `lotto_news` | 복권 관련 뉴스 | 원문 미저장 |
+| `lotto_video` | 복권 관련 유튜브 영상 | **30일 안에 갱신되거나 사라진다** |
 | `collect_job_log` | 수집 잡 실행이력 | 크론/수동 구분 |
 
 여기에 Alembic 이 `alembic_version` 테이블을 하나 더 만든다. 스키마 버전 한 행짜리 관리용이며 계약의 대상이 아니다. 백엔드는 이 테이블을 읽지 않는다.
@@ -140,6 +141,94 @@ CREATE INDEX ix_lotto_news_published_dttm ON lotto_news (published_dttm DESC);
 
 `summary_desc` 는 **네이버 API 가 돌려주는 요약문**이지 기사 원문이 아니다. 원문을 저장하면 저작권 문제가 생기고 초안 14.3 의 "뉴스는 원문 복제보다 요약/분류/키워드 중심" 원칙에 어긋난다 ([[naver-search-api]]).
 
+### `lotto_video`
+
+2026-08-28 신설. 유튜브 영상의 **메타데이터만** 담는다. 영상 파일·자막·썸네일 이미지는 저장하지 않는다 — `lotto_news` 가 기사 원문을 담지 않는 것과 같은 원칙이다.
+
+```sql
+CREATE TABLE lotto_video (
+    video_id                bigint      GENERATED ALWAYS AS IDENTITY,
+    provider_nm             text        NOT NULL DEFAULT 'youtube',
+    provider_video_key      text        NOT NULL,   -- 유튜브 영상 ID(11자)
+    provider_channel_key    text        NOT NULL,   -- UC 로 시작하는 채널 ID
+    channel_nm              text,
+    title_nm                text        NOT NULL,   -- 원문 그대로. 변조하지 않는다
+    summary_desc            text,                   -- 설명 앞부분만. 전문 아님
+    thumbnail_url           text,                   -- 핫링크용 URL. 이미지는 받지 않는다
+    published_dttm          timestamptz NOT NULL,
+    duration_sec            integer,
+    view_cnt                bigint,                 -- 21억을 넘어 bigint
+    shorts_estimate_cd      text        NOT NULL DEFAULT 'unknown',
+    shorts_basis_desc       text,
+    made_for_kids_cd        text        NOT NULL DEFAULT 'unknown',
+    embeddable_cd           text        NOT NULL DEFAULT 'unknown',
+    privacy_status_cd       text        NOT NULL DEFAULT 'unknown',
+    discovery_cd            text        NOT NULL,
+    round_no                integer,                -- 제목에서 파싱. FK 없음
+    game_cd                 text        NOT NULL DEFAULT 'unknown',
+    keyword_list            text[],
+    collected_dttm          timestamptz NOT NULL DEFAULT now(),
+    refreshed_dttm          timestamptz NOT NULL DEFAULT now(),
+
+    CONSTRAINT pk_lotto_video PRIMARY KEY (video_id),
+    CONSTRAINT uk_lotto_video_provider_key UNIQUE (provider_nm, provider_video_key),
+    CONSTRAINT ck_lotto_video_provider_key      CHECK (provider_video_key <> ''),
+    CONSTRAINT ck_lotto_video_shorts_estimate   CHECK (shorts_estimate_cd IN ('likely','unlikely','unknown')),
+    CONSTRAINT ck_lotto_video_made_for_kids     CHECK (made_for_kids_cd   IN ('yes','no','unknown')),
+    CONSTRAINT ck_lotto_video_embeddable        CHECK (embeddable_cd      IN ('yes','no','unknown')),
+    CONSTRAINT ck_lotto_video_privacy_status    CHECK (privacy_status_cd  IN ('public','unlisted','private','unknown')),
+    CONSTRAINT ck_lotto_video_discovery         CHECK (discovery_cd       IN ('channel','search')),
+    CONSTRAINT ck_lotto_video_game              CHECK (game_cd            IN ('lotto','pension','unknown')),
+    CONSTRAINT ck_lotto_video_round_no          CHECK (round_no     IS NULL OR round_no     > 0),
+    CONSTRAINT ck_lotto_video_duration_sec      CHECK (duration_sec IS NULL OR duration_sec >= 0),
+    CONSTRAINT ck_lotto_video_view_cnt          CHECK (view_cnt     IS NULL OR view_cnt     >= 0)
+);
+CREATE INDEX ix_lotto_video_published_dttm ON lotto_video (published_dttm DESC);
+CREATE INDEX ix_lotto_video_refreshed_dttm ON lotto_video (refreshed_dttm);
+CREATE INDEX ix_lotto_video_shorts_published ON lotto_video (shorts_estimate_cd, published_dttm DESC);
+CREATE INDEX ix_lotto_video_game_round ON lotto_video (game_cd, round_no) WHERE round_no IS NOT NULL;
+```
+
+#### ★ 이 테이블의 행은 30일 안에 사라지거나 갱신된다
+
+YouTube 개발자 정책 III.E.4 는 비승인 데이터를 30일을 넘겨 저장하는 것을 금지하고 **"삭제 또는 갱신"** 을 요구한다. `refreshed_dttm` 이 그 시계다. `video_refresh` 잡이 25일마다 재조회해 갱신하고, 30일을 넘긴 행은 **API 호출 성공 여부와 무관하게** 삭제한다.
+
+**백엔드에 미치는 영향**: 이 테이블에서 읽은 응답을 **24시간 넘게 캐시하지 않는다.** 오래 캐시하면 워커가 지운 데이터를 백엔드가 계속 내보내게 되고, 그 시점부터 **정책 위반의 주체는 백엔드다.**
+
+#### `link_url` 컬럼이 없다
+
+`provider_video_key` 에서 파생 가능하고, 파생값을 저장하면 두 곳이 어긋난다. 조립 규칙은 이렇다.
+
+```
+일반 영상:  https://www.youtube.com/watch?v={provider_video_key}
+쇼츠:       https://www.youtube.com/shorts/{provider_video_key}
+임베드:     https://www.youtube-nocookie.com/embed/{provider_video_key}
+```
+
+#### `round_no` 에 FK 를 걸지 않는다
+
+`lotto_draw.round_no` 를 가리키는 것처럼 보이지만 FK 가 없다. 이유 둘 — 아직 추첨 전인 회차를 예고하는 영상이 있어 FK 면 INSERT 가 거부되고, **연금복권 330회와 로또 330회는 전혀 다른 것**이라 번호만으로 참조 대상이 정해지지 않는다.
+
+**★ 백엔드는 `game_cd = 'lotto'` 일 때만 `lotto_draw` 와 조인한다.** 이 조건을 빠뜨리면 연금복권 330회 영상에 로또 330회 당첨번호가 붙는다 — 에러 없이 조용히 틀린 번호가 화면에 뜬다.
+
+#### 표시 조건
+
+워커가 수집 시점에 걸러 넣지만, 갱신 주기(25일) 사이에 상태가 바뀐 행이 있을 수 있다. **백엔드가 다시 건다.**
+
+```sql
+WHERE privacy_status_cd = 'public'
+  AND embeddable_cd     = 'yes'
+  AND made_for_kids_cd  = 'no'
+```
+
+`made_for_kids_cd`·`embeddable_cd`·`privacy_status_cd` 는 **API 응답에 내보내지 않는다.** WHERE 절 재료일 뿐이다.
+
+#### `shorts_estimate_cd` 는 추정이다
+
+쇼츠를 판별하는 공식 API 필드가 없다. 공식 정의는 "세로/정사각 화면비 + 3분 이하 + 2024-10-15 이후 업로드"인데 **Data API 는 원본 화면비를 주지 않는다.** 재생시간과 게시일만으로 추정하므로 3분 이하 가로 영상이 오분류된다.
+
+**API 응답에서 `is_shorts` 같은 boolean 으로 바꾸지 않는다** — 추정이 확정으로 둔갑한다. `shorts_hint` 처럼 문자열 그대로 내보낸다. `'unknown'` 은 쇼츠 목록에도 일반 목록에도 넣지 않는다.
+
 ### `collect_job_log`
 
 ```sql
@@ -152,6 +241,8 @@ CREATE TABLE collect_job_log (
     finished_dttm   timestamptz,
     collected_cnt   integer     NOT NULL DEFAULT 0,
     error_desc      text,
+    stat_json       jsonb,                   -- 단계별 건수 (2026-08-28 추가)
+    log_list        jsonb,                   -- 경고·오류 전문 (2026-08-28 추가)
 
     CONSTRAINT pk_collect_job_log           PRIMARY KEY (job_log_id),
     CONSTRAINT ck_collect_job_log_exec_type CHECK (exec_type_cd IN ('cron', 'manual')),
@@ -163,6 +254,31 @@ CREATE INDEX ix_collect_job_log_job_nm_started ON collect_job_log (job_nm, start
 현행 `crawl_logs` (`backend/app/models.py:20-31`) 를 대체한다. `job_nm` 이 생겨 로또와 뉴스를 구분하고, `exec_type_cd` 가 생겨 크론과 수동 실행을 구분한다 — 수동 트리거가 언제 왜 쓰였는지 추적할 수 있어야 한다 ([[worker-jobs]]).
 
 **`job_nm` 에는 `CHECK` 를 걸지 않는다.** 잡이 늘어날 때마다 마이그레이션을 강제하고 싶지 않다. 잡 목록의 정본은 [[worker-jobs]] 다.
+
+#### `stat_json` · `log_list` — 왜 컬럼 둘을 더 뒀나 (2026-08-28)
+
+`collected_cnt` 와 `error_desc` 만으로는 **왜 0건인지 알 수 없다.** 검색이 200건을 물어왔는데 필터가 전부 걸렀는지, 애초에 API 가 0건을 줬는지, 이미 다 저장된 것이었는지가 구분되지 않는다. 잡이 6단계 필터를 거치면서 그 정보는 로그에만 남고 터미널 스크롤과 함께 사라졌다.
+
+**`stat_json`** — 단계별 통과 건수. 잡마다 키가 다르다(스키마를 강제하지 않는다).
+
+```json
+{"fetched": 200, "deduped": 150, "on_topic": 75, "rule_clean": 60,
+ "llm_clean": 58, "fresh": 20, "new_candidate": 12, "stored": 12}
+```
+
+**`log_list`** — 그 실행에서 발생한 **모든 `WARNING` 이상** 메시지. `error_desc` 는 잡을 죽인 마지막 예외 하나뿐이라, 죽지 않고 넘어간 문제(채널명이 바뀌었다, LLM 판정이 실패해 규칙 결과를 썼다, 배치 하나를 건너뛰었다)가 기록되지 않았다.
+
+```json
+[{"t": "2026-08-28T10:15:06+09:00", "lv": "WARNING",
+  "logger": "worker.jobs.video_channel",
+  "msg": "★ 채널명이 바뀌었다: UC... — 저장된 이름 'A' → 현재 'B'"}]
+```
+
+**jsonb 인 이유**: 잡마다 단계가 다르고 앞으로 더 늘어난다. 컬럼으로 만들면 잡을 추가할 때마다 마이그레이션이 필요하고, 대부분의 잡에서 NULL 인 컬럼이 쌓인다(`start_round`/`end_round` 를 옮기지 않은 것과 같은 판단이다). 조회는 `stat_json->>'fetched'` 로 한다.
+
+**별도 테이블(`collect_job_event`)을 만들지 않은 이유**: 잡 하나가 남기는 경고는 많아야 수십 건이고, 항상 그 실행과 함께 조회된다. 조인을 만들 이유가 없다. 배열이 수천 건으로 커질 잡이 생기면 그때 나눈다.
+
+**보존**: `log_list` 는 실행마다 쌓이므로 오래된 행을 정리한다 — `JOB_LOG_RETAIN_DAYS`(기본 90일). 워커가 기동 시 정리한다.
 
 `start_round` / `end_round` 는 옮기지 않았다. 로또 잡에만 의미가 있어 뉴스 잡에서는 항상 NULL 이 된다. `collected_cnt` 로 충분하다.
 
@@ -188,6 +304,8 @@ CREATE INDEX ix_collect_job_log_job_nm_started ON collect_job_log (job_nm, start
 `prize_tiers[]`: `rank` ← `prize_grade_no` · `winner_count` ← `winner_cnt` · `prize_per_game` ← `game_prize_amt`
 
 뉴스: `title` ← `title_nm` · `description` ← `summary_desc` · `link` ← `link_url` · `orig_link` ← `orig_link_url` · `source` ← `provider_nm` · `pub_date` ← `published_dttm` · `keywords` ← `keyword_list`
+
+영상: `id` ← `video_id` · `video_key` ← `provider_video_key` · `title` ← `title_nm` · `channel` ← `channel_nm` · `thumbnail` ← `thumbnail_url` · `published_at` ← `published_dttm` · `duration_sec` ← `duration_sec` · `views` ← `view_cnt` · `shorts_hint` ← `shorts_estimate_cd` · `round` ← `round_no` · `game` ← `game_cd` · `keywords` ← `keyword_list`
 
 사이트맵: `rounds[].lastmod` ← `draw_ymd` · `news[].id` ← `news_id` · `news[].lastmod` ← `published_dttm`
 

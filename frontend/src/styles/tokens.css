@@ -18,8 +18,16 @@
 
   /* ── Color · Text ─────────────────────────────── */
   --color-text: #1a1d2e;
-  --color-text-muted: #6b7280;
-  --color-text-subtle: #98a2b3;
+  /* ⚠ 이 두 값은 흰 배경이 아니라 **가장 불리한 배경**을 기준으로 정해져 있다.
+     muted 는 파스텔 카드(--svc-*-bg, --color-primary-soft) 위 본문 설명에 쓰이는데,
+     예전 #6b7280 은 흰 배경에서 4.83:1 로 통과하면서 파스텔 위에서는 4.00:1 로 떨어져
+     Lighthouse 접근성이 전 페이지에서 감점됐다(2026-08-21 실측). 지금 값은 파스텔 11종
+     전부에서 4.6:1 이상이다. subtle 은 예전 #98a2b3 이 흰 배경에서도 2.58:1 이라
+     푸터 저작권 문구가 AA 미달이었다.
+     ⚠ 색을 만질 때는 흰 배경만 보고 판단하지 않는다 — 반드시 파스텔 배경까지 계산한다.
+     ⚠ subtle 은 중립 배경(surface·bg·surface-2) 전용이다. 파스텔 위에는 muted 를 쓴다. */
+  --color-text-muted: #626875;
+  --color-text-subtle: #647188;
 
   /* ── Color · Brand ────────────────────────────── */
   --color-primary: #3b4fd8;
@@ -27,18 +35,33 @@
   --color-primary-soft: #eef0fb;
   --color-primary-soft2: #f5f0fc;
 
+  /*
+   * 채워진 강조 배경(--color-primary / --color-primary-hover / --color-success) 위에
+   * 얹는 글자·글리프 색.
+   *
+   * ⚠ 흰색을 직접 박지 않는다. 라이트에서는 강조색이 어두워 흰 글자가 맞지만, **다크에서는
+   *   같은 토큰이 밝은 색으로 뒤집힌다** — 그때도 흰 글자를 쓰면 대비가 2.98:1 로 떨어진다
+   *   (실제로 다크의 주요 버튼·선택 칩 전부가 그랬다. axe, 2026-08-21).
+   *   지금 값은 라이트 5.10~8.10, 다크 6.03~8.72 로 여섯 조합 모두 AA 를 넘는다.
+   */
+  --color-on-accent: #ffffff;
+
   /* 보조 설명 안의 숫자를 짚는 색(갈색). 상태색이 아니므로 semantic 과 섞지 않는다.
      예: "주요 통계 (최근 **20**회 기준)" 의 20. */
   --color-accent-num: #a2622c;
 
-  /* ── Color · Semantic (상태 표시 전용) ─────────── */
-  --color-success: #16a34a;
+  /* ── Color · Semantic (상태 표시 전용) ───────────
+   * ⚠ 진한 값은 **같은 짝의 -soft 배경 위에 놓였을 때**를 기준으로 정한다. 배지(.trend,
+   *   상태 칩)가 항상 그렇게 쓰이기 때문이다. 흰 배경만 보고 고르면 배지에서 미달한다 —
+   *   실제로 종전 값이 그랬다(danger 3.95, info 3.57 / 2026-08-21 Lighthouse).
+   *   지금 값은 짝 배경·흰색·--color-bg 세 곳 모두 4.6:1 이상이다. */
+  --color-success: #117f3a;
   --color-success-soft: #dcfce7;
-  --color-warning: #d97706;
+  --color-warning: #a55b05;
   --color-warning-soft: #fef3c7;
-  --color-danger: #dc2626;
+  --color-danger: #c92020;
   --color-danger-soft: #fee2e2;
-  --color-info: #0284c7;
+  --color-info: #0271ab;
   --color-info-soft: #e0f2fe;
 
   /* ── Ball · 동행복권 공식 5구간 ─────────────────
@@ -156,16 +179,29 @@
     --color-border-strong: #2f3849;
 
     --color-text: #e6e9ef;
+    /* muted 는 다크 배경 11종에서 최저 5.96:1 이라 그대로 둔다.
+       subtle 은 #6b7280 일 때 surface-2 에서 3.56:1 로 미달이라 한 단계 밝혔다. */
     --color-text-muted: #9aa4b2;
-    --color-text-subtle: #6b7280;
+    --color-text-subtle: #7e8593;
 
     --color-primary: #7c8cff;
     --color-primary-hover: #9aa8ff;
     --color-primary-soft: #1e1b4b;
     --color-primary-soft2: #241c4e;
+    /* 강조색이 밝아졌으므로 그 위 글자는 반대로 어두워야 한다. */
+    --color-on-accent: #0b0d12;
 
     /* 어두운 배경에서 갈색은 탁해진다. 명도를 올려 대비를 확보한다. */
     --color-accent-num: #d69a63;
+
+    /* ⚠ 종전에는 -soft 배경만 덮고 진한 값은 라이트 값을 그대로 썼다. 그래서 다크에서
+       danger 3.34 · info 3.64 로 **처음부터 미달**이었다(라이트를 고치면 더 나빠진다).
+       --color-primary 를 다크에서 밝히는 것과 같은 이유로 여기서도 밝혀야 한다.
+       ⚠ 네 쌍은 **항상 같이** 고친다 — 한쪽만 바꾸면 짝이 어긋난다. */
+    --color-success: #16a54b;
+    --color-warning: #d97706;
+    --color-danger: #e55c5c;
+    --color-info: #0297e3;
 
     --color-success-soft: #052e16;
     --color-warning-soft: #451a03;
@@ -196,15 +232,24 @@
   --color-border-strong: #2f3849;
 
   --color-text: #e6e9ef;
+  /* 위 자동 다크 블록과 같은 이유 — 두 곳을 반드시 함께 고친다. */
   --color-text-muted: #9aa4b2;
-  --color-text-subtle: #6b7280;
+  --color-text-subtle: #7e8593;
 
   --color-primary: #7c8cff;
   --color-primary-hover: #9aa8ff;
   --color-primary-soft: #1e1b4b;
   --color-primary-soft2: #241c4e;
+  /* 위 자동 다크 블록과 같은 이유 — 두 곳을 반드시 함께 고친다. */
+  --color-on-accent: #0b0d12;
 
   --color-accent-num: #d69a63;
+
+  /* 위 자동 다크 블록과 같은 이유 — 두 곳을 반드시 함께 고친다. */
+  --color-success: #16a54b;
+  --color-warning: #d97706;
+  --color-danger: #e55c5c;
+  --color-info: #0297e3;
 
   --color-success-soft: #052e16;
   --color-warning-soft: #451a03;

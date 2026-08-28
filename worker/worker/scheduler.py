@@ -145,6 +145,34 @@ async def _run_news() -> None:
     await runner.run_now("news", "cron")
 
 
+async def _run_video_channel() -> None:
+    """화이트리스트 채널 수집. 실패해도 재시도하지 않는다 — 6시간 뒤 다시 돈다."""
+    if runner.is_running("video_channel"):
+        logger.info("video_channel 잡 건너뜀 — 이미 실행 중이다")
+        return
+    await runner.run_now("video_channel", "cron")
+
+
+async def _run_video_search() -> None:
+    """검색 보조 수집. 재시도하지 않는다 — 재시도가 곧 search 쿼터 소모다."""
+    if runner.is_running("video_search"):
+        logger.info("video_search 잡 건너뜀 — 이미 실행 중이다")
+        return
+    await runner.run_now("video_search", "cron")
+
+
+async def _run_video_refresh() -> None:
+    """30일 정책 갱신. 실패가 곧 정책 위반이라 실패하면 로그가 크게 남는다.
+
+    그래도 여기서 재시도하지 않는다 — 하드 만료 삭제는 잡 맨 앞에서 API 없이
+    이미 수행되므로, 갱신이 며칠 실패해도 30일 초과 데이터가 남지는 않는다.
+    """
+    if runner.is_running("video_refresh"):
+        logger.info("video_refresh 잡 건너뜀 — 이미 실행 중이다")
+        return
+    await runner.run_now("video_refresh", "cron")
+
+
 async def _catch_up() -> None:
     """기동 시 로또 잡을 따라잡는다.
 
@@ -213,6 +241,31 @@ def start() -> None:
         logger.warning(
             "NAVER_CLIENT_ID/SECRET 이 없어 news 잡을 크론에 등록하지 않는다. "
             "lotto 잡은 정상 동작한다."
+        )
+
+    # 유튜브 세 잡. 키가 없으면 크론에 올리지 않는다(news 와 같은 계약) —
+    # 올려두면 하루 수십 개의 failed 행만 쌓인다. 수동 트리거는 여전히 받는다.
+    if settings.youtube_enabled:
+        for job_id, name, func, cron in (
+            ("video_channel_cron", "video_channel 수집", _run_video_channel, settings.YOUTUBE_CHANNEL_CRON),
+            ("video_search_cron", "video_search 수집", _run_video_search, settings.YOUTUBE_SEARCH_CRON),
+            ("video_refresh_cron", "video_refresh 갱신", _run_video_refresh, settings.YOUTUBE_REFRESH_CRON),
+        ):
+            sched.add_job(
+                func,
+                _build_trigger(cron),
+                id=job_id,
+                name=name,
+                replace_existing=True,
+                coalesce=True,
+                max_instances=1,
+                misfire_grace_time=3600,
+            )
+            logger.info("%s 등록 — cron=%r", name, cron)
+    else:
+        logger.warning(
+            "YOUTUBE_API_KEY 가 없어 video_* 세 잡을 크론에 등록하지 않는다. "
+            "lotto·news 잡은 정상 동작한다."
         )
 
     sched.start()

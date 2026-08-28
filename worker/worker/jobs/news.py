@@ -3,7 +3,13 @@
 원문을 저장하지 않는다. 제목·요약·출처·발행일·링크·키워드만 남긴다.
 `summary_desc` 는 네이버가 주는 요약문이지 기사 원문이 아니다.
 
-catch-up 하지 않는다 — 놓친 뉴스는 다음 주기에 어차피 검색된다.
+catch-up 하지 않는다 — 즉시 한 번 돌려도 **놓친 구간이 돌아오지 않기 때문**이다.
+아래 _is_fresh 가 하루 넘은 기사를 버리므로, 워커가 멈춰 있던 기간의 뉴스는
+크론을 몇 번 더 돌려도 채워지지 않는다(2026-08-18 실측: 33일 중단 → 32일치 0건,
+복구 실행은 당일·전날치 91건만 담았다). lotto 와 갈리는 지점이 여기다 — 회차는
+번호로 지목해 다시 조회되지만 뉴스에는 그런 주소가 없다. 되살리려면 잡이 아니라
+1회성 백필이 필요하고 그것은 재배포 약관 판단에 걸린다.
+계약: docs/wiki/10-contracts/worker-jobs.md 의 catch-up 절.
 """
 from __future__ import annotations
 
@@ -21,6 +27,35 @@ from .progress import JobProgress
 logger = logging.getLogger(__name__)
 
 KST = ZoneInfo("Asia/Seoul")
+
+
+def _is_on_topic(title: str, queries: list[str], exclude: list[str], must_match: bool) -> bool:
+    """제목이 이 사이트의 주제에 맞는가.
+
+    **제목만 본다.** 요약(description)은 네이버가 검색어 주변을 잘라 주는
+    스니펫이라 거의 항상 검색어를 포함한다 — 실측 332건에서 제목·요약을 함께
+    보면 전부 통과해 변별력이 0 이었다. 제목만이 기사의 주제를 말해 준다.
+
+    두 규칙을 순서대로 적용한다.
+
+    1. must_match 면 제목에 검색어가 하나도 없을 때 버린다. 검색 API 는 본문
+       전문을 뒤지므로, 기사 말미에 "이 사업은 복권기금으로 운영된다" 한 줄이
+       있는 과학관 보도자료도 결과에 들어온다. 주제가 아니라 각주에 스친 것이다.
+
+    2. 제목에 제외어가 있으면 버린다. '로또 청약'·'로또 줍줍' 은 제목에 '로또'
+       가 있어 1을 통과하지만 부동산 기사다. 이런 기사가 몰리면(실측: 안유진
+       청약 13건, 송파 롯데캐슬 12건) 목록이 통째로 그것들로 덮인다.
+
+    제외어를 먼저 보지 않는 이유는 없다 — 결과는 같다. 읽는 사람이 '무엇을
+    담는가' 를 먼저 보고 '무엇을 빼는가' 를 나중에 보는 편이 자연스러워 이 순서다.
+
+    ⚠ 제외어는 **과잉 차단의 위험**이 있다. 늘릴 때는 반드시 기존 데이터에
+      드라이런해 진짜 복권 뉴스가 걸리지 않는지 확인한다. 현재 기본값은
+      2026-08-19 에 332건으로 검증했다 — 걸러진 248건 중 복권 뉴스 0건.
+    """
+    if must_match and not any(q in title for q in queries):
+        return False
+    return not any(k in title for k in exclude)
 
 
 def _is_fresh(published_dttm: datetime | None, today: date, max_age_days: int) -> bool:
@@ -114,10 +149,24 @@ async def run(progress: JobProgress) -> None:
             for item in items:
                 merged.setdefault(item["link_url"], item)
 
+    # 주제에 맞지 않는 기사를 버린다. 신선도보다 먼저 보는 것은 문자열 검사가
+    # 날짜 변환보다 싸기 때문이고, 어느 쪽을 먼저 해도 결과는 같다.
+    deduped = len(merged)
+    exclude = settings.news_exclude_keywords
+    merged = {
+        link: item
+        for link, item in merged.items()
+        if _is_on_topic(item["title_nm"], queries, exclude, settings.NEWS_TITLE_MUST_MATCH)
+    }
+    logger.info(
+        "주제 필터(제목 일치=%s, 제외어 %d개) — %d건 중 %d건 제외",
+        settings.NEWS_TITLE_MUST_MATCH, len(exclude), deduped, deduped - len(merged),
+    )
+    on_topic = len(merged)
+
     # 오래된 기사를 버린다. sort=date 로 요청해도 네이버는 며칠 전 기사를 함께 준다.
     # DB 에 넣고 나중에 거르지 않고 여기서 버리는 이유는, 한 번 들어간 행은
     # link_url UNIQUE 때문에 다시 판단할 기회가 없기 때문이다.
-    deduped = len(merged)
     max_age = settings.NEWS_MAX_AGE_DAYS
     merged = {
         link: item
@@ -126,7 +175,7 @@ async def run(progress: JobProgress) -> None:
     }
     logger.info(
         "신선도 필터(%s 기준 %d일 이내) — %d건 중 %d건 제외",
-        today, max_age, deduped, deduped - len(merged),
+        today, max_age, on_topic, on_topic - len(merged),
     )
 
     # 키워드는 합쳐진 뒤 전체 검색어 기준으로 다시 계산한다.
@@ -139,7 +188,14 @@ async def run(progress: JobProgress) -> None:
         for item in merged.values():
             progress.collected += await _insert_news(conn, item)
 
+    progress.stat = {
+        "fetched": fetched,
+        "deduped": deduped,
+        "on_topic": on_topic,
+        "fresh": len(merged),
+        "stored": progress.collected,
+    }
     logger.info(
-        "news 잡 완료 — 조회 %d건 → 링크 중복제거 %d건 → 신선 %d건 → 신규 %d건 저장",
-        fetched, deduped, len(merged), progress.collected,
+        "news 잡 완료 — 조회 %d건 → 링크 중복제거 %d → 주제적합 %d → 신선 %d → 신규 %d건 저장",
+        fetched, deduped, on_topic, len(merged), progress.collected,
     )

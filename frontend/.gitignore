@@ -1,5 +1,7 @@
 /node_modules
 /.next/
+# 실측용 프로덕션 산출물 (NEXT_DIST_DIR). dev 서버가 켜진 채로 빌드할 때 쓴다.
+/.next-prod/
 /out/
 /build
 

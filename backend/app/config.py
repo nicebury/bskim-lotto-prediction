@@ -60,6 +60,21 @@ class Settings(BaseSettings):
     # 근거: docs/wiki/00-decisions/0012-serialize-monte-carlo.md
     RECOMMEND_MAX_CONCURRENCY: int = 1
 
+    # ── 운영자 전용 화면 (/api/admin/*) ───────────────────────────────────
+    # 사용자 계정 테이블을 만들지 않는다. 쓰는 사람이 한 명이고, 계정 시스템은 그
+    # 자체로 공격면이자 유지보수 대상이다 (docs/wiki/10-contracts/api-contract.md).
+    #
+    # ★ 비어 있으면 `/api/admin/*` 가 전부 503 이다. 빈 문자열끼리 `compare_digest`
+    # 비교는 **통과하므로**, 빈 값을 '인증 없음' 으로 두면 아무나 들어온다 — 인증이
+    # 없는 것보다 나쁘다. 인증이 있다고 착각하게 만들기 때문이다.
+    # 기동을 막지 않는 이유: 운영자 화면 하나 때문에 공개 API 전체가 안 뜨면 손해가
+    # 더 크다. 그래서 그 경로만 503 으로 죽인다.
+    ADMIN_TOKEN: str = ""
+    # 세션 쿠키 서명 키. `ADMIN_TOKEN` 과 **다른 값**이어야 한다 — 같으면 쿠키에서
+    # 토큰을 역산할 여지가 생긴다. 같은 값이면 기동을 거부한다(아래 검사).
+    ADMIN_SESSION_SECRET: str = ""
+    ADMIN_SESSION_HOURS: int = 12
+
     def model_post_init(self, __context) -> None:
         """필수값을 검사한다.
 
@@ -86,6 +101,27 @@ class Settings(BaseSettings):
                 f"(현재 {self.RECOMMEND_MAX_CONCURRENCY}). "
                 "0 이하로 두면 추천 요청이 영원히 대기합니다."
             )
+
+        # 둘이 같으면 쿠키 서명에서 토큰을 역산할 여지가 생긴다. 계약이 "다른 값이어야
+        # 한다" 고 정한 것을 사람의 주의력에 맡기지 않는다 — 복붙 한 번이면 같아진다.
+        # 값 자체는 메시지에 담지 않는다.
+        if (
+            self.ADMIN_TOKEN.strip()
+            and self.ADMIN_TOKEN.strip() == self.ADMIN_SESSION_SECRET.strip()
+        ):
+            raise RuntimeError(
+                "ADMIN_TOKEN 과 ADMIN_SESSION_SECRET 이 같습니다. "
+                "다른 값을 쓰세요 — 같으면 세션 쿠키에서 토큰을 역산할 여지가 생깁니다."
+            )
+
+    @property
+    def admin_enabled(self) -> bool:
+        """운영자 API 를 열 수 있는가.
+
+        토큰과 서명 키가 **둘 다** 있어야 한다. 서명 키가 없으면 쿠키를 서명할 수 없고,
+        서명 없는 쿠키는 누구나 위조할 수 있어 토큰 검사가 무의미해진다.
+        """
+        return bool(self.ADMIN_TOKEN.strip()) and bool(self.ADMIN_SESSION_SECRET.strip())
 
     @property
     def database_dsn(self) -> str:

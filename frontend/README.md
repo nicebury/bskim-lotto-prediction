@@ -94,7 +94,37 @@ grep -rnE '\b(probability|win_rate|accuracy|confidence|hit_rate)\b' src/
 
 **주요 페이지가 JS 를 끈 상태에서 본문 텍스트를 보여줘야 한다.** 이것이 이 프로젝트가 Next.js 를 쓰는 유일한 이유다.
 
-모바일 375px 폭에서 가로 스크롤이 없어야 하고, Lighthouse SEO 100 / CLS < 0.1 이어야 한다. 헤드리스 브라우저 실측에는 시스템 라이브러리가 필요하다(`sudo npx playwright install-deps chromium`).
+### 실측 (Lighthouse · 접근성 · 375px)
+
+WSL 에는 헤드리스 크롬 의존 라이브러리(`libgbm`·`libxkbcommon`)가 없고 설치에 `sudo` 가 필요하다. **Windows 쪽 node 와 크롬을 그대로 쓰면 설치가 필요 없다** (`cmd.exe /c` 로 호출, WSL↔Windows 는 `localhost` 가 포워딩된다).
+
+```bash
+# 0) ⚠ dev 서버가 떠 있으면 산출물을 갈라 둔다 (아래 함정 참조)
+NEXT_DIST_DIR=.next-prod npx next build
+NEXT_DIST_DIR=.next-prod npx next start -p 3100 &
+
+# 1) Lighthouse — Windows 쪽에서 실행
+cmd.exe /c "cd /d %TEMP% && npx --yes lighthouse@12 http://localhost:3100/ \
+  --output=json --output-path=%TEMP%\lh.json --quiet \
+  --chrome-flags=\"--headless=new --no-sandbox --disable-gpu\""
+
+# 2) 끝나면 반드시 되돌린다 — 빌드가 참조 경로를 고쳐 놓는다
+git checkout -- next-env.d.ts
+```
+
+접근성과 375px 은 puppeteer-core 로 잰다(Windows `%TEMP%` 에 설치, 프로젝트를 건드리지 않는다).
+
+- **접근성은 axe 로, 라이트·다크 두 모드 각각.** Lighthouse 는 `prefers-color-scheme` 을 라이트로만 돌리는데 다크는 팔레트가 통째로 뒤집힌다 — 실제로 다크에서만 나온 위반이 있었다. `page.emulateMediaFeatures([{name:'prefers-color-scheme', value:'dark'}])`.
+- **375px 은 창 크기가 아니라 뷰포트 오버라이드로.** Windows 크롬은 창을 512px 아래로 줄이지 않는다. `page.setViewport({width:375,...})`(CDP `Emulation.setDeviceMetricsOverride`)를 쓰면 창 크기와 무관하다.
+- **접힌 팝오버는 펼쳐서 잰다.** `.help-tip-btn` 을 전부 클릭한 뒤 다시 재야 열렸을 때 화면 밖으로 나가는 것이 잡힌다(실제로 375px 에서 최대 203px 잘려 있었다).
+
+목표: **Lighthouse SEO 100 · CLS < 0.1 · 접근성 위반 0 · 375px 가로 넘침 0.** 2026-08-21 실측 기준 SEO/접근성/모범사례 100, CLS 0.000, 성능 83~92.
+
+### ⚠ 데이터 없이 잰 값은 절반만 맞다
+
+백엔드가 꺼져 있으면 통계 화면이 **껍데기만** 렌더된다(표·볼·차트가 아예 없다). 그 상태로 재면 전부 통과하지만 아무것도 검증하지 못한다 — 실제로 데이터를 넣자 접근성 위반과 375px 넘침이 새로 드러났다.
+
+백엔드 세션을 기다릴 필요는 없다. 계약([`api-contract`](../docs/wiki/10-contracts/api-contract.md) · [`api-contract-stats`](../docs/wiki/10-contracts/api-contract-stats.md))대로 응답하는 목 서버를 띄우고, 값은 평균이 아니라 **화면을 가장 세게 미는 극단값**(12자리 금액, 아주 긴 한글 제목·언론사명, 45칸 전부 채운 격자)으로 채운다. 실데이터보다 넘침 검증에 낫다.
 
 ---
 
@@ -103,6 +133,8 @@ grep -rnE '\b(probability|win_rate|accuracy|confidence|hit_rate)\b' src/
 **애널리틱스가 첫 페이지만 집계한다.** App Router 는 클라이언트 라우팅이라 GA4 기본 스니펫이 최초 진입 때 한 번만 `page_view` 를 보낸다. 링크로 이동한 페이지는 잡히지 않아 "페이지별 체류시간" 측정이 무너진다. `usePathname()` 을 구독하는 클라이언트 컴포넌트에서 수동 전송한다(`components/analytics/PageViewTracker.tsx`). 그 컴포넌트는 `useSearchParams()` 를 쓰므로 **반드시 `<Suspense>` 로 감싼다** — 감싸지 않으면 정적 생성이 깨진다.
 
 → [`../docs/wiki/30-seo/analytics.md`](../docs/wiki/30-seo/analytics.md)
+
+**`next dev` 가 켜져 있으면 `next build` 산출물을 덮어쓴다.** dev 서버는 떠 있는 동안 `.next` 를 계속 다시 쓴다. 개발 서버를 켠 채로 `build && start` 하면 `next start` 가 **개발용 청크를 서빙한다**(`main-app.js?v=…`). 에러가 없어 알아채기 어렵고, 그 상태의 Lighthouse 는 번들 크기·LCP·TBT 가 전부 무의미하다(성능 50, LCP 16초로 나왔다). 실측할 때는 `NEXT_DIST_DIR=.next-prod` 로 가른다. 그 대신 Next 가 `next-env.d.ts` 의 참조 경로를 고쳐 놓으므로 끝나면 `git checkout -- next-env.d.ts`.
 
 **서버 컴포넌트는 클라이언트 컴포넌트에 함수를 넘길 수 없다.** render prop 을 넘기면 `Functions cannot be passed directly to Client Components` 로 빌드가 죽는다. 이미 렌더링된 엘리먼트를 넘긴다(`components/StatWindowTabs.tsx`).
 

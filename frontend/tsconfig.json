@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": false,
     "skipLibCheck": true,
     "strict": true,
@@ -13,11 +17,34 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
-    "plugins": [{ "name": "next" }],
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": [
+        "./src/*"
+      ]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "next-env.d.ts",
+    ".next-prod/types/**/*.ts"
+  ],
+  // ⚠ 빌드 산출물의 라우트 타입(`.next*/types/**`)을 넣지 않는다.
+  //    `NEXT_DIST_DIR` 로 dev(`.next`)와 prod(`.next-prod`)를 갈라 쓰기 때문에 둘을 함께
+  //    넣으면 **오래된 쪽의 라우트 목록이 새 쪽과 충돌한다** — 실제로 8월 27일자 `.next`
+  //    에 `/admin` 이 없어 `tsc` 가 깨졌다(2026-08-28). 라우트 타입 검증은 `next build`
+  //    가 자기 산출물로 직접 하므로 여기서 겹쳐 볼 이유가 없다.
+  // ⚠ 빌드 산출물을 **exclude 에도** 적는다. include 의 `**/*.ts` 가 그것까지 훑기
+  //    때문이다 — include 에서 뺀 것만으로는 부족하다(실측).
+  "exclude": [
+    "node_modules",
+    ".next",
+    ".next-prod",
+    ".next-probe"
+  ]
 }
