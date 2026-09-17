@@ -431,6 +431,15 @@ export type VideoGame = 'lotto' | 'pension' | 'unknown'
 /** 목록 필터. `all` 에서만 `unknown` 이 보인다. */
 export type VideoKind = 'all' | 'normal' | 'shorts'
 
+/**
+ * 영상 정렬·기간(2026-09-17 계약 추가 — `api-contract.md` 영상 절).
+ *
+ * ⚠ `views` 는 **현재 조회수** 순이다. "최근 1주 조회수 순" 은 `period='1w'` + `sort='views'` 로
+ *   *최근 7일 게시분을 지금 조회수로* 줄 세우는 것이지 **주간 증가분이 아니다**(조회수 이력이 없다).
+ */
+export type VideoSort = 'latest' | 'views'
+export type VideoPeriod = '1w' | '1m' | '3m' | 'all'
+
 export interface VideoItem {
   id: number
   /** 유튜브 영상 ID(11자). URL 조립에 쓴다. */
@@ -521,4 +530,197 @@ export interface JobLogResult {
   summary: JobSummary[]
   items: JobLogItem[]
   next_before_id: number | null
+}
+
+/* ────────────────────────────────────────────────────────────
+ * AI 번호추천 시뮬레이터 (2026-08-28 계약 신설)
+ *
+ * ⚠ 각 단계는 **`null` 일 수 있다.** 백엔드가 계산하지 못한 단계이고, 화면은 그것을
+ *   "수치를 함께 보여드리지 못했습니다" 로 표시한다 — **0 으로 채우지 않는다.**
+ * ⚠ 금지 필드명(`score`·`weight`·`probability`)은 여기에도 없다. 앙상블 단계는
+ *   순위(`top_numbers`)만 준다(→ docs/wiki/10-contracts/api-contract.md).
+ * ──────────────────────────────────────────────────────────── */
+
+/** 몬테카를로 가상 추첨 횟수. **계약이 셋으로 고정**했다 — 열린 값은 422 다. */
+export type SimulateTrials = 10000 | 50000 | 100000
+
+export interface NumberCount {
+  number: number
+  count: number
+}
+
+export interface SimulateStages {
+  /** 1. 빈도 분석 */
+  frequency: {
+    rounds_analyzed: number
+    include_bonus: boolean
+    most: NumberCount[]
+    least: NumberCount[]
+  } | null
+  /** 2. 출현 주기 분석 */
+  cycle: {
+    longest_waiting: { number: number; rounds_since: number }[]
+  } | null
+  /** 3. 최근 트렌드 감지 */
+  trend: {
+    window: number
+    recency_weight: number
+    rising: NumberCount[]
+  } | null
+  /** 4. 조합 패턴 필터 */
+  pattern: {
+    odd_even_3_3_rate: number
+    sum_range: { from: number; to: number; rate: number }
+    consecutive_rate: number
+    tail_variety_avg: number
+  } | null
+  /** 5. 앙상블 스코어링 — **순위만** 온다. */
+  ensemble: {
+    top_numbers: number[]
+  } | null
+  /** 6. 몬테카를로 시뮬레이션 */
+  montecarlo: {
+    trials: number
+    valid_combinations: number
+    filtered_out: number
+  } | null
+}
+
+export interface SimulateResult {
+  sets: RecommendSet[]
+  trials: number
+  seed: number | null
+  hot_window: number | null
+  stages: SimulateStages
+  /** 백엔드가 면책 문구를 내려준다. 프론트가 그것을 잊지 못하게 하려는 계약이다. */
+  disclaimer: string
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 조합 분석 (GET /api/lotto/analyze)
+ *
+ * → docs/wiki/10-contracts/api-contract-analysis.md
+ *
+ * ⚠ 2026-09-03 에 백엔드가 구현을 마쳤다. 그전에는 프론트가 `lib/analyze.ts` 로 같은 값을
+ *   계산하고 있었는데, 백엔드 세션이 **전수 대조로 값이 일치함을 확인**한 뒤 그 파일을
+ *   걷어냈다(log.md 2026-09-03). 이제 계산은 서버 한 곳에서만 돈다.
+ * ──────────────────────────────────────────────────────────── */
+
+/** 동행복권 공식 5구간. 서버가 정한다 — 프론트가 번호에서 다시 계산하지 않는다. */
+export type ColorBand = '1-10' | '11-20' | '21-30' | '31-40' | '41-45'
+
+export interface AnalyzeNumberFact {
+  number: number
+  /** 역대 전체 출현 횟수. **보너스는 세지 않는다**(`bonus_count` 로 따로 온다). */
+  total_count: number
+  recent_20: number
+  recent_50: number
+  /** 한 번도 없었으면 null. */
+  last_seen_round: number | null
+  /** 최신 회차 기준 미출현 회차 수. `last_seen_round` 가 null 이면 null. */
+  rounds_since: number | null
+  /** 역대 최장 미출현 간격(회차). */
+  max_gap: number | null
+  /** 보너스 번호로 나온 횟수. 당첨번호와 성격이 달라 따로 센다. */
+  bonus_count: number
+  /** 끝수(1의 자리). */
+  tail: number
+  color_band: ColorBand
+}
+
+export interface AnalyzeReference {
+  /** 합계를 10단위로 묶은 **회차 수**(비율이 아니다). */
+  sum_histogram: Record<string, number>
+  /** 내 합계가 든 10단위 구간의 비율(0~1). */
+  sum_band_share: number
+  odd_even_share: number
+  high_low_share: number
+  /** 연속을 한 쌍 이상 포함한 회차의 비율. */
+  consecutive_share: number
+  /** AC값별 비율. 키는 숫자 문자열. */
+  ac_histogram: Record<string, number>
+  /** 회차당 이월수 평균. */
+  carryover_avg: number
+}
+
+export interface AnalyzeCombination {
+  sum: number
+  /** "4:2" (홀:짝) */
+  odd_even: string
+  /** "3:3" (고:저). 고 = 23 이상 */
+  high_low: string
+  consecutive_pairs: number
+  tail_sum: number
+  same_tail_pairs: number
+  /** 0~10. 정의는 계약 문서의 계산 정의 표 참조. */
+  ac_value: number
+  multiples_of_3: number
+  prime_count: number
+  /** 직전 회차와 겹치는 개수. 보너스 제외. */
+  carryover: number | null
+  reference: AnalyzeReference
+}
+
+export interface AnalyzeMatchedRound {
+  round_no: number
+  draw_date: string
+  numbers: number[]
+  bonus: number
+  /** 겹친 번호. 화면이 하이라이트한다. */
+  matched: number[]
+  match_count: number
+  bonus_matched: boolean
+  /** 해당 없으면 null. */
+  rank: number | null
+}
+
+export interface AnalyzePastMatch {
+  /**
+   * 몇 개 일치가 몇 회차였는가. **0~6 일곱 키를 모두 담는다.**
+   * ⚠ 0 인 키를 빼면 화면이 "데이터가 없는 것" 과 "0회인 것" 을 구분할 수 없다.
+   */
+  distribution: Record<string, number>
+  /**
+   * 등수별 회차 수. **1~5 다섯 키를 모두 담는다.**
+   * ⚠ 2026-09-03 에 백엔드가 0인 등수를 빼고 있던 버그를 고쳤다(log.md). 화면이
+   *   "1등 0회 · 2등 0회 …" 표를 그리므로 0 도 와야 한다.
+   */
+  rank_counts: Record<string, number>
+  /** 많이 맞은 순 → 같으면 최신 순. 최대 5개. */
+  closest: AnalyzeMatchedRound[]
+  /** 여섯 개가 전부 같았던 회차. **`null` 이 아니라 빈 배열**로 온다. */
+  exact_match_rounds: number[]
+}
+
+export interface AnalyzeRetrospect {
+  rounds: number
+  ticket_price: number
+  spent: number
+  /** 금액을 확정할 수 있는 등수만(4등·5등). **0회인 등수는 담지 않는다.** */
+  prizes: { rank: number; count: number; amount_each: number; amount: number }[]
+  /**
+   * 금액을 확정할 수 없는 등수(1~3등).
+   * ⚠ **0회인 등수는 담지 않는다** — 이것은 "금액을 모르는 당첨이 있다" 는 신호라,
+   *   0을 담으면 한 번도 안 됐는데 경고가 뜬다(백엔드 2026-09-03 수정).
+   */
+  unpriced: { rank: number; count: number }[]
+  returned: number
+  /** returned - spent. */
+  net: number
+}
+
+export interface AnalyzeResult {
+  numbers: number[]
+  rounds_analyzed: number
+  from_round: number
+  to_round: number
+  latest_draw_date: string
+  per_number: AnalyzeNumberFact[]
+  /** 45칸 격자용. 번호 오름차순, **비율이 아니라 개수**. */
+  frequency_grid: { number: number; count: number }[]
+  combination: AnalyzeCombination
+  past_match: AnalyzePastMatch
+  retrospect: AnalyzeRetrospect
+  /** 백엔드가 내려준다. 프론트가 면책을 잊지 못하게 하려는 계약이다. */
+  disclaimer: string
 }

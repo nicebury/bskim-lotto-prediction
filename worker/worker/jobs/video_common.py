@@ -370,13 +370,44 @@ async def process_stubs(
     }
     stat["rule_clean"] = len(merged)
 
-    # 4) 금지 표현 — LLM 보조. 규칙을 통과한 것만 묻는다.
-    #    화이트리스트 채널(promote=True)은 건너뛴다 — 공식 채널의 제목은
-    #    '제1238회 당첨번호' 형식이라 판정할 것이 없고, 쿼터만 쓴다.
-    if use_llm and merged:
+    # 4) 신선도 — 날짜 변환은 문자열 검사보다 비싸지만 DB·API 보다는 싸다
+    merged = {
+        k: v
+        for k, v in merged.items()
+        if is_fresh(v.get("published_dttm"), today, settings.YOUTUBE_MAX_AGE_DAYS)
+    }
+    stat["fresh"] = len(merged)
+
+    # 5) ★ 이미 있는 것 제거 — **LLM 판정보다 먼저** 한다.
+    #
+    #    2026-09-08 에 순서를 바꿨다. 종전에는 이 단계가 LLM 뒤에 있어서
+    #    **이미 저장된 영상을 매 실행마다 다시 판정했다.** search.list 는 늘
+    #    최신 50건을 통째로 주므로, 어제 판정해 저장한 영상을 오늘 또 묻고
+    #    6시간 뒤 또 물었다. 실측(9/1~9/8): 하루 494건을 판정했으나 실제
+    #    신규는 35건이었다 — 유료 API 호출의 93%가 낭비였다.
+    #
+    #    DB 조회 한 번이면 걸러낼 것을 외부 유료 API 에 물을 이유가 없다.
+    known = await filter_known_keys(conn, "youtube", list(merged))
+    merged = {k: v for k, v in merged.items() if k not in known}
+    stat["new_candidate"] = len(merged)
+
+    if not merged:
+        stat["llm_clean"] = 0
+        stat["stored"] = 0
+        return stat
+
+    # 6) 금지 표현 — LLM 보조. **신규이고 신선한 것만** 판정한다.
+    #    화이트리스트도 면제하지 않는다(2026-09-08 변경) — 공식 채널이라도
+    #    홍보·이벤트 영상이 섞이고, 애드센스 심사자는 채널 소유자를 보지 않는다.
+    #    비용은 하루 3건 남짓으로 연 55원이다.
+    if use_llm:
         blocked = await llm_judge.judge_blocked(
             client,
-            items=list(merged.values()),
+            items=[
+                {"key": k, "title_nm": v["title_nm"], "source_nm": v.get("channel_nm")}
+                for k, v in merged.items()
+            ],
+            kind="video",
             api_key=settings.API_KEY,
             model=settings.MODEL,
             batch_size=settings.LLM_JUDGE_BATCH_SIZE,
@@ -385,21 +416,8 @@ async def process_stubs(
         )
         if blocked:
             merged = {k: v for k, v in merged.items() if k not in blocked}
-        logger.info("LLM 보조 판정 — %d건 차단", len(blocked))
+        logger.info("LLM 보조 판정 — %d건 중 %d건 차단", len(blocked) + len(merged), len(blocked))
     stat["llm_clean"] = len(merged)
-
-    # 5) 신선도
-    merged = {
-        k: v
-        for k, v in merged.items()
-        if is_fresh(v.get("published_dttm"), today, settings.YOUTUBE_MAX_AGE_DAYS)
-    }
-    stat["fresh"] = len(merged)
-
-    # 6) 이미 있는 것 제거 — videos.list 쿼터를 아끼는 단계다
-    known = await filter_known_keys(conn, "youtube", list(merged))
-    merged = {k: v for k, v in merged.items() if k not in known}
-    stat["new_candidate"] = len(merged)
 
     if not merged:
         stat["stored"] = 0

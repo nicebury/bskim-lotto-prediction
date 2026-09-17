@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { browserDreamRecommend } from '@/lib/api'
 import type { DreamMatch, DreamResult, DreamTier, DreamTierKey } from '@/lib/api-types'
@@ -408,33 +408,31 @@ function DreamResultView({
   return (
     <div className="dream-result">
       {/* ── 분석 결과 ─────────────────────────────────── */}
+      {/*
+        ⚠ 2026-09-17 재설계(사용자 요청: "정확히 일치 · 포함 · 뜻이 비슷한 단어 쪽 UI 를 보기
+          좋게"). 종전에는 파란 소제목 한 줄 아래 `단어 ● ● ●` 가 줄줄이 이어지고, 나머지
+          두 갈래는 회색 접이식 상자였다. 세 갈래가 **무엇이 다른지**가 소제목 글자에만 있어
+          훑어볼 때 갈래가 구분되지 않았다.
+
+          지금은 ① 적어 주신 문장에 찾은 단어를 **형광펜으로** 표시하고, ② 세 갈래를 **레인
+          카드**로 나란히 둔다. 레인마다 아이콘 · 이름 · 한 줄 뜻 · 아래 조합에서 보게 될
+          라벨(일치/포함/비슷)이 붙고, 카드 테두리 선 모양(실선/파선/점선)이 조합 속 볼 테두리와
+          **같다** — 위에서 본 갈래를 아래 조합에서 다시 알아보게 하려는 것이다.
+      */}
       <Card as="article" title="꿈 분석 결과">
+        <DreamEcho text={result.text} words={direct.map((m) => m.dream_word)} />
+
         <p className="dream-analysis-lede">
-          적어 주신 꿈에서 <strong>{direct.length}개</strong>의 상징을 찾았습니다.
+          적어 주신 꿈에서 <strong>{direct.length}개</strong>의 상징을 찾아, 자료의 단어와 세
+          갈래로 맞춰 보았습니다.
         </p>
 
-        <ul className="keyword-chips" style={{ marginTop: 'var(--space-2)' }}>
-          {direct.map((matched) => (
-            <li className="chip" key={matched.dream_word}>
-              {matched.dream_word}
-            </li>
-          ))}
-        </ul>
-
-        {/* 정확히 일치한 것은 접지 않는다 — 가장 확실한 근거라 먼저 보여야 한다. */}
-        {byGubun.has(1) && <WordNumberList items={byGubun.get(1) ?? []} title={GUBUN_LABEL[1]} />}
-
-        {/* 나머지는 접어 둔다. 다만 접혀 있다는 것이 한눈에 보여야 한다. */}
-        {byGubun.has(2) && (
-          <Disclosure title={GUBUN_LABEL[2]} count={(byGubun.get(2) ?? []).length}>
-            <WordNumberList items={byGubun.get(2) ?? []} />
-          </Disclosure>
-        )}
-        {byGubun.has(3) && (
-          <Disclosure title={GUBUN_LABEL[3]} count={(byGubun.get(3) ?? []).length}>
-            <WordNumberList items={byGubun.get(3) ?? []} />
-          </Disclosure>
-        )}
+        <div className="dream-lanes">
+          {LANES.map((lane) => {
+            const items = byGubun.get(lane.gubun) ?? []
+            return <DreamLane key={lane.gubun} lane={lane} items={items} />
+          })}
+        </div>
 
         {/* 원문에 없던 단어. 왜 여기 있는지 반드시 설명한다 — 설명 없이 보이면 오류로 읽힌다. */}
         {expandedRows.length > 0 && (
@@ -653,6 +651,191 @@ function OriginLegend({ origins }: { origins: Origin[] }) {
         </li>
       ))}
     </ul>
+  )
+}
+
+/**
+ * 세 갈래(레인). `gubun` 과 조합 속 출처 라벨(`ORIGIN`)을 한 줄로 잇는다.
+ *
+ * ⚠ `origin` 이 곧 CSS `[data-origin]` 이다 — 볼 테두리 선 모양·글자색과 같은 규칙을 쓴다
+ *   (components.css "번호가 어디서 왔는지"). 레인 색을 따로 만들면 위아래가 다른 말을 한다.
+ * ⚠ `hint` 는 **무엇을 넣었는가** 만 말한다. 어느 갈래가 더 낫다고 말하지 않는다.
+ */
+const LANES: { gubun: 1 | 2 | 3; origin: Origin; hint: string }[] = [
+  { gubun: 1, origin: 'exact', hint: '적으신 단어와 자료의 단어가 글자 그대로 같습니다.' },
+  { gubun: 2, origin: 'contain', hint: '적으신 단어를 품은 더 긴 단어입니다.' },
+  { gubun: 3, origin: 'similar', hint: '글자는 달라도 뜻이 가까운 단어입니다.' },
+]
+
+/**
+ * 적어 주신 문장 — 찾은 상징에 형광펜.
+ *
+ * ⚠ **문자열 표시만 한다.** 어떤 단어가 원문에 있었는지는 서버가 `from_text` 로 이미
+ *   판정했고, 여기서는 그 단어가 문장 **어디에** 있는지 칠할 뿐이다. 형태소를 다시
+ *   분석하지 않는다 — 그래서 "들어오다" 처럼 활용형으로 적힌 단어는 칠해지지 않을 수 있다.
+ *   그 단어는 아래 레인에 그대로 나오므로 정보가 사라지지는 않는다.
+ * ⚠ 긴 단어부터 맞춘다. "돼지" 가 "새끼돼지" 안쪽을 먼저 먹으면 칠이 어긋난다.
+ */
+function DreamEcho({ text, words }: { text: string; words: string[] }) {
+  const parts = useMemo(() => {
+    const unique = [...new Set(words.filter((w) => w && text.includes(w)))].sort(
+      (a, b) => b.length - a.length,
+    )
+    if (unique.length === 0) return [{ text, hit: false }]
+    const escaped = unique.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    return text
+      .split(new RegExp(`(${escaped.join('|')})`, 'g'))
+      .filter(Boolean)
+      .map((chunk) => ({ text: chunk, hit: unique.includes(chunk) }))
+  }, [text, words])
+
+  return (
+    <blockquote className="dream-echo">
+      <span className="dream-echo-label">적어 주신 꿈</span>
+      <p>
+        {parts.map((part, i) =>
+          part.hit ? <mark key={i}>{part.text}</mark> : <span key={i}>{part.text}</span>,
+        )}
+      </p>
+    </blockquote>
+  )
+}
+
+/**
+ * 레인 하나.
+ *
+ * ⚠ **넓은 화면(900px 이상)에서는 세 레인이 모두 펼쳐져 나란히 선다.** 좁은 화면에서는
+ *   '일치' 만 펼치고 나머지는 접는다 — 종전의 접이식 규칙(가장 확실한 근거를 먼저)을 잇는다.
+ *   접혀 있어도 **앞 단어 몇 개를 미리** 보여 주어 펼칠 값어치를 가늠하게 한다.
+ * ⚠ `<details>` 가 아니라 버튼 + `aria-expanded` 다. 화면 폭에 따라 기본 상태가 달라야
+ *   하는데 `<details open>` 은 CSS 로 바꿀 수 없다.
+ * ⚠ 첫 렌더는 서버와 같게(일치만 열림) 두고, 마운트 뒤에 폭을 보고 연다 — 하이드레이션
+ *   불일치를 피한다.
+ * ⚠ 비어 있는 갈래도 **레인을 지우지 않는다.** "뜻이 비슷한 단어: 없음" 도 정보다 — 세
+ *   칸이 늘 같은 자리에 있어야 갈래를 위치로 기억한다.
+ */
+function DreamLane({
+  lane,
+  items,
+}: {
+  lane: (typeof LANES)[number]
+  items: { word: string; numbers: number[] }[]
+}) {
+  const [open, setOpen] = useState(lane.gubun === 1)
+  const bodyId = `dream-lane-${lane.gubun}`
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 900px)')
+    if (mq.matches) setOpen(true)
+  }, [])
+
+  const numberCount = new Set(items.flatMap((item) => item.numbers)).size
+  const empty = items.length === 0
+
+  return (
+    <section className="dream-lane" data-origin={lane.origin} data-open={open ? '' : undefined}>
+      <div className="dream-lane-head">
+        <span className="dream-lane-icon" aria-hidden="true">
+          <LaneIcon origin={lane.origin} />
+        </span>
+        <div className="dream-lane-title">
+          <h4>{GUBUN_LABEL[lane.gubun]}</h4>
+          <p>{lane.hint}</p>
+        </div>
+        {/* 아래 조합 볼 밑에 붙는 라벨과 같은 글자·같은 테두리. */}
+        <span className="dream-legend-swatch dream-lane-tag" aria-hidden="true">
+          {ORIGIN[lane.origin].label}
+        </span>
+      </div>
+
+      <p className="dream-lane-stat">
+        {empty ? (
+          '찾은 단어가 없습니다'
+        ) : (
+          <>
+            단어 <strong>{items.length}</strong> · 번호 <strong>{numberCount}</strong>
+          </>
+        )}
+      </p>
+
+      {!empty && (
+        <>
+          {/* 접혀 있을 때만 보이는 미리보기. 펼치면 아래 목록이 같은 단어를 보여 준다. */}
+          {!open && (
+            <p className="dream-lane-peek" aria-hidden="true">
+              {items.slice(0, 3).map((item) => item.word).join(' · ')}
+              {items.length > 3 && ` 외 ${items.length - 3}`}
+            </p>
+          )}
+
+          <button
+            type="button"
+            className="dream-lane-toggle"
+            aria-expanded={open}
+            aria-controls={bodyId}
+            onClick={() => setOpen((v) => !v)}
+          >
+            {open ? '접기' : '단어별 번호 보기'}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+
+          <ul className="dream-lane-words" id={bodyId} hidden={!open}>
+            {items.map((item) => (
+              <li key={`${item.word}-${item.numbers.join('-')}`}>
+                <span className="dream-lane-word">{item.word}</span>
+                <span className="dream-lane-balls">
+                  {item.numbers.map((n) => (
+                    <LottoBall key={n} number={n} size="sm" />
+                  ))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  )
+}
+
+/**
+ * 갈래 아이콘. 일치 = 과녁, 포함 = 겹친 원(큰 원이 작은 원을 품는다), 비슷 = 물결(≈).
+ * ⚠ 모양이 뜻을 말하게 골랐다 — 색을 구별하지 못해도 갈래가 나뉜다.
+ */
+function LaneIcon({ origin }: { origin: Origin }) {
+  const common = {
+    viewBox: '0 0 24 24',
+    width: 20,
+    height: 20,
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.8,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+  }
+  if (origin === 'exact') {
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="8.5" />
+        <circle cx="12" cy="12" r="4.5" />
+        <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
+      </svg>
+    )
+  }
+  if (origin === 'contain') {
+    return (
+      <svg {...common}>
+        <rect x="3" y="5" width="18" height="14" rx="3" />
+        <rect x="7" y="9" width="7" height="6" rx="1.5" />
+      </svg>
+    )
+  }
+  return (
+    <svg {...common}>
+      <path d="M4 9.5c2.5-2 5-2 8 0s5.5 2 8 0" />
+      <path d="M4 15c2.5-2 5-2 8 0s5.5 2 8 0" />
+    </svg>
   )
 }
 

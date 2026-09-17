@@ -16,7 +16,9 @@ from fastapi.responses import JSONResponse
 
 from .config import settings
 from .db import close_pool, open_pool
-from .routers import admin, dream, lotto, meta, news, recommend, stats, video
+from .routers import (
+    admin, analyze, dream, lotto, meta, news, recommend, simulate, stats, video,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -70,7 +72,9 @@ async def handle_db_error(request: Request, exc: psycopg.Error) -> JSONResponse:
 
 app.include_router(lotto.router)
 app.include_router(stats.router)
+app.include_router(analyze.router)
 app.include_router(recommend.router)
+app.include_router(simulate.router)
 app.include_router(dream.router)
 app.include_router(news.router)
 app.include_router(video.router)

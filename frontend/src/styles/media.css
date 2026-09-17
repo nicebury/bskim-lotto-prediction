@@ -1,0 +1,1122 @@
+/*
+ * 영상(`/videos`, `/videos/{id}`) · 뉴스(`/news`) 화면 — 2026-09-17 재설계.
+ *
+ * ── 이 파일이 생긴 이유 ─────────────────────────────────────────────
+ * 사용자 지적: 뉴스는 "너무 투박하고 옛날스럽다", 영상은 쇼츠 구분·검색·정렬이 없고 상세의
+ * "이 영상에 대하여" 가 텍스트 나열이다. 두 화면은 **남이 만든 것을 모아 보여 주는 화면**이라
+ * 머리(`media-hero`) · 조건 줄(`media-meta`) 문법을 함께 쓴다 — 한 사이트로 읽히게.
+ *
+ * ⚠ components.css 의 `.video-*` 일부를 덮어쓴다. globals.css 에서 그 **뒤**에 불러온다.
+ * ⚠ 유튜브 규칙(RMF): 플레이어(`.video-embed`) 위에 아무것도 얹지 않는다. 썸네일 위 배지는 된다.
+ * ⚠ 색·크기는 tokens.css 변수만. 강조 세로 띠 금지(frontend/CLAUDE.md).
+ * ──────────────────────────────────────────────────────────── */
+
+/* ────────────────────────────────────────────────────────────
+ * 1. 공용 머리 · 조건 줄
+ * ──────────────────────────────────────────────────────────── */
+
+.media-hero {
+  position: relative;
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 var(--space-2);
+  padding: var(--space-6) var(--space-5);
+  border-radius: 24px;
+  background:
+    radial-gradient(70% 90% at 100% 0%, color-mix(in oklab, var(--color-primary) 14%, transparent), transparent 70%),
+    radial-gradient(50% 70% at 0% 100%, color-mix(in oklab, var(--svc-dream) 9%, transparent), transparent 70%),
+    var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+@media (min-width: 640px) {
+  .media-hero {
+    padding: var(--space-8);
+  }
+}
+
+.media-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.04em;
+  color: var(--color-primary);
+}
+
+.media-hero h1 {
+  margin: 0;
+  font-size: clamp(1.5rem, 1.2rem + 1vw, 2rem);
+  letter-spacing: var(--ls-hero);
+}
+
+.media-lede {
+  max-width: 60ch;
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: var(--lh-body);
+  word-break: keep-all;
+}
+
+/* 알약형 검색창 — 영상(GET 폼)·뉴스(`nfilter-box`) 같은 모양. */
+.media-search,
+.nfilter-box {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding: 6px 6px 6px var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  box-shadow: 0 10px 28px -18px color-mix(in oklab, var(--color-primary) 55%, transparent);
+  transition: border-color var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
+}
+
+.media-search:focus-within,
+.nfilter-box:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-primary) 16%, transparent);
+}
+
+.media-search-icon,
+.nfilter-icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--color-text-subtle);
+}
+
+.media-search input,
+.nfilter-box input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--fs-body);
+  color: var(--color-text);
+  outline: none;
+}
+
+.media-search .btn,
+.nfilter-submit {
+  flex: none;
+  min-height: 44px;
+  padding-inline: var(--space-5);
+  border-radius: var(--radius-pill);
+}
+
+@media (min-width: 900px) {
+  .media-search {
+    max-width: 640px;
+  }
+}
+
+/* 조건 줄 — "‘1등’ 검색 · 최신순 · 24개 · 검색 지우기" */
+.media-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  margin: var(--space-4) 0 var(--space-3);
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.media-meta strong {
+  color: var(--color-text);
+}
+
+.media-meta-count {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.media-meta-clear {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 2. 영상 목록 — 갈래 탭 · 정렬 · 카드
+ * ──────────────────────────────────────────────────────────── */
+
+.media-list {
+  margin-top: var(--space-4);
+}
+
+.media-toolbar {
+  display: grid;
+  gap: var(--space-3);
+}
+
+@media (min-width: 900px) {
+  .media-toolbar {
+    grid-template-columns: auto 1fr;
+    align-items: center;
+  }
+}
+
+/* 갈래 — 세그먼트. 한 덩어리 안에서 하나만 켜진다는 것이 모양으로 보인다. */
+.media-tabs {
+  display: inline-flex;
+  justify-self: start;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+
+.media-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding-inline: var(--space-4);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+  text-decoration: none;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+
+/*
+ * ⚠ 좁은 화면에서 탭 높이 40px + 트랙 여백 4px×2 = 48px 영역이라 터치 타겟 44px 을 지킨다.
+ */
+.media-tab:hover {
+  color: var(--color-text);
+}
+
+.media-tab[data-active] {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-card);
+}
+
+/* 정렬 — 가로로 미는 칩. 넓은 화면에서는 오른쪽 끝에 붙는다. */
+.media-sorts {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.media-sorts::-webkit-scrollbar {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .media-sorts {
+    justify-content: flex-end;
+  }
+}
+
+.media-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  min-height: 44px;
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.media-sort:hover {
+  border-color: var(--color-primary);
+  color: var(--color-text);
+}
+
+.media-sort[data-active] {
+  border-color: var(--color-text);
+  background: var(--color-text);
+  color: var(--color-surface);
+}
+
+/* ── 카드 다듬기(components.css `.video-card` 덮어쓰기) ─────────── */
+
+.video-grid {
+  gap: var(--space-5) var(--space-4);
+}
+
+/*
+ * ⚠ 테두리 상자를 걷었다. 썸네일이 이미 강한 사각형이라 상자를 또 두르면 액자 속 액자다.
+ *   썸네일만 둥글게 두고 글은 그 아래에 바로 흐른다(유튜브 계열 목록의 익숙한 문법).
+ */
+.video-card {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+.video-card:hover {
+  border-color: transparent;
+}
+
+.video-card-thumb {
+  overflow: hidden;
+  border-radius: 16px;
+  box-shadow: 0 10px 24px -18px rgb(26 29 46 / 0.55);
+}
+
+.video-card-thumb img {
+  transition: transform 400ms var(--ease-out);
+}
+
+@media (hover: hover) {
+  .video-card:hover .video-card-thumb img {
+    transform: scale(1.04);
+  }
+  .video-card:hover .video-card-play {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* 재생 표시 — 마우스를 올리면 떠오른다. 썸네일 위 장식(플레이어 오버레이가 아니다). */
+.video-card-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding-left: 3px;
+  border-radius: var(--radius-pill);
+  background: rgb(26 29 46 / 0.7);
+  color: #fff;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.8);
+  transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out);
+  pointer-events: none;
+}
+
+/*
+ * 쇼츠 배지. ⚠ `likely` 에만 붙는다(VideoCard 주석). 썸네일 왼쪽 위.
+ * 흰 글자 대비를 위해 진한 반투명 바탕이다 — 썸네일 색이 무엇이든 읽힌다.
+ */
+.video-card-shorts {
+  position: absolute;
+  left: var(--space-2);
+  top: var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px 3px 6px;
+  border-radius: var(--radius-pill);
+  background: rgb(26 29 46 / 0.82);
+  color: #fff;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  line-height: 1.2;
+}
+
+.video-card-body {
+  padding: var(--space-3) 2px 0;
+}
+
+.video-card-title {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-bold);
+  line-height: 1.45;
+  min-height: calc(var(--fs-body) * 1.45 * 2);
+}
+
+.video-card-duration {
+  border-radius: 6px;
+}
+
+/*
+ * 쇼츠 탭 — 세로 카드.
+ * ⚠ 썸네일 원본은 16:9 일 수 있어 `object-fit: cover` 로 가운데를 잘라 9:16 으로 보인다.
+ *   쇼츠 썸네일은 가운데에 피사체가 오도록 만들어져 대체로 자연스럽다.
+ */
+.video-grid[data-variant='portrait'] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4) var(--space-3);
+}
+
+@media (min-width: 640px) {
+  .video-grid[data-variant='portrait'] {
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  }
+}
+
+.video-card[data-variant='portrait'] .video-card-thumb {
+  aspect-ratio: 9 / 16;
+}
+
+.video-card[data-variant='portrait'] .video-card-title {
+  font-size: var(--fs-sm);
+  min-height: calc(var(--fs-sm) * 1.45 * 2);
+}
+
+.video-card[data-variant='portrait'] .video-card-meta span:first-child {
+  /* 채널명이 길면 세로 카드 폭에서 두 줄을 먹는다. 한 줄로 자른다(낱말을 바꾸지 않는다). */
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 3. 영상 상세 — 목록으로 · 무대 · 다음 쇼츠 · 이 영상에 대하여
+ * ──────────────────────────────────────────────────────────── */
+
+.media-backbar {
+  margin: var(--space-3) 0 0;
+}
+
+.media-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: 0 var(--space-4) 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+  text-decoration: none;
+  transition: border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+
+.media-back:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.media-back:hover svg {
+  transform: translateX(-2px);
+}
+
+.media-back svg {
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.video-stage {
+  margin-top: var(--space-4);
+}
+
+/*
+ * 쇼츠 무대: 세로 플레이어 | 정보. 900px 이상에서만 두 칸.
+ * ⚠ 플레이어 칸 폭을 고정하고 높이는 `.video-embed[data-portrait]` 의 `max-height: 78vh` 가 묶는다.
+ */
+@media (min-width: 900px) {
+  .video-stage[data-portrait] {
+    display: grid;
+    grid-template-columns: minmax(0, 400px) minmax(0, 1fr);
+    gap: var(--space-8);
+    align-items: start;
+  }
+
+  .video-stage[data-portrait] .video-stage-info {
+    position: sticky;
+    top: calc(var(--header-height) + var(--space-4));
+  }
+
+  .video-stage[data-portrait] .video-title {
+    margin-top: var(--space-2);
+  }
+}
+
+.video-shorts-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: var(--space-4) 0 0;
+  padding: 3px 10px 3px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-text);
+  color: var(--color-surface);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+}
+
+@media (min-width: 900px) {
+  .video-stage[data-portrait] .video-shorts-tag {
+    margin-top: 0;
+  }
+}
+
+.video-stage .video-title {
+  font-size: clamp(1.2rem, 1rem + 0.7vw, 1.5rem);
+  letter-spacing: var(--ls-title);
+  word-break: keep-all;
+}
+
+/* ── 다음 쇼츠 ────────────────────────────────────────── */
+
+.next-shorts {
+  margin-top: var(--space-5);
+  padding: var(--space-4);
+  border-radius: 20px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  transition: border-color var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
+}
+
+/* 재생이 끝났다 — 카드가 강조되며 시선을 끈다(자동으로 넘기지는 않는다). */
+.next-shorts[data-ended] {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-primary) 18%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .next-shorts[data-ended] .next-shorts-go {
+    animation: next-nudge 1.4s var(--ease-out) infinite;
+  }
+}
+
+@keyframes next-nudge {
+  0%,
+  60%,
+  100% {
+    transform: translateX(0);
+  }
+  30% {
+    transform: translateX(4px);
+  }
+}
+
+.next-shorts-status {
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  color: var(--color-primary);
+}
+
+.next-shorts-status:empty {
+  display: none;
+}
+
+.next-shorts[data-ended] .next-shorts-status {
+  margin-bottom: var(--space-2);
+}
+
+.next-shorts-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.04em;
+  color: var(--color-text-subtle);
+}
+
+.next-shorts-card {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: center;
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.next-shorts-thumb {
+  display: block;
+  aspect-ratio: 9 / 16;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--color-surface-2);
+}
+
+.next-shorts-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.next-shorts-body {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.next-shorts-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  line-height: 1.45;
+}
+
+.next-shorts-meta {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+.next-shorts-go {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 4px;
+  margin-top: var(--space-1);
+  min-height: 40px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  color: var(--color-on-accent);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+}
+
+.next-shorts-card:hover .next-shorts-go {
+  background: var(--color-primary-hover);
+}
+
+.next-shorts .yt-credit {
+  margin-top: var(--space-2);
+}
+
+/* ── 이 영상에 대하여 ──────────────────────────────────── */
+
+.video-about h2 {
+  font-size: var(--fs-h2);
+  letter-spacing: var(--ls-title);
+}
+
+.video-facts {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 640px) {
+  .video-facts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.video-facts li {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: 18px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+.video-fact-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.video-facts h3,
+.video-norond h3 {
+  margin: 0;
+  font-size: var(--fs-h3);
+  word-break: keep-all;
+}
+
+.video-facts p,
+.video-norond p {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+/* 회차를 못 붙인 사정 — 경고가 아니라 '안내'. 주황 틴트로 흰 사실 카드와 구분한다. */
+.video-norond {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  border-radius: 18px;
+  background: color-mix(in oklab, var(--color-warning) 8%, var(--color-surface));
+}
+
+.video-norond .video-fact-icon {
+  background: var(--color-surface);
+  color: var(--color-warning);
+}
+
+.video-norond div {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.video-links-title {
+  margin: var(--space-6) 0 var(--space-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.04em;
+  color: var(--color-text-subtle);
+}
+
+.video-links {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 640px) {
+  .video-links {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.video-links a {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 64px;
+  padding: var(--space-3) var(--space-4);
+  border-radius: 16px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  text-decoration: none;
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+
+.video-links a > svg:first-child {
+  color: var(--color-primary);
+}
+
+.video-links a > svg:last-child {
+  color: var(--color-text-subtle);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.video-links a:hover {
+  border-color: var(--color-primary);
+  background: var(--color-surface);
+}
+
+.video-links a:hover > svg:last-child {
+  transform: translateX(3px);
+  color: var(--color-primary);
+}
+
+.video-links strong {
+  display: block;
+  font-size: var(--fs-sm);
+}
+
+.video-links small {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+.video-about-back {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-6);
+}
+
+.media-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 48px;
+  padding-inline: var(--space-6);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 4. 뉴스 — 검색 · 주요 기사 · 날짜 묶음 카드
+ * → components/NewsFilter.tsx · NewsFeed.tsx
+ * ──────────────────────────────────────────────────────────── */
+
+.nfilter {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.nfilter-box {
+  margin-top: 0;
+}
+
+.nfilter-row {
+  display: grid;
+  gap: var(--space-2);
+}
+
+@media (min-width: 900px) {
+  .nfilter-row {
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: var(--space-4);
+  }
+}
+
+.nfilter-periods,
+.nfilter-quick {
+  display: flex;
+  gap: var(--space-1);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.nfilter-periods::-webkit-scrollbar,
+.nfilter-quick::-webkit-scrollbar {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .nfilter-quick {
+    justify-content: flex-end;
+  }
+}
+
+.nfilter-chip,
+.nfilter-quick-word {
+  flex: none;
+  min-height: 44px;
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.nfilter-chip:hover,
+.nfilter-quick-word:hover {
+  border-color: var(--color-primary);
+  color: var(--color-text);
+}
+
+.nfilter-chip[data-active] {
+  border-color: var(--color-text);
+  background: var(--color-text);
+  color: var(--color-surface);
+}
+
+.nfilter-quick-word {
+  border-style: dashed;
+}
+
+.nfilter-quick-word[data-active] {
+  border-style: solid;
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+/* ── 피드 ─────────────────────────────────────────────── */
+
+.nf {
+  display: grid;
+  gap: var(--space-6);
+}
+
+/* 주요 기사. 카드 격자보다 한 단계 크고, 모서리 빛으로 '맨 앞' 임을 보인다. */
+.nf-lead {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-radius: 24px;
+  background:
+    radial-gradient(80% 100% at 100% 0%, color-mix(in oklab, var(--svc-news) 16%, transparent), transparent 65%),
+    var(--color-surface);
+  border: 1px solid var(--color-border);
+  position: relative;
+}
+
+@media (min-width: 640px) {
+  .nf-lead {
+    padding: var(--space-8);
+  }
+}
+
+.nf-lead-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--svc-news);
+}
+
+.nf-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--svc-news);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--svc-news) 22%, transparent);
+}
+
+.nf-lead-title {
+  margin: 0;
+  font-size: clamp(1.25rem, 1rem + 0.9vw, 1.65rem);
+  line-height: 1.35;
+  letter-spacing: var(--ls-title);
+  word-break: keep-all;
+  text-wrap: balance;
+}
+
+.nf-lead-title a,
+.nf-card-title a {
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+/* 늘린 링크 — 카드 어디를 눌러도 제목 링크가 눌린다. */
+.nf-lead-title a::after,
+.nf-card-title a::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.nf-lead:hover .nf-lead-title a,
+.nf-card:hover .nf-card-title a {
+  color: var(--color-primary);
+}
+
+.nf-lead:has(a:focus-visible),
+.nf-card:has(a:focus-visible) {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.nf-lead-title a:focus-visible,
+.nf-card-title a:focus-visible {
+  outline: none;
+}
+
+.nf-lead-summary {
+  max-width: 70ch;
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: var(--lh-body);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: keep-all;
+}
+
+.nf-lead-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-top: var(--space-1);
+}
+
+.nf-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  color: var(--color-primary);
+}
+
+/* 날짜 묶음 머리. */
+.nf-day {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.nf-day-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-black);
+  letter-spacing: var(--ls-title);
+}
+
+.nf-day-head small {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-subtle);
+}
+
+.nf-grid {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 720px) {
+  .nf-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .nf-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.nf-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  height: 100%;
+  padding: var(--space-4);
+  border-radius: 18px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  transition:
+    transform var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .nf-card:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in oklab, var(--color-primary) 35%, var(--color-border));
+    box-shadow: 0 14px 30px -22px color-mix(in oklab, var(--color-primary) 55%, transparent);
+  }
+}
+
+.nf-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.nf-time {
+  flex: none;
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-subtle);
+}
+
+.nf-card-title {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-bold);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: keep-all;
+}
+
+.nf-card-summary {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+  color: var(--color-text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: keep-all;
+}
+
+.nf-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-2);
+}
+
+.nf-card-ext {
+  flex: none;
+  color: var(--color-text-subtle);
+}
+
+.nf-card:hover .nf-card-ext {
+  color: var(--color-primary);
+}
+
+.nf-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px var(--space-2);
+  font-size: var(--fs-xs);
+  color: var(--color-text-subtle);
+}
+
+/* 언론사 — 머리글자 배지 + 도메인 */
+.nf-outlet {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.nf-outlet-badge {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: var(--fw-black);
+  color: var(--st);
+  background: var(--st-bg);
+}
+
+.nf-outlet-badge[data-tone='0'] { --st: var(--svc-news); --st-bg: var(--svc-news-bg); }
+.nf-outlet-badge[data-tone='1'] { --st: var(--svc-stats); --st-bg: var(--svc-stats-bg); }
+.nf-outlet-badge[data-tone='2'] { --st: var(--svc-lotto); --st-bg: var(--svc-lotto-bg); }
+.nf-outlet-badge[data-tone='3'] { --st: var(--svc-dream); --st-bg: var(--svc-dream-bg); }
+.nf-outlet-badge[data-tone='4'] { --st: var(--svc-play); --st-bg: var(--svc-play-bg); }
+.nf-outlet-badge[data-tone='5'] { --st: var(--color-warning); --st-bg: var(--svc-reco-bg); }
+
+.nf-outlet-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+}

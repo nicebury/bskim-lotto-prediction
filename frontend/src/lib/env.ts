@@ -54,6 +54,29 @@ export const NAVER_SITE_VERIFICATION = process.env.NAVER_SITE_VERIFICATION || ''
 export const ADSENSE_CLIENT = process.env.NEXT_PUBLIC_ADSENSE_CLIENT || ''
 
 /**
+ * 광고 자리별 **실제 애드센스 슬롯 ID** 목록. `이름=숫자` 를 쉼표로 잇는다.
+ *
+ *     NEXT_PUBLIC_ADSENSE_SLOTS=home-mid=1234567890,lotto-mid=2345678901
+ *
+ * ⚠ 슬롯마다 환경변수를 따로 두지 않는다. 위 주석대로 `process.env` **동적 접근은 치환되지
+ *   않으므로**, 변수 하나를 정적으로 읽고 파싱한다(→ lib/ad-slots.ts).
+ * ⚠ 숫자 ID 는 **승인 후 대시보드에서 광고 단위를 만들어야** 나온다. 비어 있으면 그 자리의
+ *   `AdSlot` 은 렌더링되지 않는다 — 잘못된 값으로 빈 상자를 만드는 것보다 낫다.
+ */
+export const ADSENSE_SLOTS = process.env.NEXT_PUBLIC_ADSENSE_SLOTS || ''
+
+/**
+ * `ads.txt` 에 쓸 퍼블리셔 ID. `ADSENSE_CLIENT`(`ca-pub-…`)에서 `ca-` 를 뗀 값이다.
+ *
+ * ⚠ **별도 환경변수를 두지 않는다.** 같은 값을 두 곳에 적게 하면 한쪽만 고치는 사고가 난다.
+ * ⚠ 형식이 다르면 빈 문자열이다 — `/ads.txt` 는 그때 404 를 낸다. 틀린 ads.txt 를 올리면
+ *   해당 광고 인벤토리가 통째로 무효가 되므로, **없는 편이 틀린 것보다 낫다.**
+ */
+export const ADSENSE_PUBLISHER_ID = /^ca-pub-\d+$/.test(ADSENSE_CLIENT)
+  ? ADSENSE_CLIENT.slice('ca-'.length)
+  : ''
+
+/**
  * `.env_frontend` 의 SITE_URL 은 `https://<도메인>` 처럼 미확정 플레이스홀더가 들어 있을
  * 수 있다. 그대로 `new URL()` 에 넘기면 빌드가 죽으므로 파싱 가능한지 확인하고,
  * 불가능하면 로컬 오리진으로 되돌린다. 도메인이 확정되면 이 폴백은 그냥 쓰이지 않는다.

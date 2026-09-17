@@ -72,7 +72,7 @@ export function AdminLogs() {
         if (!res.ok) {
           setError(
             res.status === 503
-              ? '운영자 기능이 꺼져 있습니다. 서버의 ADMIN_TOKEN 설정을 확인하세요.'
+              ? '운영자 기능이 꺼져 있습니다. 서버의 운영자 자격증명 설정을 확인하세요.'
               : '이력을 불러오지 못했습니다.',
           )
           return

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useId, useState } from 'react'
 
 import type { NewsPeriod } from '@/lib/api-types'
+import { SearchGlyph } from './icons'
 
 /**
  * 뉴스 조회 폼 — 키워드 + 기간(002 R30).
@@ -15,13 +16,16 @@ import type { NewsPeriod } from '@/lib/api-types'
  * 폼 제출 시 page 를 1로 되돌린다 — 3페이지에서 키워드를 바꾸면 결과가 3페이지부터
  * 시작할 이유가 없다.
  */
+/** 자주 찾는 낱말(고정). 아래 컴포넌트 주석 참조. */
+const QUICK = ['1등', '당첨금', '판매점', '연금복권', '동행복권', '추첨']
+
 const PERIODS: { value: NewsPeriod; label: string }[] = [
-  { value: '1w', label: '최근 1주' },
-  { value: '2w', label: '최근 2주' },
-  { value: '1m', label: '최근 1개월' },
-  { value: '3m', label: '최근 3개월' },
-  { value: '6m', label: '최근 6개월' },
-  { value: 'all', label: '전체 기간' },
+  { value: '1w', label: '1주' },
+  { value: '2w', label: '2주' },
+  { value: '1m', label: '1개월' },
+  { value: '3m', label: '3개월' },
+  { value: '6m', label: '6개월' },
+  { value: 'all', label: '전체' },
 ]
 
 export function NewsFilter({
@@ -52,47 +56,71 @@ export function NewsFilter({
   }
 
   return (
-    <form className="news-filter" onSubmit={onSubmit} role="search">
-      <div className="news-filter-field">
+    <form className="nfilter" onSubmit={onSubmit} role="search">
+      {/*
+        ⚠ 2026-09-17 재설계("투박하다"). 입력칸 · 기간 드롭다운 · 버튼이 한 줄에 같은 무게로 놓여
+          검색창인지 설정 줄인지 흐렸다. 지금은 **돋보기가 든 알약형 검색창** 하나를 크게 두고,
+          기간은 **칩**으로 늘어놓는다 — 드롭다운은 열어야 선택지가 보인다.
+      */}
+      <div className="nfilter-box">
         <label className="sr-only" htmlFor={`${baseId}-keyword`}>
           뉴스 키워드 검색
         </label>
+        <SearchGlyph className="nfilter-icon" />
         <input
           id={`${baseId}-keyword`}
-          className="input"
           type="search"
-          placeholder="키워드 (예: 1등, 판매점)"
+          placeholder="키워드로 찾기 (예: 1등, 판매점)"
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
         />
+        <button type="submit" className="btn btn-primary nfilter-submit">
+          검색
+        </button>
       </div>
 
-      <div className="news-filter-field">
-        <label className="sr-only" htmlFor={`${baseId}-period`}>
-          조회 기간
-        </label>
-        <select
-          id={`${baseId}-period`}
-          className="input"
-          value={period}
-          onChange={(e) => {
-            const next = e.target.value as NewsPeriod
-            setPeriod(next)
-            // 기간은 고르는 즉시 적용한다 — 제출 버튼을 한 번 더 누르게 하지 않는다.
-            apply(keyword, next)
-          }}
-        >
+      <div className="nfilter-row">
+        <div className="nfilter-periods" role="group" aria-label="조회 기간">
           {PERIODS.map((p) => (
-            <option key={p.value} value={p.value}>
+            <button
+              key={p.value}
+              type="button"
+              className="nfilter-chip"
+              data-active={p.value === period ? '' : undefined}
+              aria-pressed={p.value === period}
+              onClick={() => {
+                setPeriod(p.value)
+                // 기간은 고르는 즉시 적용한다 — 제출 버튼을 한 번 더 누르게 하지 않는다.
+                apply(keyword, p.value)
+              }}
+            >
               {p.label}
-            </option>
+            </button>
           ))}
-        </select>
-      </div>
+        </div>
 
-      <button type="submit" className="btn btn-primary news-filter-submit">
-        검색
-      </button>
+        {/*
+          자주 찾는 낱말. 무엇을 검색할 수 있는지 **예시로** 보여 준다.
+          ⚠ 고정 목록이다. 기사 키워드를 세어 인기어를 만들지 않는다 — 브라우저에서 집계하지
+            않는다는 규칙(frontend/CLAUDE.md)이고, 그런 값이 필요하면 API 가 내려야 한다.
+        */}
+        <div className="nfilter-quick" aria-label="자주 찾는 키워드">
+          {QUICK.map((word) => (
+            <button
+              key={word}
+              type="button"
+              className="nfilter-quick-word"
+              data-active={word === initialKeyword ? '' : undefined}
+              onClick={() => {
+                setKeyword(word)
+                apply(word, period)
+              }}
+            >
+              #{word}
+            </button>
+          ))}
+        </div>
+      </div>
     </form>
   )
 }

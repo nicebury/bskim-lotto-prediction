@@ -77,4 +77,4 @@
 | `frontend/` | C | Next.js 렌더링·SEO·애널리틱스 |
 | `docs/wiki/` | 공유 | 지식체계 |
 | `docs/raw/` | — | 원본 기획·시안. **읽기 전용** |
-| `frontend_old/`, `work_order/` | — | 아카이브. **수정 금지** |
+| `work_order/` | — | 아카이브. **수정 금지** |

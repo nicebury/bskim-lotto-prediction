@@ -3,24 +3,38 @@
 **공개 API 가 아니다.** 사이트 운영자 한 사람만 쓰는 화면의 데이터원이고, 나머지
 엔드포인트와 규칙이 다르다 (docs/wiki/10-contracts/api-contract.md 의 '운영자 전용' 절).
 
-## 왜 계정 테이블을 만들지 않는가
+## 아이디 · 비밀번호 · OTP 2단계 (2026-08-31)
 
-쓰는 사람이 한 명이고, 계정 시스템은 그 자체로 공격면이자 유지보수 대상이다. 환경변수
-`ADMIN_TOKEN` 하나로 한다 — 워커의 `X-Job-Key` 와 같은 규약이다.
+종전에는 64자 랜덤 토큰 하나를 입력받았다. 외우지 못해 늘 복사해 붙여야 했고, 사용자가
+"아이디·비밀번호로 하고 싶다" 고 요청했다.
 
-## 이 파일에서 조심할 것 넷
+⚠ **아이디·비밀번호'만'으로 바꾸면 종전보다 약해진다.** 사람이 기억하는 비밀번호는
+64자 랜덤보다 훨씬 추측하기 쉽기 때문이다. 그래서 **OTP(TOTP, RFC 6238)를 함께** 받는다 —
+외우기 쉬운 비밀번호를 쓰더라도 30초마다 바뀌는 여섯 자리가 그 약점을 덮는다.
+
+**계정 테이블은 여전히 만들지 않는다.** 쓰는 사람이 한 명이고, 계정 시스템은 그 자체로
+공격면이자 유지보수 대상이다. 계정 하나를 환경변수에 둔다
+(`scripts/make_admin_credentials.py` 가 만든다).
+
+## 이 파일에서 조심할 것 다섯
 
 1. **`secrets.compare_digest`** 로 비교한다. `==` 는 앞에서부터 다른 자리를 만나면 즉시
-   반환하므로, 응답 시간 차이로 토큰을 한 글자씩 알아낼 수 있다.
-2. **`ADMIN_TOKEN` 이 비면 전부 503.** 빈 문자열끼리의 `compare_digest` 는 **통과한다** —
+   반환하므로, 응답 시간 차이로 값을 한 글자씩 알아낼 수 있다.
+2. **설정이 하나라도 비면 전부 503.** 빈 문자열끼리의 `compare_digest` 는 **통과한다** —
    빈 값을 '인증 없음' 으로 두면 아무나 들어온다. 인증이 없는 것보다 나쁘다.
-3. **쿠키에 토큰 원문을 담지 않는다.** XSS 한 번에 영구 토큰이 새기 때문이다. 서명된
+   ⚠ 특히 **OTP 비밀키가 없다고 비밀번호만으로 통과시키지 않는다.** 2단계를 켜 두었다고
+   믿는 사람에게 1단계만 돌려주는 것이 가장 나쁜 실패다.
+3. **쿠키에 자격증명을 담지 않는다.** XSS 한 번에 영구 자격증명이 새기 때문이다. 서명된
    세션 값(발급시각 + HMAC)을 담아 만료를 강제한다.
-4. **왜 틀렸는지 알려주지 않는다.** 토큰이 없다/짧다/틀렸다를 구분해 주면 그 자체가
-   공격자에게 주는 정보다. 전부 같은 401 이다.
+4. **왜 틀렸는지 알려주지 않는다.** 아이디가 틀렸다/비밀번호가 틀렸다/OTP 가 틀렸다를
+   구분해 주면 그 자체가 공격자에게 주는 정보다(아이디가 맞는지부터 알려 주는 셈이다).
+   전부 같은 401 이다.
+5. **세 값을 전부 검사한 뒤에 판정한다.** 아이디가 틀렸다고 곧바로 반환하면 응답 시간이
+   달라져 아이디의 존재 여부가 새어 나간다.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import logging
@@ -79,30 +93,113 @@ def _rate_limited(ip: str) -> bool:
 
 
 def _require_enabled() -> None:
-    """토큰·서명키가 없으면 이 경로 전체를 죽인다.
+    """자격증명이 하나라도 없으면 이 경로 전체를 죽인다.
 
     기동 자체를 막지 않는 이유: 운영자 화면 하나 때문에 공개 API 전체가 안 뜨면 손해가
     더 크다. 그래서 이 경로만 503 으로 죽이고, 공개 엔드포인트는 멀쩡히 돈다.
     """
     if not settings.admin_enabled:
         logger.error(
-            "ADMIN_TOKEN 또는 ADMIN_SESSION_SECRET 이 비어 있어 운영자 API 를 막았습니다. "
-            "backend/env.sample 을 보고 .env_backend 를 채우세요."
+            "운영자 자격증명이 비어 있어 /api/admin/* 를 막았습니다 "
+            "(ADMIN_USERNAME · ADMIN_PASSWORD_HASH · ADMIN_TOTP_SECRET · "
+            "ADMIN_SESSION_SECRET 중 하나 이상). "
+            "`uv run python scripts/make_admin_credentials.py` 로 만들어 "
+            ".env_backend 에 넣으세요."
         )
         raise HTTPException(
             status_code=503, detail="운영자 기능이 설정되지 않았습니다."
         )
 
 
+# ── 자격증명 검증 ────────────────────────────────────────────────────────
+
+
+def _verify_password(password: str, stored: str) -> bool:
+    """`scrypt$n$r$p$salt$hash` 를 검증한다. 형식은 `scripts/make_admin_credentials.py` 가 만든다.
+
+    파라미터를 해시 문자열에서 읽는 이유: 나중에 강도를 올려도 **이미 만든 자격증명이
+    깨지지 않는다.** 상수로 박아 두면 파라미터를 바꾸는 순간 로그인이 안 되고, 원인이
+    "비밀번호가 틀렸다" 로만 보인다.
+
+    형식이 깨졌으면 통과시키지 않는다 — 설정이 잘못된 것을 '인증 성공' 으로 바꾸지 않는다.
+    """
+    try:
+        scheme, n, r, p, salt_hex, hash_hex = stored.split("$")
+        if scheme != "scrypt":
+            return False
+        expected = bytes.fromhex(hash_hex)
+        actual = hashlib.scrypt(
+            password.encode("utf-8"),
+            salt=bytes.fromhex(salt_hex),
+            n=int(n),
+            r=int(r),
+            p=int(p),
+            dklen=len(expected),
+            maxmem=256 * 1024 * 1024,
+        )
+    except (ValueError, TypeError, MemoryError):
+        logger.error(
+            "ADMIN_PASSWORD_HASH 형식이 올바르지 않습니다. "
+            "scripts/make_admin_credentials.py 로 다시 만드세요."
+        )
+        return False
+    return secrets.compare_digest(actual, expected)
+
+
+def _verify_otp(code: str, secret: str) -> bool:
+    """TOTP(RFC 6238) 여섯 자리를 검증한다.
+
+    `valid_window=1` — 앞뒤 30초를 함께 인정한다. 사람이 코드를 읽고 입력하는 사이에
+    주기가 바뀌는 일이 흔하고, 서버와 폰의 시계가 몇 초 어긋나기도 한다. 창을 0 으로
+    두면 "분명히 맞게 쳤는데 안 된다" 가 반복된다.
+    ⚠ 창을 더 넓히지 않는다 — 넓힐수록 한 코드가 유효한 시간이 길어진다.
+    """
+    import pyotp
+
+    try:
+        return pyotp.TOTP(secret).verify(code, valid_window=1)
+    except Exception:  # noqa: BLE001
+        # 비밀키가 base32 가 아니면 여기서 터진다. 설정 오류를 통과로 바꾸지 않는다.
+        logger.error(
+            "ADMIN_TOTP_SECRET 이 올바른 base32 가 아닙니다. "
+            "scripts/make_admin_credentials.py 로 다시 만드세요."
+        )
+        return False
+
+
 # ── 세션 쿠키 ────────────────────────────────────────────────────────────
+
+
+def _cookie_secure(request: Request) -> bool:
+    """세션 쿠키에 `Secure` 를 붙일지 정한다.
+
+    ⚠ **요청 스킴만으로는 알 수 없다.** 2026-08-28 에는 `request.url.scheme` 으로 정했으나
+    그 판단이 이 구조에서 틀린다는 것을 확인했다 — 브라우저는 프론트(Next)와만 말하고
+    **Next 서버가 백엔드를 중계**하므로, 백엔드에 닿는 요청은 내부망 평문 HTTP 다.
+    사용자가 HTTPS 를 쓰고 있어도 백엔드는 그 사실을 알 방법이 없다.
+
+    그래서 `ADMIN_COOKIE_SECURE` 로 **사람이 명시한다.** 설정 키를 늘리지 않으려던 종전
+    판단을 뒤집는 것인데, 그 판단의 전제("스킴은 서버가 아는 사실이다")가 성립하지
+    않기 때문이다.
+
+    스킴·헤더가 HTTPS 라고 말하면 설정과 무관하게 붙인다 — 켜야 할 때 끄지 않기 위해서다.
+    반대 방향(HTTPS 인데 끄는 것)은 하지 않는다.
+    """
+    if settings.ADMIN_COOKIE_SECURE:
+        return True
+    if request.url.scheme == "https":
+        return True
+    # 중계자가 원래 스킴을 알려 주면 그것도 믿는다. 프론트 프록시가 이 헤더를 붙이면
+    # 설정 없이도 올바르게 동작한다.
+    return request.headers.get("x-forwarded-proto") == "https"
 
 
 def _sign(issued_at: int) -> str:
     """발급시각에 대한 HMAC. 쿠키 값은 `{발급시각}.{서명}` 이다.
 
-    토큰 원문 대신 이것을 담으므로, 쿠키가 새더라도 새는 것은 **만료가 있는 세션**이지
-    영구 토큰이 아니다. 서명 키가 `ADMIN_TOKEN` 과 달라야 하는 이유도 여기 있다 —
-    같으면 서명에서 토큰을 역산할 여지가 생긴다(설정에서 같으면 기동을 거부한다).
+    자격증명 대신 이것을 담으므로, 쿠키가 새더라도 새는 것은 **만료가 있는 세션**이지
+    영구 자격증명이 아니다. 서명 키가 다른 비밀값과 달라야 하는 이유도 여기 있다 —
+    같으면 서명에서 그것을 역산할 여지가 생긴다(설정에서 같으면 기동을 거부한다).
     """
     return hmac.new(
         settings.ADMIN_SESSION_SECRET.encode("utf-8"),
@@ -167,12 +264,24 @@ async def login(req: AdminLoginRequest, request: Request, response: Response) ->
         logger.warning("운영자 로그인 시도가 분당 한도를 넘었습니다 (ip=%s)", ip)
         raise HTTPException(status_code=429, detail="잠시 후 다시 시도하세요.")
 
-    # ★ `==` 가 아니라 `compare_digest`. 앞에서부터 다른 자리를 만나면 즉시 반환하는
-    # 비교는 응답 시간 차이로 토큰을 한 글자씩 알아내게 해 준다.
-    if not secrets.compare_digest(req.token, settings.ADMIN_TOKEN.strip()):
+    # ★ **세 가지를 전부 검사한 뒤에 판정한다.**
+    #
+    # 아이디가 틀렸다고 곧바로 반환하면, 아이디가 맞을 때만 비밀번호 해시 계산(0.1초)이
+    # 돌아 **응답 시간으로 아이디의 존재 여부가 새어 나간다.** 순서를 지키는 대신 결과를
+    # 모아 마지막에 한 번 판정한다.
+    ok_user = secrets.compare_digest(
+        req.username.strip(), settings.ADMIN_USERNAME.strip()
+    )
+    ok_password = _verify_password(req.password, settings.ADMIN_PASSWORD_HASH.strip())
+    ok_otp = _verify_otp(req.otp.strip(), settings.ADMIN_TOTP_SECRET.strip())
+
+    if not (ok_user and ok_password and ok_otp):
+        # 무엇이 틀렸는지 **로그에도** 남기지 않는다. 서버 로그를 본 사람에게 "아이디는
+        # 맞았다" 를 알려 줄 이유가 없다.
         logger.warning("운영자 로그인 실패 (ip=%s)", ip)
-        # 왜 틀렸는지 알려주지 않는다. 없다/짧다/틀렸다를 구분해 주면 그 자체가 정보다.
         raise HTTPException(status_code=401, detail="인증에 실패했습니다.")
+
+    secure = _cookie_secure(request)
 
     response.set_cookie(
         key=SESSION_COOKIE,
@@ -181,10 +290,7 @@ async def login(req: AdminLoginRequest, request: Request, response: Response) ->
         samesite="lax",      # 다른 사이트에서 온 POST 에 쿠키가 실리지 않는다
         path="/",
         max_age=settings.ADMIN_SESSION_HOURS * 3600,
-        # ★ 요청 스킴에서 정한다. 설정 키를 하나 더 두지 않는 이유: 사람이 채워야 할
-        # 값이 늘면 로컬에서 `true` 로 두었다가 쿠키가 안 붙는 사고가 나고, 반대로
-        # 운영에서 `false` 로 두면 평문으로 샌다. 스킴은 서버가 아는 사실이다.
-        secure=request.url.scheme == "https",
+        secure=secure,
     )
     return {"status": "ok"}
 

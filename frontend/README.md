@@ -4,9 +4,28 @@
 
 제약과 규칙은 `CLAUDE.md`, 디자인 시스템은 [`../docs/wiki/20-design/`](../docs/wiki/20-design/), SEO 는 [`../docs/wiki/30-seo/`](../docs/wiki/30-seo/), 부를 API 는 [`../docs/wiki/10-contracts/api-contract.md`](../docs/wiki/10-contracts/api-contract.md).
 
-구 Vite 앱은 `../frontend_old/` 에 있다. **참조만 하고 수정하지 않는다.**
-
 ---
+
+## ⚠ 화면이 안 바뀔 때 (WSL)
+
+**개발 서버를 켜 두었는데 고친 것이 화면에 반영되지 않으면, 먼저 이것부터 의심한다.**
+
+윈도우 드라이브(`/mnt/d`)를 WSL 이 마운트하는 파일시스템은 리눅스의 `inotify` 이벤트를 올려 보내지 않는다. webpack 은 변경 통지를 기다리다 아무것도 못 받고 그대로 앉아 있게 되고, **에러도 경고도 나지 않는다.**
+
+2026-09-08 에 실제로 사고가 났다. 개발 서버가 9월 2일에 뜬 뒤 **엿새 동안 그날의 화면을 계속 서빙**했고, 그 사이 고친 것이 하나도 반영되지 않았다. 화면만 보면 "구현이 안 된 것" 과 구별되지 않는다.
+
+`next.config.ts` 에 **폴링 감시**를 켜 두어 지금은 재발하지 않는다(1초 간격, 개발에서만). 그래도 이상하면 이렇게 확인한다.
+
+```bash
+# 1. 개발 서버가 언제 떴는지 본다. 최근 고친 시각보다 오래됐으면 그것이 원인이다.
+ps -o pid,lstart,args -p $(ss -tlnp | grep ':3000' | grep -o 'pid=[0-9]*' | cut -d= -f2)
+
+# 2. 캐시를 비우고 다시 띄운다.
+rm -rf .next && npx next dev
+```
+
+⚠ **Turbopack(`next dev --turbopack`)으로 바꾸면 폴링 설정이 무시된다.** 같은 증상이 다시 나므로 그때는 Turbopack 쪽 감시 옵션을 따로 찾아야 한다.
+
 
 ## 셋업
 

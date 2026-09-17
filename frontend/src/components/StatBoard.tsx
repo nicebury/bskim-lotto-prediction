@@ -243,7 +243,7 @@ function OverdueTable({ data }: { data: HotColdResult | null }) {
         </tbody>
       </table>
       <p className="stat-table-note">
-        마지막 출현 이후 지난 회차 수입니다. 오래 나오지 않았다고 나올 차례가 된 것은 아닙니다.
+        마지막으로 나온 뒤 몇 회차가 지났는지를 셉니다.
       </p>
     </ScrollArea>
   )
@@ -289,7 +289,7 @@ function PairsTable({ data }: { data: PairsResult | null }) {
         </tbody>
       </table>
       <p className="stat-table-note">
-        같은 회차에 함께 나온 횟수입니다. 이 쌍이 다시 나온다는 뜻은 아닙니다.
+        지나간 회차에서 이 두 번호가 같이 나온 횟수입니다.
       </p>
     </ScrollArea>
   )

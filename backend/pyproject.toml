@@ -22,6 +22,8 @@ dependencies = [
     "chromadb>=0.5",
     # torch 2.11 은 Python 3.13 에서 import 시 IndentationError 로 죽는다. 2.13 이 3.13 을 공식 지원한다.
     "torch>=2.13",
+    "pyotp>=2.10.0",
+    "qrcode>=8.2",
 ]
 
 [dependency-groups]

@@ -71,6 +71,11 @@ async def list_videos(
         None, ge=1, description="회차. game 과 함께 써야 의미가 있다"
     ),
     game: Optional[str] = Query(None, description="lotto | pension"),
+    q: Optional[str] = Query(
+        None, description="제목·채널명·키워드에 대소문자 무시 포함 검색. 50자 이하"
+    ),
+    sort: str = Query("latest", description="latest | views"),
+    period: str = Query("all", description="published_at 기준 최근 기간. 1w|1m|3m|all"),
 ) -> dict:
     # 계약이 허용값을 못 박았으므로 그 밖은 422 다. Query 의 pattern 으로 막지 않고
     # 여기서 거르는 이유는, 무엇이 가능한 값인지를 오류 메시지에 담기 위해서다 —
@@ -87,12 +92,50 @@ async def list_videos(
             detail=f"알 수 없는 game 입니다: {game}. "
             f"가능한 값: {', '.join(repo.VIDEO_GAMES)}",
         )
+    if sort not in repo.VIDEO_SORTS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"알 수 없는 sort 입니다: {sort}. "
+            f"가능한 값: {', '.join(repo.VIDEO_SORTS)}",
+        )
+    if period not in repo.VIDEO_PERIOD_DAYS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"알 수 없는 period 입니다: {period}. "
+            f"가능한 값: {', '.join(repo.VIDEO_PERIOD_DAYS)}",
+        )
+
+    # 공백만 있는 q 는 필터로 치지 않는다 — 빈 검색과 같게 다룬다(`news` 의 keyword 와
+    # 같은 규약). 검색창을 비웠는데 공백 한 칸이 남아 아무것도 안 나오는 일을 막는다.
+    keyword = q.strip() if q else None
+    keyword = keyword or None
+
+    # 길이는 **공백을 턴 뒤**에 잰다. 계약이 "공백 제거 후 … 50자를 넘으면 422" 순서로
+    # 서술한 그대로다. 앞뒤 공백 때문에 거절당하는 것은 사용자가 이해할 수 없는 거절이다.
+    if keyword is not None and len(keyword) > repo.VIDEO_Q_MAX_LENGTH:
+        raise HTTPException(
+            status_code=422,
+            detail=f"q 는 {repo.VIDEO_Q_MAX_LENGTH}자를 넘을 수 없습니다. "
+            f"(받은 길이: {len(keyword)})",
+        )
+
+    since_days = repo.VIDEO_PERIOD_DAYS[period]
 
     pool = get_pool()
     # count 와 list 는 같은 필터를 받아야 total 이 '필터 후 건수' 가 된다.
-    total = await repo.count_videos(pool, kind=kind, round_no=round, game=game)
+    total = await repo.count_videos(
+        pool, kind=kind, round_no=round, game=game, q=keyword, since_days=since_days
+    )
     items = await repo.list_videos(
-        pool, page=page, size=size, kind=kind, round_no=round, game=game
+        pool,
+        page=page,
+        size=size,
+        kind=kind,
+        round_no=round,
+        game=game,
+        q=keyword,
+        since_days=since_days,
+        sort=sort,
     )
 
     _set_cache_header(response)

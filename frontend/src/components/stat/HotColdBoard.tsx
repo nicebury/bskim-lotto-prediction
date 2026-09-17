@@ -105,7 +105,7 @@ function RankTable({
         더 많이 나왔으면 <span className="trend trend-up">↑ 후반에 더</span>, 덜 나왔으면{' '}
         <span className="trend trend-down">↓ 후반에 덜</span>, 같으면{' '}
         <span className="trend trend-flat">— 비슷</span> 입니다. 지나간 구간을 둘로 나눠 세어
-        본 결과일 뿐, 앞으로의 출현과는 관계가 없습니다.
+        본 결과입니다.
       </p>
     </ScrollArea>
   )
@@ -257,7 +257,7 @@ export function HotColdBoard({ initial, roundIndex, latestRound, rangeSupported 
               <HelpTip title="자주 나온 번호">
                 고른 구간 안에서 <strong>출현 횟수가 많은 순</strong>으로 줄을 세운 것입니다.
                 예를 들어 &ldquo;6회&rdquo;는 그 구간의 여러 회차 중 여섯 번 뽑혔다는 뜻이고,
-                비율은 그것을 회차 수로 나눈 값입니다. 다음 회차에 또 나온다는 뜻은 아닙니다.
+                비율은 그것을 회차 수로 나눈 값입니다.
               </HelpTip>
             </h3>
             <RankTable

@@ -1,6 +1,6 @@
 import Script from 'next/script'
 
-import { ADSENSE_CLIENT, GA_ID, NAVER_ANALYTICS_ID } from '@/lib/env'
+import { GA_ID, NAVER_ANALYTICS_ID } from '@/lib/env'
 
 /**
  * 측정·광고 스크립트 로드. 서버 컴포넌트에서 렌더 가능하다.
@@ -44,13 +44,12 @@ export function AnalyticsScripts() {
         애드센스 로더도 승인 전에는 렌더링하지 않는다. ads.txt 역시 승인 후에 추가한다.
         → docs/wiki/30-seo/adsense-readiness.md
       */}
-      {ADSENSE_CLIENT && (
-        <Script
-          src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`}
-          strategy="afterInteractive"
-          crossOrigin="anonymous"
-        />
-      )}
     </>
   )
 }
+
+/*
+ * ⚠ 애드센스 로더는 이 파일에 없다. **경로에 따라 렌더링 여부가 달라져야 해서**
+ *   `AdSenseLoader.tsx` 로 옮겼다(2026-09-01) — 정책 페이지와 얇은 페이지에는 로더를
+ *   내보내지 않는다. 여기 두면 클라이언트 컴포넌트가 되어 GA 초기화까지 함께 끌려간다.
+ */

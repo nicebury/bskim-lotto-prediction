@@ -1,0 +1,835 @@
+/*
+ * 가이드 상세 5종(`/guide/{slug}`) 전용.
+ *
+ * ── 이 파일이 생긴 이유 ─────────────────────────────────────────────
+ * 2026-09-17 까지 상세 다섯 장은 `h1` 아래 `h2` + `p` 만 반복하는 형태였다.
+ * 정보는 맞지만 **읽을 것이 어디부터인지 화면이 말해 주지 않아** 워드 문서처럼
+ * 보였다("그냥 텍스트만 나열해서 무슨 문서 파일 같아" — 사용자).
+ *
+ * 고친 방식은 글을 꾸미는 것이 아니라 **글의 종류마다 다른 그릇을 준 것**이다.
+ * 수치는 수치답게(`.gd-figure`), 절차는 절차답게(`.gd-steps`), 견주는 것은
+ * 나란히(`.gd-versus`), 주의는 눈에 띄게(`.gd-callout`). 같은 문장이라도
+ * 어떤 그릇에 담기느냐로 훑어지는 속도가 달라진다.
+ *
+ * ── ⚠ 클래스 접두어 `gd-` (guide doc) ──────────────────────────────
+ * `.guide-*` 는 `GuideCard`·`GuideSection` 이, `.gh-*` 는 허브가 쓴다.
+ * 세 곳이 같은 낱말을 쓰다 충돌한 전력이 있어 접두어로 가른다.
+ *
+ * ── ⚠ 색·크기 ──────────────────────────────────────────────────────
+ * 새 hex·px 을 만들지 않는다. 전부 `tokens.css` 변수이고 중간색은
+ * `color-mix(in oklab, …)` 로 유도한다. 강조색은 `--color-primary` 하나이며,
+ * `--svc-*` 는 강조가 아니라 **항목을 구분하는 색표**다(사이트 전체 규약).
+ *
+ * ── ⚠ 세로 띠를 만들지 않는다 ───────────────────────────────────────
+ * `border-left: 3px solid` 같은 강조 띠는 금지다(frontend/CLAUDE.md).
+ * 위계는 번호 배지·배경·크기로 만든다.
+ *
+ * ── 움직임 ─────────────────────────────────────────────────────────
+ * JS 를 쓰지 않는다. 스크롤 리빌은 `animation-timeline: view()` 다.
+ * ⚠ **리빌에서 투명도를 건드리지 않는다.** 스크롤 타임라인은 시간이 아니라 스크롤
+ *   위치로 진행해 화면에 반쯤 걸친 요소가 반투명한 채 멈춘다 — 그 순간 글자 대비가
+ *   4.5:1 을 못 넘어 axe 가 잡는다(허브에서 실측하고 배운 것, guide-hub.css 참조).
+ * ──────────────────────────────────────────────────────────── */
+
+@keyframes gd-slide {
+  from {
+    translate: 0 16px;
+  }
+}
+
+/*
+ * 스크롤 리빌.
+ * ⚠ `view()` 를 모르는 브라우저에서는 규칙 전체가 무시되어 **처음부터 제자리**다.
+ *   움직임이 없을 뿐 내용은 온전하므로 폴백을 따로 두지 않는다.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .gd-reveal {
+    animation: gd-slide linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 42%;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 1. 머리 — 제목 · 리드 · 그림
+ *
+ * 종전에는 `h1` 다음에 회색 한 줄, 그리고 곧바로 본문이었다. 지금은 리드 문장을
+ * 본문보다 크게 두어 **글 전체가 무엇을 말하는지** 먼저 읽히게 한다.
+ * ──────────────────────────────────────────────────────────── */
+
+.gd-head {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/*
+ * 넓은 화면에서는 **좌 글 / 우 그림**으로 가른다.
+ * ⚠ 세로로 쌓아 두었더니 그림이 글과 목차 사이에 끼어, 제목을 읽고 스크롤을 한 번
+ *   해야 목차가 나왔다. 허브 히어로와 같은 배치로 맞추면 첫 화면 안에서 제목·리드·
+ *   목차가 한 번에 보인다.
+ * ⚠ `align-items: center` 로 그림을 글 높이 가운데 둔다. 위로 붙이면 글이 짧은
+ *   페이지에서 그림만 덩그러니 떠 보인다.
+ */
+@media (min-width: 900px) {
+  .gd-head {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr);
+    grid-template-areas:
+      'title art'
+      'lede  art'
+      'toc   art';
+    align-items: center;
+    column-gap: var(--space-8);
+  }
+
+  .gd-head > h1 {
+    grid-area: title;
+    align-self: end;
+  }
+
+  .gd-head > .gd-lede {
+    grid-area: lede;
+  }
+
+  .gd-head > .guide-hero-img {
+    grid-area: art;
+  }
+
+  .gd-head > nav {
+    grid-area: toc;
+    align-self: start;
+  }
+}
+
+.gd-lede {
+  max-width: 54ch;
+  /* 본문(`--fs-body`)과 제목 사이 크기. 한 단계 차이가 리드임을 알린다. */
+  font-size: var(--fs-h3);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+/*
+ * 이 글에서 다루는 것 — 목차 칩.
+ *
+ * ⚠ 장식이 아니라 **길잡이**다. 상세는 스크롤이 길어 지금 어디쯤인지 알기 어렵다.
+ *   칩을 누르면 해당 절로 내려간다(`href="#..."`, JS 0줄).
+ * ⚠ 터치 타겟 44px 을 칩 하나하나가 지킨다 — 링크라서 규칙 대상이다.
+ */
+.gd-toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gd-toc a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  text-decoration: none;
+  transition: border-color var(--dur) var(--ease-out);
+}
+
+.gd-toc a:hover {
+  border-color: var(--color-primary);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 1-b. 본문 칼럼 + 오른쪽 목차 레일
+ *
+ * ⚠ 2026-09-17 사용자 지적: "텍스트 정렬이 왼쪽으로 치우쳐 있다". 문단을 62ch 로 묶어
+ *   두고 컨테이너는 1200px 이라, 넓은 화면에서 글이 왼쪽 절반에만 몰리고 오른쪽이
+ *   비었다. 글줄을 늘리면 읽기 어려워지므로 **칼럼 자체를 가운데로 모으고**, 넓은
+ *   화면에서는 남는 폭을 목차 레일(`GuideRail`)로 채운다.
+ *
+ * ⚠ `article:has(> .gd-head)` 로 잡는다. 상세 다섯 장에만 걸리게 하려는 것이다 —
+ *   `article` 은 뉴스·영상 카드도 쓴다. `:has` 를 모르는 브라우저에서는 규칙이
+ *   통째로 무시되어 종전의 한 칼럼 배치로 남는다(내용은 온전하다).
+ * ──────────────────────────────────────────────────────────── */
+
+/* 좁은 화면·태블릿: 읽기 칼럼을 가운데로. 머리는 넓게 둔다. */
+article:has(> .gd-head) > :not(.gd-head) {
+  max-width: 780px;
+  margin-inline: auto;
+}
+
+/* 레일은 넓은 화면 전용. 좁은 화면에서는 머리의 목차 칩이 같은 일을 한다. */
+.gd-rail {
+  display: none;
+}
+
+@media (min-width: 1100px) {
+  /*
+   * ⚠ 레일을 `grid-row: 2 / span 20` 으로 본문 줄 전체에 걸친다. 그래야 `sticky` 가
+   *   글 끝까지 따라온다(sticky 는 자기 그리드 영역 안에서만 붙는다).
+   *   20 은 절 개수의 넉넉한 상한이다 — 지금 가장 긴 글이 절 9개다. 남는 줄은
+   *   내용이 없어 높이가 0 이 된다.
+   */
+  article:has(> .gd-head) {
+    display: grid;
+    grid-template-columns: minmax(0, 780px) 220px;
+    justify-content: center;
+    column-gap: var(--space-12);
+  }
+
+  /*
+   * ⚠ 선택자를 위 좁은 화면 규칙과 **똑같이** 쓴다. 명시도가 낮으면 `margin-inline: auto`
+   *   가 살아남는데, 그리드 항목에 자동 여백이 걸리면 내용 폭으로 쪼그라든다 — FAQ 상자가
+   *   320px 로 줄어 가운데 떠 있었다(캡처로 확인).
+   */
+  article:has(> .gd-head) > :not(.gd-head) {
+    grid-column: 1;
+    max-width: none;
+    margin-inline: 0;
+  }
+
+  article:has(> .gd-head) > .gd-head {
+    grid-column: 1 / -1;
+  }
+
+  /*
+   * ⚠ 머리의 목차 칩은 **감추지 않는다.** 감춰 봤더니 제목·리드 아래가 비어 그림 옆에
+   *   글이 덩그러니 떴다. 칩은 '무엇을 다루는가' 를 첫 화면에서 알리고, 레일은 읽는 동안
+   *   따라다닌다 — 역할이 달라 겹쳐도 거슬리지 않는다.
+   */
+
+  /* ⚠ 위 `> *` 규칙(명시도 0,1,1)을 이기려고 같은 머리를 붙인다. `.gd-rail` 만 쓰면 진다. */
+  article:has(> .gd-head) > .gd-rail {
+    grid-column: 2;
+    grid-row: 2 / span 20;
+    align-self: start;
+    position: sticky;
+    top: calc(var(--header-height) + var(--space-6));
+    display: grid;
+    gap: var(--space-3);
+    margin-top: var(--space-12);
+  }
+}
+
+.gd-rail-title {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.04em;
+  color: var(--color-text-subtle);
+}
+
+/* 읽은 비율. `scaleX` 로 늘인다 — width 를 바꾸면 스크롤마다 레이아웃을 다시 잰다. */
+.gd-rail-progress {
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--color-border);
+  overflow: hidden;
+}
+
+.gd-rail-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--color-primary);
+  transform-origin: left center;
+  transition: transform 120ms linear;
+}
+
+.gd-rail-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gd-rail-list a,
+.gd-rail-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: 10px;
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+  text-decoration: none;
+  word-break: keep-all;
+  transition:
+    background-color var(--dur) var(--ease-out),
+    color var(--dur) var(--ease-out);
+}
+
+.gd-rail-list a:hover {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+/*
+ * 현재 절. **배경과 굵기**로 표시한다 — 왼쪽 띠를 쓰지 않는다(frontend/CLAUDE.md).
+ * 번호 색도 함께 바뀌어, 색을 구별하지 못해도 굵기로 알 수 있다.
+ */
+.gd-rail-list a[data-active] {
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: var(--fw-bold);
+  box-shadow: 0 1px 2px color-mix(in oklab, var(--color-text) 6%, transparent);
+}
+
+.gd-rail-num {
+  flex: none;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-subtle);
+}
+
+.gd-rail-list a[data-active] .gd-rail-num {
+  color: var(--color-primary);
+}
+
+.gd-rail-top {
+  margin-top: var(--space-2);
+  font-size: var(--fs-xs);
+  color: var(--color-text-subtle);
+}
+
+.gd-rail-top:hover {
+  color: var(--color-primary);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 2. 절 — 장 번호 + 제목
+ *
+ * ⚠ 장 번호(01, 02 …)는 CSS 카운터로 찍는 **순수 장식**이다. 낭독기는 제목만 듣는다.
+ *   레일의 번호와 같은 숫자라 "지금 3장" 이 두 곳에서 맞물린다.
+ * ⚠ 절 사이를 1px 선으로 가른다. 박스로 감싸면 안쪽 카드가 '상자 속 상자' 가 되어
+ *   투박해진다(2026-09-17 사용자 지적) — 절은 선과 여백으로, 카드는 안쪽에만.
+ * ──────────────────────────────────────────────────────────── */
+
+article:has(> .gd-head) {
+  counter-reset: gd-sec;
+}
+
+/*
+ * ⚠ `.section` 의 위아래 여백(데스크톱 48px)에 선 위 여백까지 더하면 절 사이가 110px 을
+ *   넘어 글이 끊겨 보였다. 아래 여백은 없애고 선 위아래로만 숨을 준다.
+ */
+.gd-sec {
+  margin-block: var(--space-8) 0;
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--color-border);
+  counter-increment: gd-sec;
+}
+
+.gd-sec::before {
+  content: counter(gd-sec, decimal-leading-zero);
+  display: inline-grid;
+  place-items: center;
+  min-width: 2.4rem;
+  height: 1.6rem;
+  margin-bottom: var(--space-3);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-black);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.gd-sec h2 {
+  font-size: clamp(1.25rem, 1.05rem + 0.6vw, 1.5rem);
+  letter-spacing: var(--ls-title);
+  line-height: var(--lh-tight);
+  word-break: keep-all;
+  text-wrap: balance;
+}
+
+/*
+ * 본문 문단. ⚠ 62ch 제한을 풀었다 — 칼럼이 780px 로 묶여 있어 한 줄이 한글 45자
+ * 안팎이다. 칼럼 안에서 다시 묶으면 오른쪽이 비어 "치우쳐 보이는" 문제가 되살아난다.
+ */
+.gd-sec p {
+  line-height: var(--lh-body);
+  word-break: keep-all;
+  text-wrap: pretty;
+}
+
+/*
+ * ⚠ 그림이 붙은 절은 제목·문단이 `.gd-withspot > div` 안에 한 겹 더 들어가 있어
+ *   직계 선택자(`.gd-sec > p`)에 안 걸린다. 빼먹으면 문단 여백과 색이 사라져 제목 밑에
+ *   글이 짙게 달라붙는다(375px 캡처로 확인).
+ */
+.gd-sec > p,
+.gd-withspot p {
+  margin-top: var(--space-3);
+  color: var(--color-text-muted);
+}
+
+.gd-sec strong {
+  color: var(--color-text);
+  font-weight: var(--fw-bold);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 3. 수치 — 문장에서 숫자를 꺼내 세운다
+ *
+ * ⚠ 이 사이트에서 큰 숫자를 보여 주는 방식은 허브의 숫자 밴드와 **같아야 한다**.
+ *   항목명이 위, 값이 아래, 단위는 작게, 강조색은 하나.
+ * ⚠ 테두리 대신 옅은 틴트 + 모서리 빛으로 띄운다(투박하다는 지적, 2026-09-17).
+ * ──────────────────────────────────────────────────────────── */
+
+.gd-figures {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+@media (min-width: 640px) {
+  .gd-figures {
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  }
+}
+
+.gd-figure {
+  position: relative;
+  overflow: hidden;
+  padding: var(--space-5);
+  border-radius: 20px;
+  background:
+    radial-gradient(120% 90% at 100% 0%, color-mix(in oklab, var(--color-primary) 10%, transparent), transparent 60%),
+    var(--color-surface);
+  box-shadow:
+    0 1px 2px color-mix(in oklab, var(--color-primary) 8%, transparent),
+    0 8px 24px -12px color-mix(in oklab, var(--color-primary) 22%, transparent);
+}
+
+.gd-figure dt {
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+.gd-figure dd {
+  margin-top: var(--space-2);
+  font-size: clamp(1.7rem, 1.15rem + 1.9vw, 2.3rem);
+  font-weight: var(--fw-black);
+  letter-spacing: var(--ls-title);
+  line-height: 1.1;
+  color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 단위·보조어. 값과 같은 색을 쓰되 크기만 낮춘다 — 색까지 바꾸면 다른 정보가 된다. */
+.gd-figure dd span {
+  margin-left: 0.15em;
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-semibold);
+  letter-spacing: normal;
+}
+
+.gd-figure p {
+  margin-top: var(--space-2);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 4. 절차 — 큰 번호가 붙은 카드
+ *
+ * 좁은 화면: 번호 | 글 두 칸. 640px 이상: 카드를 **가로로 나란히** 세우고 번호를 위에 크게.
+ * ⚠ 종전에는 넓은 화면에서도 한 줄에 카드 하나였다. 짧은 문장이 1100px 폭으로 늘어져
+ *   빈 가로줄 세 장처럼 보였다 — 나란히 두면 "세 가지를 차례로" 가 모양으로 읽힌다.
+ * ⚠ 세로 연결선을 긋지 않는다. 번호가 이미 순서를 말한다.
+ * ──────────────────────────────────────────────────────────── */
+
+.gd-steps {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-5) 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: gd-step;
+}
+
+@media (min-width: 640px) {
+  .gd-steps {
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  }
+}
+
+.gd-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-content: start;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-5);
+  border-radius: 20px;
+  background: var(--color-surface);
+  box-shadow:
+    0 1px 2px color-mix(in oklab, var(--color-text) 5%, transparent),
+    0 10px 28px -18px color-mix(in oklab, var(--color-primary) 30%, transparent);
+  transition: transform var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .gd-step:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 1px 2px color-mix(in oklab, var(--color-text) 5%, transparent),
+      0 16px 32px -18px color-mix(in oklab, var(--color-primary) 40%, transparent);
+  }
+}
+
+/*
+ * ⚠ 번호를 CSS 카운터로 찍는다. 마크업에 숫자를 손으로 적으면 단계를 하나 끼워
+ *   넣을 때 아래가 전부 어긋난다. 순서는 `<ol>` 이 이미 의미로 갖고 있다.
+ */
+.gd-step::before {
+  counter-increment: gd-step;
+  content: counter(gd-step, decimal-leading-zero);
+  grid-row: span 2;
+  font-size: 1.6rem;
+  font-weight: var(--fw-black);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in oklab, var(--color-primary) 70%, var(--color-surface));
+}
+
+@media (min-width: 640px) {
+  .gd-step {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .gd-step::before {
+    grid-row: auto;
+    margin-bottom: var(--space-2);
+    font-size: 2rem;
+  }
+}
+
+.gd-step h3 {
+  font-size: var(--fs-h3);
+  line-height: var(--lh-tight);
+  word-break: keep-all;
+}
+
+.gd-step p {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 5. 견주기 — 둘 이상을 나란히
+ * ──────────────────────────────────────────────────────────── */
+
+.gd-versus {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-5) 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: gd-vs;
+}
+
+/*
+ * ⚠ 최소 폭을 준다. 항목이 다섯 개인 절에서 한 줄에 다섯 칸이 되어 글자가 한 줄에
+ *   대여섯 자씩 끊긴 적이 있다.
+ */
+@media (min-width: 640px) {
+  .gd-versus {
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  }
+}
+
+/*
+ * ⚠ 파스텔을 카드 전체에 칠하고 같은 색 테두리를 두르던 것을 바꿨다 — 세 장이 나란히
+ *   서면 색 덩어리 셋으로 읽혀 투박했다(2026-09-17). 지금은 흰 카드 위 **오른쪽 위
+ *   모서리에서 번지는 색**과 색표 원 하나로 항목을 가른다.
+ */
+.gd-versus > li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border-radius: 20px;
+  background:
+    radial-gradient(140% 100% at 100% 0%, var(--gd-bg, var(--color-primary-soft)), transparent 58%),
+    var(--color-surface);
+  box-shadow:
+    0 1px 2px color-mix(in oklab, var(--color-text) 5%, transparent),
+    0 10px 28px -18px color-mix(in oklab, var(--gd-svc, var(--color-primary)) 45%, transparent);
+  counter-increment: gd-vs;
+  transition: transform var(--dur) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .gd-versus > li:hover {
+    transform: translateY(-2px);
+  }
+}
+
+/* 색표 원. 안에 순번을 넣어 색을 구별하지 못해도 항목이 갈린다. */
+.gd-versus > li::before {
+  content: counter(gd-vs);
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-bottom: var(--space-1);
+  border-radius: 10px;
+  background: var(--gd-svc, var(--color-primary));
+  color: var(--svc-fg);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-black);
+}
+
+.gd-versus h3 {
+  font-size: var(--fs-h3);
+  line-height: var(--lh-tight);
+  word-break: keep-all;
+}
+
+.gd-versus p {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+/* 카드 색표. 뜻을 가리키지 않고 항목을 가른다. 지정이 없으면 순서대로 돌린다. */
+.gd-versus > li:nth-child(5n + 1) { --gd-svc: var(--svc-news); --gd-bg: var(--svc-news-bg); }
+.gd-versus > li:nth-child(5n + 2) { --gd-svc: var(--svc-stats); --gd-bg: var(--svc-stats-bg); }
+.gd-versus > li:nth-child(5n + 3) { --gd-svc: var(--svc-lotto); --gd-bg: var(--svc-lotto-bg); }
+.gd-versus > li:nth-child(5n + 4) { --gd-svc: var(--svc-reco); --gd-bg: var(--svc-reco-bg); }
+.gd-versus > li:nth-child(5n + 5) { --gd-svc: var(--svc-dream); --gd-bg: var(--svc-dream-bg); }
+
+.gd-versus > li[data-accent='reco'] {
+  --gd-svc: var(--svc-reco);
+  --gd-bg: var(--svc-reco-bg);
+}
+.gd-versus > li[data-accent='stats'] {
+  --gd-svc: var(--svc-stats);
+  --gd-bg: var(--svc-stats-bg);
+}
+.gd-versus > li[data-accent='lotto'] {
+  --gd-svc: var(--svc-lotto);
+  --gd-bg: var(--svc-lotto-bg);
+}
+
+/*
+ * ⚠ `--svc-reco`(주황)는 흰 글자 대비가 낮다. 색표 원 안 숫자만 진한 글자로 바꾼다.
+ */
+.gd-versus > li[data-accent='reco']::before,
+.gd-versus > li:nth-child(5n + 4):not([data-accent])::before {
+  color: var(--ball-fg-dark);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 6. 짚고 넘어가기 — 아이콘 배지 | 소제목 + 본문
+ *
+ * ⚠ 흰 상자 + 회색 테두리였던 것을 **옅은 강조색 바탕 + 둥근 아이콘 배지**로 바꿨다.
+ *   흰 카드 사이에 흰 상자가 또 끼면 무엇이 당부인지 구분되지 않았다.
+ * ⚠ 좁은 화면에서는 배지를 소제목 줄에 붙이고(종전 배치), 640px 이상에서만 왼쪽
+ *   칸으로 뗀다 — 375px 에서 왼쪽 칸을 떼면 본문 폭이 너무 좁다.
+ * ──────────────────────────────────────────────────────────── */
+
+.gd-callout {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+  padding: var(--space-5);
+  border-radius: 20px;
+  background: color-mix(in oklab, var(--color-primary) 6%, var(--color-surface));
+}
+
+.gd-callout[data-tone='warn'] {
+  background: color-mix(in oklab, var(--color-danger) 7%, var(--color-surface));
+}
+
+.gd-callout-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+  word-break: keep-all;
+}
+
+/*
+ * 아이콘 배지. 아이콘(svg) 자체에 배경을 칠하고 안쪽 여백으로 원을 만든다 —
+ * 마크업을 다섯 페이지에서 고치지 않으려는 것이다.
+ * ⚠ `em` 이라 사용자가 글자를 키우면 배지도 함께 커진다.
+ */
+.gd-callout-icon {
+  flex: none;
+  box-sizing: content-box;
+  width: 1.1em;
+  height: 1.1em;
+  padding: 0.5em;
+  border-radius: 12px;
+  background: var(--color-surface);
+  color: var(--color-primary);
+  box-shadow: 0 4px 12px -6px color-mix(in oklab, var(--color-primary) 45%, transparent);
+}
+
+.gd-callout[data-tone='warn'] .gd-callout-icon {
+  color: var(--color-danger);
+  box-shadow: 0 4px 12px -6px color-mix(in oklab, var(--color-danger) 45%, transparent);
+}
+
+.gd-callout p:not(.gd-callout-head) {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+.gd-callout ul {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding-left: var(--space-5);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+}
+
+@media (min-width: 640px) {
+  /* 본문을 아이콘 배지 오른쪽 칸에 맞춘다. 배지 폭 = 2.1em × 소제목 글자(0.98rem) ≈ 2.06rem. */
+  .gd-callout > :not(.gd-callout-head) {
+    margin-left: calc(2.06rem + var(--space-3));
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 7. 표 — 등수별 수령처처럼 칸이 필요한 것
+ *
+ * ⚠ 좁은 화면에서 표를 억지로 접지 않는다. 가로로 밀어 보게 하되 **감싼 상자만**
+ *   스크롤한다 — `body` 가 가로로 스크롤되면 사이트 전체 규칙 위반이다.
+ * ⚠ `tabindex="0"` 을 마크업에서 준다. 스크롤되는 영역은 키보드로도 닿아야 한다.
+ * ──────────────────────────────────────────────────────────── */
+
+.gd-tablewrap {
+  margin-top: var(--space-5);
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+.gd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+
+.gd-table th,
+.gd-table td {
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.gd-table thead th {
+  background: color-mix(in oklab, var(--color-primary) 6%, transparent);
+  color: var(--color-text);
+  font-weight: var(--fw-bold);
+}
+
+.gd-table tbody tr:last-child th,
+.gd-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.gd-table tbody th {
+  color: var(--color-text);
+  font-weight: var(--fw-semibold);
+}
+
+.gd-table td {
+  color: var(--color-text-muted);
+}
+
+/* 숫자 칸은 오른쪽 정렬 + 고정폭 숫자. 자릿수가 눈으로 비교된다. */
+.gd-table [data-num] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 8. 출처
+ *
+ * ⚠ 수치를 밖에서 가져왔으면 어디서 왔는지 적는다. 출처 없는 숫자는 시간이 지나면
+ *   고칠 수도 지울 수도 없는 짐이 된다.
+ * ──────────────────────────────────────────────────────────── */
+
+.gd-source {
+  margin-top: var(--space-4);
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+  color: var(--color-text-subtle, var(--color-text-muted));
+  word-break: keep-all;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 9. 본문 속 그림
+ *
+ * ⚠ 좁은 화면에서 숨긴다. 본문이 우선이고, 스팟 그림은 없어도 뜻이 통한다.
+ * ⚠ 높이를 고정해 그림마다 규격이 달라도 리듬이 흔들리지 않게 한다(허브와 같은 방식).
+ * ──────────────────────────────────────────────────────────── */
+
+.gd-spot {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .gd-withspot {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-6);
+  }
+
+  .gd-spot {
+    display: grid;
+    place-items: center;
+    flex: none;
+  }
+
+  /*
+   * ⚠ 그림 옆 본문에도 글줄 제한을 건다. `.gd-sec > p` 는 직계 자식만 잡는데
+   *   여기서는 문단이 `.gd-withspot` 안에 한 겹 들어가 있어 제한이 풀렸고,
+   *   1100px 에서 한 줄이 90자를 넘었다.
+   */
+  .gd-withspot p {
+    max-width: 62ch;
+  }
+
+  /*
+   * ⚠ 200×168 로 뒀다가 키웠다 — 본문 옆에서 우표만 해 보여, 있으나 마나 한
+   *   장식이 됐다(캡처로 확인). 본문 폭을 62ch 로 묶어 두었으므로 그림이 커져도
+   *   글줄이 짧아지지 않는다.
+   */
+  .gd-spot img {
+    display: block;
+    width: auto;
+    max-width: 260px;
+    height: auto;
+    max-height: 210px;
+  }
+}

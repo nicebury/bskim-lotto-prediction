@@ -1,0 +1,588 @@
+/* ════════════════════════════════════════════════════════════
+ * 번호놀이터
+ *
+ * → docs/wiki/20-design/playground.md
+ *
+ * ⚠ **게임별 CSS 파일을 만들지 않는다.** 캔버스 안에는 CSS 가 없다. 게임이 CSS 를
+ *   필요로 한다면 그것은 호스트가 해야 할 일을 게임이 하려는 것이므로 설계가 잘못된 것이다.
+ * ⚠ 이 파일은 `components.css` **뒤에** import 된다(globals.css) — 공용 클래스를 덮어써야
+ *   할 때가 있기 때문이다.
+ * ════════════════════════════════════════════════════════════ */
+
+/* ── 목록: 게임 6카드 ───────────────────────────────────── */
+
+.pg-grid {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 560px) {
+  .pg-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 900px) {
+  .pg-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/*
+ * ⚠ `.guide-card` 와 같은 문법이다(파스텔 배경 + 같은 색 테두리). 같은 성격의 카드가
+ *   화면마다 다르게 보이면 한 제품으로 읽히지 않는다.
+ */
+.pg-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  text-decoration: none;
+  color: inherit;
+  transition:
+    border-color var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-out);
+}
+
+.pg-card:hover {
+  border-color: var(--color-primary);
+}
+
+/* 눌리는 느낌. 카드가 링크라는 것을 손이 먼저 안다. */
+.pg-card:active {
+  transform: translateY(1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pg-card {
+    transition: none;
+  }
+  .pg-card:active {
+    transform: none;
+  }
+}
+
+/*
+ * 썸네일 자리.
+ *
+ * ⚠ **`aspect-ratio` 로 높이를 예약한다.** SVG 는 즉시 그려지지만, 자리를 비율로 고정해
+ *   두면 카드 여섯이 글자 수와 무관하게 같은 리듬으로 선다.
+ * ⚠ 배경은 accent 파스텔, 그림은 accent 진한 색이다. 그림이 `currentColor` 하나만 쓰므로
+ *   여기서 `color` 를 정하면 전부 따라온다 — 다크모드도 토큰이 알아서 바꾼다.
+ */
+.pg-card-thumb {
+  display: block;
+  aspect-ratio: 120 / 68;
+  padding: var(--space-3) var(--space-4);
+}
+
+.pg-card-thumb svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.pg-card-thumb[data-accent='lotto'] { background: var(--svc-lotto-bg); color: var(--svc-lotto); }
+.pg-card-thumb[data-accent='stats'] { background: var(--svc-stats-bg); color: var(--svc-stats); }
+.pg-card-thumb[data-accent='reco'] { background: var(--svc-reco-bg); color: var(--svc-reco); }
+.pg-card-thumb[data-accent='dream'] { background: var(--svc-dream-bg); color: var(--svc-dream); }
+.pg-card-thumb[data-accent='news'] { background: var(--svc-news-bg); color: var(--svc-news); }
+.pg-card-thumb[data-accent='play'] { background: var(--svc-play-bg); color: var(--svc-play); }
+
+.pg-card-body {
+  display: grid;
+  gap: 2px;
+  align-content: start;
+  flex: 1;
+  padding: var(--space-4);
+}
+
+.pg-card-title {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+}
+
+.pg-card-tagline {
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+  line-height: var(--lh-body);
+}
+
+/* 걸리는 시간. 고르기 전에 알아야 하는 사실이라 눈에 띄되 제목을 넘지 않는다. */
+.pg-card-pace {
+  margin-top: var(--space-2);
+  font-size: var(--fs-xs);
+  color: var(--color-text-subtle);
+}
+
+/* ── 목록: 3단계 설명 ───────────────────────────────────── */
+
+.pg-steps {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: pg-step;
+}
+
+.pg-steps > li {
+  counter-increment: pg-step;
+  padding-left: 40px;
+  position: relative;
+}
+
+.pg-steps > li::before {
+  content: counter(pg-step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+}
+
+.pg-steps h3 {
+  margin: 0 0 var(--space-1);
+  font-size: var(--fs-h3);
+}
+
+.pg-steps p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+}
+
+/* ── 상세: 무대 ─────────────────────────────────────────── */
+
+.pg-stage-wrap {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+}
+
+/*
+ * ⚠ **CLS 0 의 핵심.** `--pg-ar` 은 서버가 아는 값(`meta.stage`)이라 첫 HTML 부터 정확한
+ *   자리가 잡힌다. 캔버스가 늦게 로드돼도 레이아웃이 밀리지 않는다.
+ * ⚠ 스켈레톤이 **같은 규칙**을 쓴다. 다르면 로드 순간 튄다.
+ */
+/*
+ * 게임 페이지의 머리 — 제목 + 한 줄 소개.
+ *
+ * ⚠ `.section`(위아래 32~48px)을 쓰지 않는다. 이 위에 쌓이는 픽셀만큼 게임이 화면 밖으로
+ *   밀려나고, 모바일에서는 그것이 곧 "스크롤해야 플레이할 수 있다" 가 된다.
+ */
+.pg-head {
+  margin-block: var(--space-4) var(--space-3);
+}
+
+/*
+ * ⚠ 일반 `h1`(--fs-h1, 1.75rem)보다 **작다.** 게임 페이지에서 가장 커야 할 것은 제목이
+ *   아니라 게임 화면이다.
+ */
+.pg-title {
+  font-size: 1.3rem;
+}
+
+.pg-intro {
+  margin-top: 4px;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+@media (min-width: 640px) {
+  .pg-title {
+    font-size: var(--fs-h1);
+  }
+}
+
+.pg-stage,
+.pg-canvas-skeleton {
+  /* ⚠ 오버레이(시작·실패·완료)가 이 안에 절대배치된다. 빼면 오버레이가 페이지 전체를 덮는다. */
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  margin-inline: auto;
+  aspect-ratio: var(--pg-ar, 360 / 560);
+  /*
+    ⚠ **화면 높이에 맞춘다.** 폭이 아니라 높이가 먼저 걸리면 `aspect-ratio` 가 폭을 줄여
+      주므로, 세로가 짧은 기기에서도 게임 전체가 한 화면에 들어온다.
+    ⚠ `svh` 를 쓴다 — `vh` 는 iOS 주소창이 접힐 때 값이 변해 레이아웃이 출렁인다.
+    ⚠ 단순히 `76svh` 로 두면 **하단 탭바(56px)에 캔버스 바닥이 가린다.** 화면에서 게임이
+      아닌 것들의 합을 빼야 한다 — 헤더 + 제목·소개 + HUD + 탭바.
+    ⚠ `clamp` 의 아래 한계(260px)는 가로 모드처럼 세로가 매우 짧을 때를 위한 것이다.
+      그때는 페이지가 스크롤되더라도 게임을 알아볼 수 있는 크기는 지킨다.
+  */
+  --pg-chrome: 292px;
+  max-block-size: clamp(260px, calc(100svh - var(--pg-chrome)), 660px);
+  /* 자동 스크롤이 sticky 헤더 밑으로 파고들지 않게 한다. */
+  scroll-margin-top: calc(var(--header-height) + var(--space-2));
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+
+/* 탭바가 없고(768px 이상) 제목도 한 줄이라 여유가 더 있다. */
+@media (min-width: 768px) {
+  .pg-stage,
+  .pg-canvas-skeleton {
+    --pg-chrome: 236px;
+  }
+}
+
+.pg-canvas-skeleton {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+
+.pg-canvas,
+.pg-canvas-failed {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+}
+
+/*
+ * iOS 함정 대응.
+ * ⚠ `touch-action: none` — 더블탭 확대로 오조작되는 것을 막는다.
+ * ⚠ `overscroll-behavior: contain` — 캔버스 드래그가 페이지를 스크롤하지 않게 한다.
+ *   (`pointermove` 의 `preventDefault` 와 짝이다. 리스너가 `{ passive: false }` 여야 실효)
+ * ⚠ 긴 누름 콜아웃 메뉴와 텍스트 선택을 끈다.
+ */
+.pg-canvas {
+  touch-action: none;
+  overscroll-behavior: contain;
+  -webkit-touch-callout: none;
+  user-select: none;
+  cursor: pointer;
+}
+
+/* ⚠ **보이는 포커스 링.** 키보드만으로 완주할 수 있어야 하고, 어디에 포커스가 있는지 보여야 한다. */
+.pg-canvas:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.pg-canvas-failed {
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+  text-align: center;
+}
+
+/* ── 상세: HUD ──────────────────────────────────────────── */
+
+.pg-hud {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: center;
+  text-align: center;
+}
+
+/*
+ * 진행 표시와 소리 버튼을 한 줄에.
+ * ⚠ `.pg-hud` 가 `justify-items: center` 라 이 줄만 폭을 채워야 양끝 정렬이 된다.
+ */
+.pg-hud-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 420px;
+}
+
+.pg-hud-label {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+/*
+ * 효과음 켜기/끄기.
+ *
+ * ⚠ **아이콘만 두지 않는다.** 스피커 글리프의 사선(꺼짐)은 작은 화면에서 잘 보이지 않아,
+ *   지금 소리가 나는 상태인지 아닌지를 아이콘만으로 판단하기 어렵다. 글자를 함께 둔다.
+ * ⚠ 터치 타겟 최소치를 지킨다.
+ */
+.pg-sound-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding-inline: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+  transition: color var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out);
+}
+
+.pg-sound-toggle:hover {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+
+/* 소리가 켜져 있으면 강조색으로 — "지금 소리가 난다" 가 한눈에 보여야 한다. */
+.pg-sound-toggle[aria-pressed='true'] {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.pg-sound-toggle:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.pg-hud-label strong {
+  color: var(--color-text);
+}
+
+.pg-hud-balls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 아직 못 모은 자리. 색이 아니라 **점과 파선**으로 비어 있음을 알린다. */
+.pg-hud-empty {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-pill);
+  border: 1px dashed var(--color-border-strong);
+  color: var(--color-text-subtle);
+}
+
+/*
+ * ⚠ 비어 있어도 **높이를 예약한다.** 문구가 뜰 때 캔버스가 밀리면 조작 중에 화면이 흔들린다.
+ */
+.pg-hud-status {
+  min-height: 1.4em;
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--color-text);
+}
+
+.pg-hud-hint {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--color-warning);
+}
+
+.pg-hud-keys {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--color-text-subtle);
+}
+
+/* ── 상세: 결과 ─────────────────────────────────────────── */
+
+.pg-result {
+  padding: var(--space-5);
+  border: 1px solid color-mix(in oklab, var(--color-primary) 30%, transparent);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+.pg-result h2 {
+  margin: 0 0 var(--space-4);
+  font-size: var(--fs-h2);
+  text-align: center;
+}
+
+.pg-result-balls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.pg-result-actions {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+@media (min-width: 460px) {
+  .pg-result-actions {
+    grid-auto-flow: column;
+    justify-content: center;
+  }
+}
+
+/* ── 상세: 조작 방법·다른 게임 ──────────────────────────── */
+
+.pg-howto {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding-left: 1.3em;
+  color: var(--color-text);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+}
+
+.pg-howto-keys {
+  margin-top: var(--space-3);
+  font-size: var(--fs-xs);
+}
+
+.pg-others {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 640px) {
+  .pg-others {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.pg-others a {
+  display: grid;
+  gap: 2px;
+  height: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  color: inherit;
+}
+
+.pg-others a:hover {
+  border-color: var(--color-primary);
+}
+
+.pg-others strong {
+  font-size: var(--fs-sm);
+}
+
+.pg-others span {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+.pg-alt,
+.pg-noscript {
+  margin-top: var(--space-4);
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.pg-disclaimer {
+  margin-top: 0;
+}
+
+/*
+ * ⚠ 하단 고정 바가 조작 버튼을 가리지 않게 한다. iOS 홈 인디케이터까지 더한다.
+ *   `body` 의 `padding-bottom` 이 이미 탭바 높이를 확보하지만, 게임 화면은 아래쪽에
+ *   조작이 몰려 여유가 더 필요하다.
+ */
+@media (max-width: 767px) {
+  .pg-stage-wrap {
+    padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 게임 오버레이 — 시작 · 실패 · 완료 (2026-09-08)
+ *
+ * ── ⚠ 왜 캔버스가 아니라 DOM 인가 ──────────────────────────────────
+ * **캔버스 안에 그린 버튼은 스크린리더에 전혀 보이지 않고 탭으로 닿지도 않는다.**
+ * 게임은 `emit({type:'phase'})` 로 단계만 알리고, 실제 버튼은 여기서 진짜 `<button>` 으로
+ * 그린다. 덕분에 키보드·보조기술 사용자도 시작하고 다시할 수 있다.
+ *
+ * ⚠ 캔버스 위에 겹치므로 `.pg-stage` 가 `position: relative` 여야 한다.
+ * ──────────────────────────────────────────────────────────── */
+
+.pg-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  /* 게임이 비쳐 보여야 "이 화면의 일부" 로 읽힌다. 완전히 가리면 다른 페이지처럼 보인다. */
+  background: color-mix(in srgb, var(--color-bg) 74%, transparent);
+  border-radius: var(--radius-card);
+}
+
+.pg-overlay-panel {
+  width: min(100%, 300px);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-pop);
+  text-align: center;
+}
+
+.pg-overlay-title {
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-title);
+  color: var(--color-text);
+}
+
+.pg-overlay-text {
+  margin-top: var(--space-2);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+  color: var(--color-text-muted);
+}
+
+.pg-overlay-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+/* ⚠ 터치 타겟 최소치. 캔버스 위라 손가락이 미끄러지기 쉬운 자리다. */
+.pg-overlay-actions .btn {
+  min-height: 44px;
+  padding-inline: var(--space-5);
+}
+
+/*
+ * 좁은 화면에서는 버튼 두 개가 한 줄에 들어가지 않는다. 줄바꿈되면 폭이 제각각이 되어
+ * 지저분하므로 **세로로 쌓고 폭을 맞춘다.**
+ */
+@media (max-width: 380px) {
+  .pg-overlay-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

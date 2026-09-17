@@ -59,7 +59,7 @@ export function BulkActions({
     setBusy('copy')
     const ok = await copyText(buildShareTextAll(params))
     setBusy(null)
-    flash(ok ? `${count}조합을 복사했습니다` : '복사하지 못했습니다')
+    flash(ok ? `추천 ${count}개를 복사했습니다` : '복사하지 못했습니다')
   }
 
   const onImage = async () => {
@@ -67,7 +67,7 @@ export function BulkActions({
     try {
       const blob = await drawSetsImage(params)
       if (!blob) throw new Error('이미지를 만들지 못했습니다')
-      downloadBlob(blob, `행운상자-${strategyLabel}-${count}조합.png`)
+      downloadBlob(blob, `행운상자-${strategyLabel}-추천${count}개.png`)
       flash('이미지를 저장했습니다')
     } catch {
       flash('이미지를 저장하지 못했습니다')
@@ -96,7 +96,7 @@ export function BulkActions({
 
   return (
     <div className="bulk-actions">
-      <span className="bulk-actions-label">{count}조합 한 번에</span>
+      <span className="bulk-actions-label">추천 {count}개 한 번에</span>
 
       <div className="bulk-actions-buttons">
         <button type="button" className="btn btn-secondary" onClick={onCopy} disabled={busy !== null}>
@@ -111,13 +111,13 @@ export function BulkActions({
         <button type="button" className="btn btn-secondary" onClick={onImage} disabled={busy !== null}>
           <ImageIcon />
           <span>{busy === 'image' ? '만드는 중…' : '이미지 저장'}</span>
-          <span className="sr-only">전체 {count}조합</span>
+          <span className="sr-only">추천 {count}개 전체</span>
         </button>
 
         <button type="button" className="btn btn-secondary" onClick={onShare} disabled={busy !== null}>
           <ShareIcon />
           <span>공유</span>
-          <span className="sr-only">전체 {count}조합</span>
+          <span className="sr-only">추천 {count}개 전체</span>
         </button>
       </div>
 

@@ -1,7 +1,10 @@
 /node_modules
 /.next/
 # 실측용 프로덕션 산출물 (NEXT_DIST_DIR). dev 서버가 켜진 채로 빌드할 때 쓴다.
-/.next-prod/
+# ⚠ 이름을 하나만 박아 두면(`/.next-prod/`) 실측할 때마다 즉석에서 지은 다른 이름
+#   (.next-g01x 등)이 미추적으로 남아 `git status` 를 수십 MB 짜리 잡음으로 덮는다.
+#   실제로 2026-09-16 에 여섯 개 51MB 가 쌓여 있었다. 접두어로 일반화한다.
+/.next-*/
 /out/
 /build
 

@@ -10,9 +10,9 @@ DB 컬럼명과 다르며, 그 매핑은 `repository.py` 가 한다.
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Optional, Union
+from typing import Literal, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # ── 공통 ────────────────────────────────────────────────────────────────
 
@@ -346,6 +346,232 @@ class NewsPage(BaseModel):
     items: list[NewsItem]
 
 
+# ── AI 번호추천 시뮬레이터 ──────────────────────────────────────────────
+# 계약: docs/wiki/10-contracts/api-contract.md 의 'AI 번호추천 시뮬레이터' 절
+
+
+class SimulateRequest(BaseModel):
+    sets: int = Field(default=5, ge=1, le=10)
+    # ⚠ 자유 정수로 받지 않는다. 화면이 세 단계만 제공하고, 열린 값을 받으면 누군가
+    # 1,000만을 넣어 서버를 오래 붙잡는다 — 몬테카를로를 한 번에 하나만 돌리기로 한
+    # 결정(0012)과 같은 이유다. 그 외 값은 422 다.
+    trials: Literal[10_000, 50_000, 100_000] = 100_000
+    seed: Optional[int] = None
+
+
+class StageNumberCount(BaseModel):
+    number: int
+    # ⚠ 정규화 점수가 아니라 **실제 횟수**다. 화면이 "34번이 187회" 라고 말하고,
+    # 사용자가 검증할 수 있는 것은 횟수뿐이다.
+    count: int
+
+
+class StageNumberGap(BaseModel):
+    number: int
+    rounds_since: int
+
+
+class StageFrequency(BaseModel):
+    rounds_analyzed: int
+    # 공개 통계(`/stats/frequency`)의 기본값(false)과 다르다. 용도가 달라서이고,
+    # 이 필드를 함께 실어 화면이 그 사실을 밝힐 수 있게 한다.
+    include_bonus: bool
+    most: list[StageNumberCount]
+    least: list[StageNumberCount]
+
+
+class StageCycle(BaseModel):
+    longest_waiting: list[StageNumberGap]
+
+
+class StageTrend(BaseModel):
+    window: int
+    recency_weight: float = Field(
+        description="최근/과거 가중치 비. 분석기의 실제 규칙에서 온 값이다"
+    )
+    rising: list[StageNumberCount]
+
+
+class StageSumRange(BaseModel):
+    from_: int = Field(alias="from")
+    to: int
+    rate: float
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class StagePattern(BaseModel):
+    odd_even_3_3_rate: float
+    sum_range: StageSumRange
+    consecutive_rate: float
+    tail_variety_avg: float
+
+
+class StageEnsemble(BaseModel):
+    """★ 번호별 **순위만** 준다.
+
+    `score`·`weight`·`probability` 를 담지 않는다. 시안의 "최종 점수를 매깁니다" 라는
+    **설명 문구**와 그 점수를 **응답 필드로 노출하는 것**은 다르다 — 설명은 알고리즘이
+    무엇을 하는지 말하는 것이고, 필드는 사용자가 그 값을 근거로 삼게 만든다.
+    """
+
+    top_numbers: list[int]
+
+
+class StageMonteCarlo(BaseModel):
+    trials: int
+    # "패턴 필터를 통과한 조합 수" 라는 사실이다. 당첨 가능성을 뜻하지 않는다는 것은
+    # 프론트가 문구로 밝힌다.
+    valid_combinations: int
+    filtered_out: int
+
+
+class SimulateStages(BaseModel):
+    """계산할 수 없는 단계는 **`null`** 이다. 빈 값을 0 으로 채우지 않는다 —
+    화면은 `null` 인 단계를 "이번에는 수치를 함께 보여드리지 못했습니다" 로 표시한다."""
+
+    frequency: Optional[StageFrequency] = None
+    cycle: Optional[StageCycle] = None
+    trend: Optional[StageTrend] = None
+    pattern: Optional[StagePattern] = None
+    ensemble: Optional[StageEnsemble] = None
+    montecarlo: Optional[StageMonteCarlo] = None
+
+
+class SimulateResponse(BaseModel):
+    sets: list[RecommendSet]
+    trials: int
+    seed: Optional[int] = None
+    hot_window: Optional[int] = None
+    stages: SimulateStages
+    disclaimer: str
+
+
+# ── 조합 분석 ───────────────────────────────────────────────────────────
+# 계약: docs/wiki/10-contracts/api-contract-analysis.md
+
+
+class AnalyzeNumber(BaseModel):
+    number: int
+    # ⚠ 보너스를 세지 않는다. 보너스는 `bonus_count` 로 따로 낸다 — 당첨번호와 성격이
+    # 다르고, 섞으면 "역대 152번" 이 무엇의 152번인지 설명할 수 없게 된다.
+    total_count: int
+    recent_20: int
+    recent_50: int
+    last_seen_round: Optional[int] = None
+    # 마지막 출현이 없으면 "몇 회차째 안 나왔는가" 도 알 수 없다. 전체 회차 수로 채우면
+    # 없는 사실이 생긴다.
+    rounds_since: Optional[int] = None
+    max_gap: Optional[int] = None
+    bonus_count: int
+    tail: int = Field(description="끝수(1의 자리). 41 → 1")
+    color_band: str = Field(description="1-10 | 11-20 | 21-30 | 31-40 | 41-45")
+
+
+class FrequencyGridItem(BaseModel):
+    number: int
+    # ⚠ 비율이 아니라 개수다. 프론트가 최댓값으로 나눠 색 농도를 정한다.
+    count: int
+
+
+class AnalyzeReference(BaseModel):
+    """역대 분포. 화면이 "내 값이 흔한가" 를 보여주는 데 쓴다.
+
+    `*_share` 는 **역대에서 관찰된 비율**이지 다음 회차의 확률이 아니다 —
+    이름에 `probability` 를 쓰지 않는 이유다 (forbidden-expressions.md).
+    """
+
+    sum_histogram: dict[str, int] = Field(description="회차 수. 비율이 아니다")
+    sum_band_share: float
+    odd_even_share: float
+    high_low_share: float
+    consecutive_share: float
+    ac_histogram: dict[str, float]
+    # 첫 회차는 직전이 없어 이월수를 정의할 수 없다. 회차가 하나뿐이면 null.
+    carryover_avg: Optional[float] = None
+
+
+class AnalyzeCombination(BaseModel):
+    sum: int
+    odd_even: str
+    high_low: str = Field(description="고 = 23 이상. Traits 와 같은 정의")
+    consecutive_pairs: int
+    tail_sum: int
+    same_tail_pairs: int
+    ac_value: int = Field(description="차이값 15개 중 서로 다른 값의 개수 - 5. 0~10")
+    multiples_of_3: int
+    prime_count: int = Field(description="1은 소수가 아니다")
+    carryover: int = Field(description="직전 회차와 겹치는 개수. 보너스 제외")
+    reference: AnalyzeReference
+
+
+class ClosestRound(BaseModel):
+    round_no: int
+    draw_date: Optional[date] = None
+    numbers: list[int] = Field(min_length=6, max_length=6)
+    bonus: int
+    matched: list[int] = Field(description="겹친 번호. 화면이 하이라이트한다")
+    match_count: int
+    bonus_matched: bool
+    rank: Optional[int] = None
+
+
+class AnalyzePastMatch(BaseModel):
+    # 0~6 일곱 키를 모두 담는다. 0 인 키를 빼면 화면이 "데이터가 없는 것" 과
+    # "0회인 것" 을 구분할 수 없다. 값의 합은 rounds_analyzed 와 같다.
+    distribution: dict[str, int]
+    # ⚠ 보너스를 본다. 5개 일치 중 보너스까지 맞으면 2등, 아니면 3등이다.
+    # distribution["5"] 는 둘을 합친 수이고 이쪽은 나눈 수다 - 안 맞으면 버그다.
+    rank_counts: dict[str, int]
+    closest: list[ClosestRound]
+    # null 이 아니라 빈 배열이다. 비어 있다는 것 자체가 화면에 쓸 정보다.
+    exact_match_rounds: list[int]
+
+
+class RetrospectPrize(BaseModel):
+    rank: int
+    count: int
+    amount_each: int
+    amount: int
+
+
+class RetrospectUnpriced(BaseModel):
+    """금액을 확정할 수 없는 등위(1~3등).
+
+    회차마다 총 판매액과 당첨자 수에 따라 달라지고 3등 금액은 데이터 소스에 없다.
+    `returned`·`net` 계산에서 **뺀다** - 0 이나 평균으로 메우면 합계가 거짓말이 된다.
+    """
+
+    rank: int
+    count: int
+
+
+class AnalyzeRetrospect(BaseModel):
+    rounds: int
+    ticket_price: int
+    spent: int
+    prizes: list[RetrospectPrize]
+    unpriced: list[RetrospectUnpriced]
+    returned: int
+    # `net` 이 음수인 것은 사실 서술이다. "기대 수익" 같은 이름을 붙이지 않는다.
+    net: int
+
+
+class AnalyzeResponse(BaseModel):
+    numbers: list[int] = Field(min_length=6, max_length=6, description="오름차순")
+    rounds_analyzed: int
+    from_round: int
+    to_round: int
+    latest_draw_date: Optional[date] = None
+    per_number: list[AnalyzeNumber]
+    frequency_grid: list[FrequencyGridItem]
+    combination: AnalyzeCombination
+    past_match: AnalyzePastMatch
+    retrospect: AnalyzeRetrospect
+    # 면책은 백엔드가 내려준다 - 프론트가 잊지 못하게 하려는 장치다.
+    disclaimer: str
+
+
 # ── 영상 ────────────────────────────────────────────────────────────────
 
 
@@ -405,7 +631,17 @@ class VideoDetail(VideoItem):
 
 
 class AdminLoginRequest(BaseModel):
-    token: str = Field(min_length=1, description="ADMIN_TOKEN 원문")
+    """아이디 · 비밀번호 · OTP 세 가지를 함께 받는다.
+
+    ⚠ 아이디·비밀번호'만' 으로 하면 종전(64자 랜덤 토큰)보다 **약해진다** — 사람이
+    기억하는 비밀번호는 훨씬 추측하기 쉽다. OTP 가 그 약점을 덮는다.
+    """
+
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=256)
+    otp: str = Field(
+        min_length=6, max_length=8, description="인증 앱의 여섯 자리 (TOTP)"
+    )
 
 
 class JobLogSummaryItem(BaseModel):

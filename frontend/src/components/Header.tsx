@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useId, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 import { NAV_ITEMS } from '@/lib/site'
 import { LogoMark } from './LogoMark'
@@ -100,7 +101,46 @@ function isCurrent(pathname: string, href: string): boolean {
  * 드로어 (모바일 내비)
  * ──────────────────────────────────────────────────────────── */
 
+/**
+ * ⚠ **헤더 밖(`document.body`)에 그린다.**
+ *
+ * `.site-header` 에 `backdrop-filter: blur(8px)` 이 있는데, 그 속성은 **`position: fixed`
+ * 의 컨테이닝 블록을 만든다**(`transform`·`filter`·`will-change`·`contain` 도 같다).
+ * 그래서 헤더 안에서 `position: fixed; inset-block: 0` 을 줘도 화면 전체가 아니라
+ * **헤더 높이(60px) 안에** 갇힌다 — 드로어 머리만 보이고 메뉴 목록이 잘렸다
+ * (실측 320×60, 2026-08-31).
+ *
+ * 헤더의 blur 를 걷어내는 대신 포털을 쓴다. blur 는 디자인이고, 여기서 고칠 문제는
+ * "떠 있는 것이 어디에 붙는가" 이기 때문이다. 검색 오버레이도 같은 함정을 안고 있어
+ * 함께 감쌌다.
+ *
+ * ⚠ SSR 에는 `document` 가 없다. 마운트 뒤에만 그린다 — 드로어는 사용자가 눌러야 열리므로
+ *   첫 페인트에 없어도 아무것도 잃지 않는다.
+ *
+ * ⚠ **`useModalBehavior` 를 이 컴포넌트 바깥에서 부르면 안 된다.** 첫 렌더에 `null` 을
+ *   돌려주므로 그 시점에는 `ref.current` 가 비어 있고, 훅의 effect 는 `if (!node) return`
+ *   으로 아무것도 하지 않고 끝난다. 의존성이 그대로라 마운트 뒤에도 **다시 돌지 않아**
+ *   Esc·포커스 트랩·배경 스크롤 잠금이 전부 죽는다(실제로 그렇게 깨뜨렸다, 2026-08-31).
+ *   그래서 내용을 별도 컴포넌트로 두고 **포털 안에서** 훅을 부른다 — 그러면 훅의 첫 실행이
+ *   DOM 이 생긴 뒤다.
+ */
+function Portal({ children }: { children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  if (!mounted) return null
+  return createPortal(children, document.body)
+}
+
 function Drawer({ pathname, onClose }: { pathname: string; onClose: () => void }) {
+  return (
+    <Portal>
+      <DrawerBody pathname={pathname} onClose={onClose} />
+    </Portal>
+  )
+}
+
+/** 포털 **안**에서 훅을 부른다(→ `Portal` 주석의 함정). */
+function DrawerBody({ pathname, onClose }: { pathname: string; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null)
   useModalBehavior(ref, onClose)
 
@@ -143,6 +183,16 @@ function Drawer({ pathname, onClose }: { pathname: string; onClose: () => void }
  * ──────────────────────────────────────────────────────────── */
 
 function SearchOverlay({ onClose }: { onClose: () => void }) {
+  // 드로어와 같은 이유로 헤더 밖에 그린다(→ `Portal` 주석).
+  return (
+    <Portal>
+      <SearchOverlayBody onClose={onClose} />
+    </Portal>
+  )
+}
+
+/** 포털 **안**에서 훅을 부른다(→ `Portal` 주석의 함정). */
+function SearchOverlayBody({ onClose }: { onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null)
   useModalBehavior(ref, onClose)
 

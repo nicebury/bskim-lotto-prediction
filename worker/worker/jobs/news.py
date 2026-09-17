@@ -21,7 +21,7 @@ import httpx
 
 from ..config import settings
 from ..db import connect
-from ..sources import naver_news
+from ..sources import llm_judge, naver_news
 from .progress import JobProgress
 
 logger = logging.getLogger(__name__)
@@ -178,6 +178,40 @@ async def run(progress: JobProgress) -> None:
         today, max_age, on_topic, on_topic - len(merged),
     )
 
+    fresh = len(merged)
+
+    # 이미 저장된 기사를 먼저 걸러낸다. LLM 판정을 신규에만 쓰기 위해서다 —
+    # 검색 API 는 매 실행 상위 50건을 통째로 주므로, 이 단계가 없으면 어제
+    # 판정한 기사를 오늘 또 묻는다(영상 잡이 겪은 것과 같은 낭비다).
+    async with connect() as conn:
+        known = await _filter_known_links(conn, list(merged))
+    merged = {k: v for k, v in merged.items() if k not in known}
+    logger.info("기존 기사 제거 — %d건 중 %d건 제외", fresh, fresh - len(merged))
+    new_candidate = len(merged)
+
+    # 애드센스 심사 기준 LLM 판정(2026-09-08 신설). 규칙 제외어는 '로또 청약'
+    # 같은 알려진 문맥만 잡고, 연예·증시가 '로또' 를 비유로 쓰는 새 표현은
+    # 계속 생긴다. 실패하면 규칙 결과를 그대로 쓴다 — 수집을 멈추지 않는다.
+    if settings.llm_judge_enabled and merged:
+        async with httpx.AsyncClient() as client:
+            blocked = await llm_judge.judge_blocked(
+                client,
+                items=[
+                    {"key": k, "title_nm": v["title_nm"], "source_nm": v.get("provider_nm")}
+                    for k, v in merged.items()
+                ],
+                kind="news",
+                api_key=settings.API_KEY,
+                model=settings.MODEL,
+                batch_size=settings.LLM_JUDGE_BATCH_SIZE,
+                timeout=settings.LLM_JUDGE_TIMEOUT_SEC,
+                max_retry=settings.LLM_JUDGE_MAX_RETRY,
+            )
+        if blocked:
+            merged = {k: v for k, v in merged.items() if k not in blocked}
+        logger.info("LLM 보조 판정 — %d건 차단", len(blocked))
+    llm_clean = len(merged)
+
     # 키워드는 합쳐진 뒤 전체 검색어 기준으로 다시 계산한다.
     for item in merged.values():
         item["keyword_list"] = naver_news.extract_keywords(
@@ -192,10 +226,23 @@ async def run(progress: JobProgress) -> None:
         "fetched": fetched,
         "deduped": deduped,
         "on_topic": on_topic,
-        "fresh": len(merged),
+        "fresh": fresh,
+        "new_candidate": new_candidate,
+        "llm_clean": llm_clean,
         "stored": progress.collected,
     }
     logger.info(
-        "news 잡 완료 — 조회 %d건 → 링크 중복제거 %d → 주제적합 %d → 신선 %d → 신규 %d건 저장",
-        fetched, deduped, on_topic, len(merged), progress.collected,
+        "news 잡 완료 — 조회 %d → 중복제거 %d → 주제 %d → 신선 %d "
+        "→ 신규후보 %d → LLM통과 %d → 저장 %d건",
+        fetched, deduped, on_topic, fresh, new_candidate, llm_clean, progress.collected,
     )
+
+
+async def _filter_known_links(conn, links: list[str]) -> set[str]:
+    """이미 DB 에 있는 기사 링크. LLM 판정 대상을 신규로 좁히는 데 쓴다."""
+    if not links:
+        return set()
+    cur = await conn.execute(
+        "SELECT link_url FROM lotto_news WHERE link_url = ANY(%s)", (links,)
+    )
+    return {r["link_url"] for r in await cur.fetchall()}

@@ -1,0 +1,1529 @@
+/*
+ * 번호 추천 화면(`/lotto/recommend`) 전용 — 2026-09-17 재설계.
+ *
+ * ── 이 파일이 생긴 이유 ─────────────────────────────────────────────
+ * 사용자 지적 넷.
+ *   ① 정밀 분석의 설정 부분이 "화면만 봐서는 뭔지 모르겠고, 재미없고, 배치가 이상하다.
+ *      누가 봐도 랜덤하게 번호 뽑는 것처럼 보인다."
+ *   ② "어떻게 추천하나요?" 가 "절차를 정리해 놓은 문서 같다."
+ *   ③ 6가지 추천에서 "어떤 방식을 골라 몇 개를 뽑는지" 가 난잡하다.
+ *   ④ 시뮬레이션을 한다는 느낌이 없다.
+ *
+ * 고친 방향은 하나다 — **무엇을 돌리는지가 모양으로 보이게.** 흐름도(설정 콘솔),
+ * 45개 번호판(진행 화면), 세 막 카드(설명), 방식 카드(6가지).
+ *
+ * ⚠ components.css 에 합치지 않는다. 그 파일이 6천 줄을 넘었고, 이 화면 규칙이 흩어져
+ *   있어 한 곳을 고치면 다른 곳이 깨졌다. 종전 클래스(`.sim-steps` 등)를 **덮어쓰는**
+ *   규칙이 있어 globals.css 에서 components.css **뒤에** 불러온다.
+ *
+ * ⚠ 색·크기는 tokens.css 변수만 쓴다. 중간색은 color-mix 로 유도한다.
+ * ⚠ 강조 세로 띠 금지(frontend/CLAUDE.md). 위계는 배경·크기·굵기로.
+ * ──────────────────────────────────────────────────────────── */
+
+/* ────────────────────────────────────────────────────────────
+ * 0. 개수 스테퍼 — [−] 5개 [+] + 표 칸 열 개
+ * → components/simulator/CountStepper.tsx
+ * ──────────────────────────────────────────────────────────── */
+
+.stepper {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.stepper-row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+
+/* 터치 타겟 44px. 가장 자주 누르는 버튼이다. */
+.stepper-btn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+
+.stepper-btn:hover:not(:disabled) {
+  background: var(--color-primary-soft);
+}
+
+.stepper-btn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+/* 끝에 닿았다. 흐리게만 두지 않고 그림자도 걷어 '눌리지 않는 것' 으로 보이게. */
+.stepper-btn:disabled {
+  color: var(--color-text-subtle);
+  box-shadow: none;
+  background: transparent;
+  cursor: default;
+}
+
+.stepper-value {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px;
+  min-width: 64px;
+}
+
+.stepper-value strong {
+  font-size: 1.6rem;
+  font-weight: var(--fw-black);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.stepper-value span {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+}
+
+/*
+ * 표 칸. 채워진 칸 = 받을 조합 수.
+ * ⚠ 표 모양(가로로 긴 둥근 사각형)이다. 원으로 그리면 로또 볼로 읽혀 "번호 10개" 가 된다.
+ */
+.stepper-pips {
+  display: flex;
+  gap: 4px;
+  padding-left: var(--space-2);
+}
+
+.stepper-pips span {
+  width: 14px;
+  height: 9px;
+  border-radius: 3px;
+  background: var(--color-border);
+  transition: background var(--dur) var(--ease-out), transform var(--dur) var(--ease-out);
+}
+
+.stepper-pips span[data-on] {
+  background: var(--color-primary);
+  transform: translateY(-1px);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 1. 정밀 분석 — 설정 콘솔
+ * → components/simulator/AiRecommender.tsx
+ * ──────────────────────────────────────────────────────────── */
+
+/*
+ * 콘솔 한 장. 안쪽을 선으로 나눠 ①② 설정 / ③ 흐름도 / 실행 이 한 덩어리로 읽힌다.
+ * ⚠ 흐름도를 콘솔 **안**에 둔다. 밖으로 빼면 설정과 흐름이 다른 이야기로 읽혀,
+ *   값을 바꿀 때 흐름도의 숫자가 따라 바뀌는 것이 눈에 들어오지 않는다.
+ */
+.sim-console {
+  display: grid;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  border-radius: 24px;
+  background:
+    radial-gradient(90% 60% at 100% 0%, color-mix(in oklab, var(--color-primary) 9%, transparent), transparent 70%),
+    var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 18px 40px -28px color-mix(in oklab, var(--color-primary) 45%, transparent);
+}
+
+@media (min-width: 640px) {
+  .sim-console {
+    padding: var(--space-6);
+  }
+}
+
+.sim-console-fields {
+  display: grid;
+  gap: var(--space-5);
+}
+
+@media (min-width: 720px) {
+  .sim-console-fields {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--space-8);
+    align-items: start;
+  }
+}
+
+.sim-field {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+}
+
+/* 질문형 제목. "추천 개수" 같은 명사 라벨보다 무엇을 고르는지 곧바로 읽힌다. */
+.sim-field-title,
+.pick-step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+  word-break: keep-all;
+}
+
+.sim-field-num,
+.pick-step-num {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  color: var(--color-on-accent);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-black);
+}
+
+.sim-field-sub {
+  margin: calc(var(--space-1) * -1) 0 var(--space-1);
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+/* ── 추첨 횟수 세 칸 ──────────────────────────────────── */
+
+.sim-trials {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.sim-trial {
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  padding: var(--space-2) var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 16px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out);
+}
+
+.sim-trial:hover:not(:disabled) {
+  border-color: var(--color-primary);
+}
+
+.sim-trial:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/*
+ * ⚠ 선택을 색만으로 알리지 않는다 — 테두리 두께(2px)와 그림자, `aria-pressed` 가 함께 간다.
+ * ⚠ 칸 전체를 진한 색으로 칠하지 않는다. 종전에는 그랬는데 점 그림이 묻혀 버렸다.
+ */
+.sim-trial[data-active] {
+  border: 2px solid var(--color-primary);
+  padding: calc(var(--space-2) - 1px) calc(var(--space-2) - 1px) calc(var(--space-3) - 1px);
+  background: var(--color-primary-soft);
+  box-shadow: 0 8px 18px -10px color-mix(in oklab, var(--color-primary) 60%, transparent);
+}
+
+.sim-trial:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/*
+ * 점 밀도 그림. 점 간격이 좁을수록 많이 돌린다.
+ * ⚠ 이미지가 아니라 반복 그라디언트다 — 요청 0, 다크 모드에서 색이 따라온다.
+ */
+.sim-trial-dots {
+  width: 100%;
+  height: 34px;
+  margin-bottom: var(--space-1);
+  border-radius: 10px;
+  background-color: var(--color-surface-2);
+  background-image: radial-gradient(circle, var(--color-primary) 1.3px, transparent 1.6px);
+  opacity: 0.9;
+}
+
+.sim-trial-dots[data-level='0'] {
+  background-size: 14px 14px;
+}
+.sim-trial-dots[data-level='1'] {
+  background-size: 8px 8px;
+}
+.sim-trial-dots[data-level='2'] {
+  background-size: 5px 5px;
+}
+
+.sim-trial[data-active] .sim-trial-dots {
+  background-color: var(--color-surface);
+}
+
+.sim-trial-label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.sim-trial-note {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+/* ── 흐름도 ───────────────────────────────────────────── */
+
+.sim-flow-wrap {
+  padding-top: var(--space-5);
+  border-top: 1px dashed var(--color-border-strong);
+}
+
+.sim-flow-title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.04em;
+  color: var(--color-text-subtle);
+}
+
+/*
+ * 좁은 화면: 세로 네 줄(아이콘 | 글). 넓은 화면: 가로 네 칸.
+ * 칸 사이 화살표는 `::after` 장식이다.
+ */
+.sim-flow {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 720px) {
+  .sim-flow {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-6);
+  }
+}
+
+.sim-flow-node {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3);
+  border-radius: 16px;
+  background: var(--color-surface-2);
+}
+
+.sim-flow-node > strong {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+  word-break: keep-all;
+  font-variant-numeric: tabular-nums;
+}
+
+.sim-flow-node > span:last-child {
+  grid-column: 2;
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+.sim-flow-icon,
+.sim-flow-icons {
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--color-surface);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-card);
+}
+
+.sim-flow-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* 네 기록 아이콘을 2×2 로. 한 칸에 네 가지를 읽는다는 것이 모양으로 보인다. */
+.sim-flow-icons {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  padding: 6px;
+}
+
+.sim-flow-icons svg {
+  width: 13px;
+  height: 13px;
+}
+
+/*
+ * 가상 추첨 칸 — 이 기능의 핵심이라 강조한다. 배경이 강조색으로 옅게 물들고
+ * 주사위가 느리게 흔들린다.
+ */
+.sim-flow-node.is-hot {
+  background: var(--color-primary-soft);
+}
+
+.sim-flow-node.is-hot > strong {
+  color: var(--color-primary);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sim-flow-dice svg {
+    animation: sim-dice 2.4s var(--ease-out) infinite;
+  }
+}
+
+@keyframes sim-dice {
+  0%,
+  70%,
+  100% {
+    transform: rotate(0);
+  }
+  78% {
+    transform: rotate(-18deg);
+  }
+  86% {
+    transform: rotate(14deg);
+  }
+  93% {
+    transform: rotate(-6deg);
+  }
+}
+
+/* 칸 사이 화살표. 좁은 화면에서는 아래로, 넓은 화면에서는 오른쪽으로. */
+.sim-flow-node:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: calc(var(--space-3) + 22px - 5px);
+  bottom: calc(var(--space-3) * -1 + 1px);
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid var(--color-border-strong);
+  border-bottom: 2px solid var(--color-border-strong);
+  transform: translateY(-2px) rotate(45deg);
+}
+
+@media (min-width: 720px) {
+  .sim-flow-node {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    row-gap: var(--space-1);
+    align-content: start;
+    justify-items: start;
+    padding: var(--space-4);
+  }
+
+  .sim-flow-icon,
+  .sim-flow-icons {
+    grid-row: auto;
+    margin-bottom: var(--space-2);
+  }
+
+  .sim-flow-node > span:last-child {
+    grid-column: auto;
+  }
+
+  .sim-flow-node:not(:last-child)::after {
+    left: auto;
+    right: calc(var(--space-6) * -0.5 - 6px);
+    top: 50%;
+    bottom: auto;
+    transform: translateY(-50%) rotate(-45deg);
+  }
+}
+
+/* ── 실행 줄 ──────────────────────────────────────────── */
+
+.sim-go-row {
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
+}
+
+@media (min-width: 640px) {
+  .sim-go-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+}
+
+.sim-go-plan {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+.sim-go-plan strong {
+  color: var(--color-text);
+}
+
+.sim-go {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 52px;
+  padding-inline: var(--space-8);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-bold);
+  box-shadow: 0 12px 24px -12px color-mix(in oklab, var(--color-primary) 70%, transparent);
+}
+
+@media (min-width: 640px) {
+  .sim-go {
+    width: auto;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 2. 진행 대화상자 — 무대(번호판) + 단계 아이콘 줄
+ * → components/simulator/SimulatorRunner.tsx
+ * ⚠ 배경·막대·현재 단계 말(`.sim-backdrop` `.sim-bar` `.sim-now`)은 components.css 에 남아
+ *   있고 이 파일이 일부를 덮어쓴다(이 파일이 뒤에 온다).
+ * ──────────────────────────────────────────────────────────── */
+
+.sim-dialog {
+  max-width: 540px;
+  border-radius: 24px;
+}
+
+.sim-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.sim-head h2 {
+  margin: 2px 0 0;
+}
+
+.sim-head-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.sim-head-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.sim-stage {
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  border-radius: 18px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+
+/*
+ * 45칸 번호판. 9열 × 5행.
+ * ⚠ 칸 크기를 폭에 맞춰 늘린다(`1fr`). 고정 px 이면 375px 에서 넘친다.
+ */
+.sim-board {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.sim-cell {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  background: var(--color-surface);
+  font-size: 0.7rem;
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-subtle);
+  transition: background 90ms linear, color 90ms linear;
+}
+
+/*
+ * 응답이 짚은 번호. 켜진 순서대로 튀어 오른다(지연은 인라인 `animation-delay`).
+ * ⚠ 색만이 아니라 크기·굵기도 바뀐다 — 번호판 전체가 `aria-hidden` 이라 낭독기는 옆
+ *   문장(`.sim-now`)으로 듣지만, 화면을 보는 색약 사용자도 구별할 수 있어야 한다.
+ */
+.sim-cell[data-lit] {
+  background: var(--color-primary);
+  color: var(--color-on-accent);
+  font-weight: var(--fw-black);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sim-cell[data-lit] {
+    animation: sim-pop 420ms var(--ease-out) both;
+  }
+}
+
+@keyframes sim-pop {
+  0% {
+    transform: scale(0.6);
+    background: var(--color-surface);
+    color: var(--color-text-subtle);
+  }
+  60% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/*
+ * '뽑는 중' 연출 칸(준비 · 가상 추첨 단계). 결과 칸(`data-lit`)보다 옅고 테두리로 구분한다 —
+ * 결과가 아니라는 것이 모양에서도 갈린다(SimulatorRunner `SimStage` 주석).
+ */
+.sim-cell[data-pick] {
+  background: color-mix(in oklab, var(--color-primary) 22%, var(--color-surface));
+  color: var(--color-primary);
+  font-weight: var(--fw-black);
+  box-shadow: inset 0 0 0 2px var(--color-primary);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sim-cell[data-pick] {
+    animation: sim-pick 260ms var(--ease-out) both;
+  }
+}
+
+@keyframes sim-pick {
+  0% {
+    transform: scale(1.35);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* 뽑힌 여섯 칸 + 카운터 한 줄. 높이를 고정해 단계가 바뀌어도 대화상자가 출렁이지 않게. */
+.sim-pickrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  min-height: 34px;
+  margin-top: var(--space-3);
+}
+
+.sim-slots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.sim-slots i {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-pill);
+  border: 1.5px dashed var(--color-border-strong);
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: var(--fw-black);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-on-accent);
+}
+
+.sim-slots i[data-on] {
+  border: 0;
+  background: var(--color-primary);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sim-slots i[data-on] {
+    animation: sim-pop 260ms var(--ease-out) both;
+  }
+}
+
+.sim-pickrow .sim-counter,
+.sim-pickrow .sim-caption {
+  min-height: 0;
+  margin: 0;
+}
+
+/* 준비 중 진행 막대 — 끝을 모르므로 채우지 않고 막대 조각이 흐른다(거짓 진행률 금지). */
+.sim-bar[data-indeterminate] > span {
+  width: 40%;
+  animation: sim-indeterminate 1.1s ease-in-out infinite;
+}
+
+@keyframes sim-indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(260%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sim-bar[data-indeterminate] > span {
+    animation: none;
+    width: 100%;
+    opacity: 0.4;
+  }
+}
+
+/* 번호판 아래 한 줄. 높이를 잡아 단계마다 대화상자가 출렁이지 않게. */
+.sim-caption,
+.sim-counter,
+.sim-chips {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-height: 34px;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  list-style: none;
+}
+
+.sim-caption i[data-kind='lit'] {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  background: var(--color-primary);
+}
+
+.sim-chips li {
+  padding: 4px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+.sim-chips b,
+.sim-counter b {
+  color: var(--color-primary);
+  font-weight: var(--fw-black);
+  font-variant-numeric: tabular-nums;
+}
+
+.sim-counter b {
+  min-width: 7ch;
+  font-size: 1.3rem;
+  text-align: right;
+}
+
+.sim-now {
+  min-height: 64px;
+  border-radius: 14px;
+}
+
+/* ── 단계 아이콘 줄 ───────────────────────────────────── */
+
+/*
+ * 단계 줄. 2026-09-17 전에는 세로 목록(번호 · 제목 · '설명' 버튼)이었고 그 규칙은
+ * components.css 에서 걷어냈다. 되살리지 않는다 — 무대(번호판)가 들어가면서 세로 일곱 줄은
+ * 375px 화면 높이를 넘는다.
+ */
+.sim-steps {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+  margin: var(--space-4) 0 0;
+  position: relative;
+}
+
+/* 아이콘 뒤를 잇는 선. 지난 단계까지만 강조색이 차오르는 것은 막대(.sim-bar)가 맡는다. */
+.sim-steps::before {
+  content: '';
+  position: absolute;
+  left: 7%;
+  right: 7%;
+  top: 50%;
+  height: 2px;
+  background: var(--color-border);
+}
+
+.sim-steps > li {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  position: relative;
+}
+
+.sim-step-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text-subtle);
+  cursor: pointer;
+  transition: transform var(--dur) var(--ease-out), background var(--dur) var(--ease-out);
+}
+
+.sim-step-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.sim-step-btn:hover {
+  border-color: var(--color-primary);
+}
+
+.sim-steps > li[data-state='done'] .sim-step-btn {
+  background: var(--color-primary-soft);
+  border-color: transparent;
+  color: var(--color-primary);
+}
+
+.sim-steps > li[data-state='active'] .sim-step-btn {
+  border: 2px solid var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-on-accent);
+  transform: scale(1.1);
+  box-shadow: 0 6px 16px -6px color-mix(in oklab, var(--color-primary) 70%, transparent);
+}
+
+.sim-step-check {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  color: var(--color-on-accent);
+  border: 2px solid var(--color-surface);
+}
+
+/*
+ * ⚠ 375px 에서 일곱 칸 × 44px = 308px 에 간격이 더해지면 대화상자 안쪽(335px)에
+ *   빠듯하다. 좁은 화면에서만 아이콘 칸을 40px 로 줄이고 **보이지 않는 터치 영역**으로
+ *   44px 을 채운다.
+ */
+@media (max-width: 400px) {
+  .sim-step-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .sim-step-btn::after {
+    content: '';
+    position: absolute;
+    inset: -2px;
+  }
+}
+
+.sim-steps-hint {
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-xs);
+  text-align: center;
+  color: var(--color-text-subtle);
+}
+
+.sim-slot {
+  min-height: var(--space-4);
+}
+
+/* 설명 팝업의 한마디 */
+.sim-help .sim-head-icon {
+  margin-bottom: var(--space-3);
+}
+
+.sim-help-quote {
+  margin: 0 0 var(--space-3);
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-bold);
+  color: var(--color-primary);
+  word-break: keep-all;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 3. 어떻게 추천하나요? — 세 막
+ * → components/simulator/HowSimWorks.tsx
+ * ──────────────────────────────────────────────────────────── */
+
+.how-sim {
+  margin-top: var(--space-8);
+}
+
+.how-sim-head {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 640px;
+}
+
+.how-sim-eyebrow {
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.04em;
+  color: var(--color-primary);
+}
+
+.how-sim-head h2 {
+  margin: 0;
+  font-size: clamp(1.35rem, 1.1rem + 0.8vw, 1.7rem);
+  letter-spacing: var(--ls-title);
+}
+
+.how-sim-lede {
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: var(--lh-body);
+  word-break: keep-all;
+}
+
+.how-sim-lede strong {
+  color: var(--color-text);
+}
+
+.how-acts {
+  display: grid;
+  gap: var(--space-8);
+  margin: var(--space-6) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.how-act-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.how-act-head h3 {
+  margin: 0;
+  font-size: var(--fs-h2);
+  letter-spacing: var(--ls-title);
+  word-break: keep-all;
+}
+
+.how-act-tag {
+  padding: 4px var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-text);
+  color: var(--color-surface);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+}
+
+/* 1막 카드 넷: 모바일 1열 → 2열 → 4열 */
+.how-cards {
+  display: grid;
+  gap: var(--space-3);
+}
+
+@media (min-width: 640px) {
+  .how-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .how-cards:not(.is-stack) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* 3막 카드 둘은 그림 옆에 세로로 쌓되, 태블릿에서는 나란히. */
+@media (min-width: 900px) {
+  .how-cards.is-stack {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.how-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border-radius: 20px;
+  background: var(--color-surface);
+  box-shadow:
+    0 1px 2px color-mix(in oklab, var(--color-text) 5%, transparent),
+    0 12px 28px -20px color-mix(in oklab, var(--color-primary) 40%, transparent);
+  transition: transform var(--dur) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .how-card:hover {
+    transform: translateY(-3px);
+  }
+}
+
+.how-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-1);
+}
+
+.how-card-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.how-card-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.how-card-no {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--color-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.how-card h4 {
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.02em;
+  color: var(--color-text-muted);
+}
+
+/*
+ * 사장님 한마디 — 카드에서 가장 큰 글씨.
+ * ⚠ 말풍선 꼬리 같은 장식을 달지 않는다. 따옴표와 크기만으로 '말' 로 읽힌다.
+ */
+.how-card-quote {
+  margin: 0;
+  font-size: 1.08rem;
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--ls-title);
+  color: var(--color-text);
+  word-break: keep-all;
+  text-wrap: balance;
+}
+
+.how-card-summary {
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--color-primary);
+  line-height: 1.5;
+  word-break: keep-all;
+}
+
+.how-card-body {
+  margin: var(--space-1) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+/* 2막·3막: 그림 | 카드 */
+.how-act-split {
+  display: grid;
+  gap: var(--space-3);
+}
+
+@media (min-width: 900px) {
+  .how-act-split {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    align-items: stretch;
+  }
+}
+
+/* ── 2막 그림: 네 기록 → 순서표 ─────────────────────────── */
+
+.how-merge,
+.how-funnel {
+  display: grid;
+  align-content: center;
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-5);
+  border-radius: 20px;
+  background:
+    radial-gradient(80% 70% at 0% 100%, color-mix(in oklab, var(--color-primary) 12%, transparent), transparent 70%),
+    var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+
+.how-merge {
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.how-merge-in {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.how-merge-in span {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: var(--color-surface);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-card);
+}
+
+.how-merge-in svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* 모이는 화살표 — 꺾쇠 하나. */
+.how-merge-arrow {
+  width: 14px;
+  height: 14px;
+  border-right: 2px solid var(--color-primary);
+  border-bottom: 2px solid var(--color-primary);
+  transform: rotate(-45deg);
+}
+
+/* 순서표. 막대 길이는 '앞설수록 길다' 는 방향만 말한다(값이 아니다). */
+.how-merge-out {
+  display: grid;
+  gap: 6px;
+  padding: var(--space-3);
+  border-radius: 14px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.how-merge-out > span {
+  display: grid;
+  grid-template-columns: 1.4em minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.how-merge-out b {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-black);
+  color: var(--color-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.how-merge-out i {
+  display: block;
+  width: var(--w);
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--color-primary), color-mix(in oklab, var(--color-primary) 35%, transparent));
+}
+
+.how-merge-out .how-merge-more {
+  display: block;
+  padding-left: 1.6em;
+  font-size: var(--fs-xs);
+  color: var(--color-text-subtle);
+}
+
+/* ── 3막 그림: 깔때기 ─────────────────────────────────── */
+
+.how-funnel {
+  justify-items: center;
+  gap: var(--space-2);
+}
+
+.how-funnel span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: var(--w);
+  min-height: 48px;
+  padding-inline: var(--space-3);
+  border-radius: 14px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+  word-break: keep-all;
+  text-align: center;
+}
+
+.how-funnel span:last-child {
+  background: var(--color-primary);
+  color: var(--color-on-accent);
+}
+
+.how-funnel svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 4. 6가지 추천 — 방식 카드 + 주문 줄
+ * → components/RecommendStudio.tsx
+ * ──────────────────────────────────────────────────────────── */
+
+.pick {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.strategy-cards {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 640px) {
+  .strategy-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
+}
+
+@media (min-width: 1024px) {
+  .strategy-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* 방식마다 색표. 뜻(우열)이 아니라 구분이다. 통제군(완전 랜덤)은 무채색. */
+.strategy-card[data-key='pure_random'],
+.pick-order-icon[data-key='pure_random'] {
+  --st: var(--svc-pension);
+  --st-bg: var(--svc-pension-bg);
+}
+.strategy-card[data-key='ensemble'],
+.pick-order-icon[data-key='ensemble'] {
+  --st: var(--svc-stats);
+  --st-bg: var(--svc-stats-bg);
+}
+.strategy-card[data-key='balanced_range'],
+.pick-order-icon[data-key='balanced_range'] {
+  --st: var(--svc-lotto);
+  --st-bg: var(--svc-lotto-bg);
+}
+.strategy-card[data-key='golden_combo'],
+.pick-order-icon[data-key='golden_combo'] {
+  --st: var(--svc-reco);
+  --st-bg: var(--svc-reco-bg);
+}
+.strategy-card[data-key='cold_return'],
+.pick-order-icon[data-key='cold_return'] {
+  --st: var(--svc-news);
+  --st-bg: var(--svc-news-bg);
+}
+.strategy-card[data-key='pair_affinity'],
+.pick-order-icon[data-key='pair_affinity'] {
+  --st: var(--svc-dream);
+  --st-bg: var(--svc-dream-bg);
+}
+
+.strategy-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: var(--color-surface);
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out),
+    transform var(--dur) var(--ease-out);
+}
+
+.strategy-card:hover {
+  border-color: color-mix(in oklab, var(--st) 55%, var(--color-border));
+}
+
+/*
+ * 고른 카드. ⚠ 색만이 아니라 **테두리 두께·체크 원·설명 노출**이 함께 바뀐다.
+ * 테두리를 2px 로 늘리는 만큼 안쪽 여백을 1px 줄여 카드 크기가 흔들리지 않게 한다.
+ */
+.strategy-card[data-active] {
+  border: 2px solid var(--color-primary);
+  padding: calc(var(--space-3) - 1px) calc(var(--space-4) - 1px);
+  box-shadow: 0 12px 26px -16px color-mix(in oklab, var(--color-primary) 60%, transparent);
+}
+
+.strategy-card-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--st-bg);
+  color: var(--st);
+}
+
+.strategy-card-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+/*
+ * 늘린 버튼. `::after` 가 카드 전체를 덮어 어디를 눌러도 이 버튼이 눌린다.
+ * ⚠ 버튼 자체는 이름·짧은 설명 줄뿐이다(RecommendStudio 주석).
+ */
+.strategy-card-btn {
+  display: grid;
+  gap: 2px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.strategy-card-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.strategy-card-btn:focus-visible {
+  outline: none;
+}
+
+.strategy-card:has(.strategy-card-btn:focus-visible) {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.strategy-card-btn:disabled {
+  cursor: default;
+}
+
+.strategy-card-name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-bold);
+  word-break: keep-all;
+}
+
+.strategy-card-tag {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+}
+
+.strategy-card-short {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+.strategy-card-check {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-pill);
+  border: 2px solid var(--color-border-strong);
+  color: transparent;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.strategy-card[data-active] .strategy-card-check {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-on-accent);
+}
+
+/*
+ * 긴 설명. 좁은 화면에서는 **고른 카드만** 펼친다 — 여섯 장 모두 세 문장씩 펼치면
+ * 카드 목록이 한 화면을 네 번 넘는다. 1024px 이상에서는 전부 보인다.
+ * ⚠ `display:none` 이어도 DOM 에 있다(SEO). 보이는 폭에서는 모두 읽힌다.
+ */
+.strategy-card-desc {
+  display: none;
+  grid-column: 1 / -1;
+  margin: var(--space-3) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px dashed var(--color-border);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+.strategy-card[data-active] .strategy-card-desc {
+  display: block;
+}
+
+@media (min-width: 1024px) {
+  .strategy-card {
+    align-content: start;
+  }
+
+  .strategy-card-desc {
+    display: block;
+  }
+}
+
+/* ── 주문 줄 ──────────────────────────────────────────── */
+
+.pick-order {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: 20px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 14px 32px -26px color-mix(in oklab, var(--color-primary) 55%, transparent);
+}
+
+.pick-order-count {
+  display: grid;
+  gap: var(--space-2);
+}
+
+@media (min-width: 720px) {
+  .pick-order {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-8);
+    padding: var(--space-5) var(--space-6);
+  }
+}
+
+.pick-order-go {
+  display: grid;
+  gap: var(--space-3);
+}
+
+@media (min-width: 720px) {
+  .pick-order-go {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    padding-left: var(--space-8);
+    border-left: 1px solid var(--color-border);
+  }
+}
+
+.pick-order-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0;
+  font-size: var(--fs-body);
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+.pick-order-line strong {
+  color: var(--color-text);
+}
+
+.pick-order-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--st-bg);
+  color: var(--st);
+}
+
+.pick-order-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.pick-go {
+  width: 100%;
+  min-height: 52px;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-bold);
+}
+
+@media (min-width: 720px) {
+  .pick-go {
+    width: auto;
+    min-width: 160px;
+  }
+}
+
+.pick-result {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.pick-result-head {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.pick-result-head strong {
+  color: var(--color-text);
+}
+
+.pick-result-stale {
+  margin-left: var(--space-1);
+  color: var(--color-warning);
+}
+
+/* BulkActions 는 자체 아래 여백을 갖고 있다. 이 격자 안에서는 gap 이 대신한다. */
+.pick-result .bulk-actions {
+  margin-bottom: 0;
+}

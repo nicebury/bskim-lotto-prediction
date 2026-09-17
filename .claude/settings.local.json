@@ -1,6 +1,5 @@
 {
   "permissions": {
-    "defaultMode": "bypassPermissions",
     "allow": [
       "Bash(mkdir -p /mnt/d/bskim_dev/bskim-lotto-prediction/.claude/skills)",
       "Bash(cp -r /mnt/d/bskim_dev/bskim-lotto-prediction__/.claude/skills/frontend-design /mnt/d/bskim_dev/bskim-lotto-prediction__/.claude/skills/senior-frontend /mnt/d/bskim_dev/bskim-lotto-prediction__/.claude/skills/ui-ux-pro-max /mnt/d/bskim_dev/bskim-lotto-prediction/.claude/skills/)",
@@ -12,7 +11,10 @@
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(git push *)",
-      "Bash(npm install *)"
-    ]
+      "Bash(npm install *)",
+      "Bash(cd *)",
+      "Bash(npm ci *)"
+    ],
+    "defaultMode": "bypassPermissions"
   }
 }

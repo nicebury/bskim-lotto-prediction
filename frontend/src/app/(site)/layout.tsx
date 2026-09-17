@@ -1,4 +1,6 @@
+import { AdSenseLoader } from '@/components/analytics/AdSenseLoader'
 import { Footer } from '@/components/Footer'
+import { MobileTabBar } from '@/components/MobileTabBar'
 import { Header } from '@/components/Header'
 import { JsonLd, organizationLd, webSiteLd } from '@/components/JsonLd'
 import { SITE_NAME, SITE_URL } from '@/lib/env'
@@ -32,6 +34,20 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
       <main id="main">{children}</main>
 
       <Footer siteName={SITE_NAME} />
+
+      {/*
+        ⚠ 공개 화면에만 둔다. 운영자 화면(`admin/**`)은 이 셸 밖이므로 자동으로 빠진다.
+        ⚠ 푸터 **뒤**에 둔다. 고정 배치라 자리는 무관하지만, 읽는 순서(탭·스크린리더)에서
+          본문과 푸터를 다 지난 뒤에 오는 것이 맞다 — 바로가기는 보조 수단이다.
+      */}
+      <MobileTabBar />
+
+      {/*
+        ⚠ 애드센스 로더는 **공개 화면에만** 둔다. 루트 레이아웃에 두면 운영자 화면에도
+          들어가고, **자동 광고는 로더 하나만 있으면 페이지 어디든 광고를 붙인다** —
+          수동 슬롯을 안 둔 것만으로는 막히지 않는다(계약: 운영자 화면에 광고 금지).
+      */}
+      <AdSenseLoader />
 
       {/* 사이트 단위 구조화 데이터. 공개 화면에서만 한 번 렌더링한다. */}
       <JsonLd data={[organizationLd(SITE_NAME, SITE_URL), webSiteLd(SITE_NAME, SITE_URL)]} />

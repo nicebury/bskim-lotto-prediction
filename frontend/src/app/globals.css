@@ -6,3 +6,18 @@
 @import '../styles/tokens.css';
 @import '../styles/base.css';
 @import '../styles/components.css';
+/* 놀이터 전용. components.css 뒤에 둔다 — 공용 클래스를 덮어써야 할 때가 있다. */
+@import '../styles/playground.css';
+/* 가이드 허브(`/guide`) 전용. 2026-09-17 채택. components.css 로 합치지 않는 이유는
+   그 파일 머리말에 적어 두었다. */
+@import '../styles/guide-hub.css';
+/* 가이드 상세 5종(`/guide/{slug}`) 전용. 2026-09-17 신설 — 그 전까지 상세는 h2+p 만
+   반복해 문서 파일처럼 보였다. 근거는 파일 머리말. */
+@import '../styles/guide-doc.css';
+/* 번호 추천 화면 전용(2026-09-17). components.css 의 `.sim-*` 일부를 덮어쓰므로 **반드시 그 뒤**에
+   둔다 — 순서를 바꾸면 진행 대화상자의 크기·머리 배치가 옛 값으로 돌아간다. */
+@import '../styles/recommend.css';
+/* 꿈해몽 결과 레인(2026-09-17). components.css 의 `[data-origin]` 을 읽으므로 그 뒤에 둔다. */
+@import '../styles/dream.css';
+/* 영상·뉴스 화면(2026-09-17). components.css 의 `.video-*` 일부를 덮어쓰므로 그 뒤에 둔다. */
+@import '../styles/media.css';

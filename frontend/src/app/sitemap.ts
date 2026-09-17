@@ -2,6 +2,7 @@ import type { MetadataRoute } from 'next'
 
 import { getDreamKeywords, getSitemapEntries } from '@/lib/api'
 import { absoluteUrl } from '@/lib/env'
+import { GAMES } from '@/games/core/catalog'
 import { DREAM_INDEXED_KEYWORDS, GUIDES, POLICY_PAGES, STAT_PAGES } from '@/lib/site'
 
 /**
@@ -68,6 +69,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       사이트맵에 실은 URL 이 계속 404 가 된다. 사라지는 URL 을 색인시키지 않는다.
     */
     { url: absoluteUrl('/videos'), changeFrequency: 'daily', priority: 0.6 },
+    /*
+      번호놀이터. 목록은 주간, 상세 여섯은 월간이다 — 게임은 내용이 자주 바뀌지 않는다.
+      ⚠ **`catalog.ts` 를 map 한다.** 게임 목록을 여기 손으로 적으면 게임이 늘거나 slug 가
+        바뀔 때 사이트맵만 옛것으로 남는다.
+      ⚠ `/playground/{slug}` 는 `catalog` 에 있는 여섯 개뿐이고, 상세 페이지도 같은 목록으로
+        `notFound()` 를 판정한다 — **사이트맵에 없는 URL 이 200 을 내지 않는다.**
+    */
+    { url: absoluteUrl('/playground'), changeFrequency: 'weekly', priority: 0.7 },
+    ...GAMES.map((game) => ({
+      url: absoluteUrl(`/playground/${game.slug}`),
+      changeFrequency: 'monthly' as const,
+      priority: 0.6,
+    })),
     { url: absoluteUrl('/guide'), changeFrequency: 'monthly', priority: 0.6 },
     ...GUIDES.map((guide) => ({
       url: absoluteUrl(`/guide/${guide.slug}`),

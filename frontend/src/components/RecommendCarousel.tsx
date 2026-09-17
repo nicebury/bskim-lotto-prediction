@@ -1,11 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { browserRecommend } from '@/lib/api'
 import type { RecommendSet, RecommendStrategy } from '@/lib/api-types'
 import { strategyMeta } from '@/lib/strategies'
 import { traitSummaryLine } from '@/lib/traits'
+import { CardSlider } from './CardSlider'
 import { CLOSE_DELAY_MS, GENERATE_STEPS, GenerateProgress, STEP_AT_MS } from './GenerateProgress'
 import { LottoBall } from './LottoBall'
 import { NumberActions } from './NumberActions'
@@ -33,94 +34,21 @@ export interface CarouselItem {
  * 문구 주의: 이 컴포넌트 어디에도 "당첨 확률·고확률·예상 적중률"을 쓰지 않는다.
  */
 export function RecommendCarousel({ items }: { items: CarouselItem[] }) {
-  const trackRef = useRef<HTMLUListElement>(null)
-  const [canLeft, setCanLeft] = useState(false)
-  const [canRight, setCanRight] = useState(false)
-
-  // 1px 여유는 소수점 스크롤 위치 때문이다 — 끝까지 밀어도 값이 딱 떨어지지 않는다.
-  const sync = useCallback(() => {
-    const track = trackRef.current
-    if (!track) return
-    setCanLeft(track.scrollLeft > 1)
-    setCanRight(track.scrollLeft + track.clientWidth < track.scrollWidth - 1)
-  }, [])
-
-  useEffect(() => {
-    const track = trackRef.current
-    if (!track) return
-    sync()
-    // 모바일에서는 세로 스택이라 넘치지 않는다. 창 폭이 바뀌면 그 판정도 뒤집힌다.
-    const observer = new ResizeObserver(sync)
-    observer.observe(track)
-    return () => observer.disconnect()
-  }, [sync])
-
-  const scrollBy = (direction: 1 | -1) => {
-    const track = trackRef.current
-    if (!track) return
-    // 카드 한 장 + gap 만큼 민다. 카드 폭이 단마다 달라 실측값을 쓴다.
-    const card = track.querySelector('li')
-    const step = card ? card.getBoundingClientRect().width + 16 : 280
-    track.scrollBy({ left: step * direction, behavior: 'smooth' })
-  }
-
+  /*
+    ⚠ 자체 캐러셀 로직을 걷어내고 **공용 `CardSlider`** 로 바꿨다(2026-08-31).
+      화살표·끝 판정·스크롤 처리를 두 벌 두면 한쪽만 고쳐지고, 실제로 그런 일이 있었다
+      (끝에 닿아도 화살표가 남던 문제). 위치 점과 모바일 슬라이드도 함께 얻는다.
+    ⚠ 모바일에서 **세로 스택이 아니라 슬라이드**다 — 002 R12 를 뒤집은 자리다
+      (→ components/CardSlider.tsx 주석).
+  */
   return (
-    <div
-      className="carousel"
-      data-more-left={canLeft ? '' : undefined}
-      data-more-right={canRight ? '' : undefined}
-    >
-      {canLeft && (
-        <button
-          type="button"
-          className="carousel-arrow is-prev"
-          aria-label="이전 추천 카드 보기"
-          aria-controls="reco-track"
-          onClick={() => scrollBy(-1)}
-        >
-          <Chevron direction="left" />
-        </button>
-      )}
-
-      <ul id="reco-track" ref={trackRef} className="carousel-track" onScroll={sync}>
-        {items.map((item) => (
-          <li key={item.strategy} className="carousel-item">
-            <RecommendCard item={item} />
-          </li>
-        ))}
-      </ul>
-
-      {canRight && (
-        <button
-          type="button"
-          className="carousel-arrow is-next"
-          aria-label="다음 추천 카드 보기"
-          aria-controls="reco-track"
-          onClick={() => scrollBy(1)}
-        >
-          <Chevron direction="right" />
-        </button>
-      )}
-    </div>
-  )
-}
-
-/** `ScrollArea` 와 같은 갈매기. 같은 일을 하는 버튼은 같은 모양이라야 같은 기능으로 읽힌다. */
-function Chevron({ direction }: { direction: 'left' | 'right' }) {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d={direction === 'left' ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6'} />
-    </svg>
+    <CardSlider label="오늘의 추천 번호">
+      {items.map((item) => (
+        <li key={item.strategy}>
+          <RecommendCard item={item} />
+        </li>
+      ))}
+    </CardSlider>
   )
 }
 

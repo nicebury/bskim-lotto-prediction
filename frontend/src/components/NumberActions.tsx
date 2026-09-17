@@ -5,7 +5,9 @@ import { useEffect, useRef, useState } from 'react'
 // SITE_NAME·SITE_URL 은 NEXT_PUBLIC_* 기반이라 브라우저 번들에 인라인된다.
 // 같은 파일의 서버 전용 값(API_BASE_URL 등)은 여기서 참조하지 않으므로 유출되지 않는다.
 import { SITE_NAME, SITE_URL } from '@/lib/env'
+import { analyzeHref } from '@/lib/reco-store'
 import { buildShareText, copyText, downloadBlob, drawNumbersImage, shareNumbers } from '@/lib/share'
+import { AdBreakLink } from './AdBreakLink'
 
 type Action = 'copy' | 'image' | 'share'
 
@@ -28,6 +30,7 @@ export function NumberActions({
   subtitle,
   compact = false,
   sourcePath = '/lotto/recommend',
+  showAnalyze = true,
 }: {
   numbers: number[]
   strategyLabel: string
@@ -41,6 +44,14 @@ export function NumberActions({
    *   링크가 번호추천으로 가면 받은 사람이 같은 결과를 찾을 수 없다.
    */
   sourcePath?: string
+  /**
+   * '분석' 버튼을 낼지.
+   *
+   * ⚠ **분석 화면에서는 꺼야 한다.** 거기서 이 버튼은 자기 자신으로 가는 링크이고,
+   *   눌러도 아무 일이 일어나지 않아 고장으로 읽힌다(자기 자신으로 가는 링크를 만들지
+   *   않는 것은 `StatNav` 가 현재 항목을 `<div>` 로 내는 것과 같은 규칙이다).
+   */
+  showAnalyze?: boolean
 }) {
   const [busy, setBusy] = useState<Action | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -103,7 +114,36 @@ export function NumberActions({
   }
 
   return (
-    <div className={`number-actions${compact ? ' is-compact' : ''}`}>
+    /*
+      ⚠ 격자 열 수를 **실제 버튼 수에 맞춘다.** 넷짜리 격자에 셋만 두면 마지막 칸이 비어
+        버튼들이 왼쪽으로 몰린다. `data-cols` 를 CSS 가 읽는다.
+    */
+    <div
+      className={`number-actions${compact ? ' is-compact' : ''}`}
+      data-cols={showAnalyze ? 4 : 3}
+    >
+      {/*
+        ── 분석 (2026-09-02 사용자 요청) ──────────────────────────
+        ⚠ **넷 가운데 유일하게 색을 준다.** 나머지 셋은 번호를 밖으로 내보내는 도구이고,
+          분석만 **사이트 안으로 더 들어가는 문**이다. 성격이 다르므로 생김새도 달라야 한다.
+        ⚠ **버튼이 아니라 링크다.** 새 탭으로 열기와 주소 복사가 되어야 하고, 스크린리더도
+          "이동" 으로 읽어야 한다. `<button>` 으로 만들고 `router.push` 를 부르면 셋 다 잃는다.
+        ⚠ `AdBreakLink` 인 이유: 광고를 켜면 이 이동이 문서를 새로 불러온다. 사용자가 전면
+          광고를 원한 자리가 **정확히 여기**다("분석을 눌러 페이지가 이동하면").
+          광고가 꺼져 있는 지금은 평범한 `<Link>` 와 완전히 같이 동작한다.
+        ⚠ `aria-label` 이 보이는 글자("분석")를 품는다 — WCAG 2.5.3(Label in Name).
+      */}
+      {showAnalyze && (
+        <AdBreakLink
+          href={analyzeHref(numbers)}
+          className="action-btn is-analyze"
+          aria-label={`${strategyLabel} 번호 분석`}
+        >
+          <ChartIcon />
+          <span>분석</span>
+        </AdBreakLink>
+      )}
+
       <button
         type="button"
         className="action-btn"
@@ -128,10 +168,16 @@ export function NumberActions({
         className="action-btn"
         onClick={onImage}
         disabled={busy !== null}
-        aria-label={`${strategyLabel} 번호 이미지 저장`}
+        aria-label={`${strategyLabel} 번호 저장`}
       >
         <ImageIcon />
-        <span>{busy === 'image' ? '만드는 중…' : compact ? '저장' : '이미지 저장'}</span>
+        {/*
+          ⚠ **넷이 한 줄에 서야 하므로 라벨을 두 글자로 통일했다**(2026-09-02 사용자 요청).
+            "이미지 저장" 만 네 글자라 넷 중 하나가 튀어 줄이 깨졌다. `aria-label` 은 온전한
+            이름을 유지하되, **보이는 글자를 그대로 품는다** — WCAG 2.5.3(Label in Name).
+            음성으로 "저장" 이라고 말하는 사용자에게 닿아야 한다.
+        */}
+        <span>{busy === 'image' ? '만드는 중…' : '저장'}</span>
       </button>
 
       <button
@@ -166,6 +212,22 @@ const ICON = {
   strokeLinecap: 'round' as const,
   strokeLinejoin: 'round' as const,
   'aria-hidden': true,
+}
+
+/**
+ * 분석 아이콘 — 막대 셋.
+ * ⚠ 같은 파일의 다른 아이콘과 **같은 규격**(24 격자, `currentColor`)이다. 규격이 어긋나면
+ *   한 줄에 놓인 네 아이콘의 굵기가 제각각으로 보인다.
+ */
+function ChartIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 20h16" />
+      <path d="M7 20v-6" />
+      <path d="M12 20V7" />
+      <path d="M17 20v-9" />
+    </svg>
+  )
 }
 
 function CopyIcon() {

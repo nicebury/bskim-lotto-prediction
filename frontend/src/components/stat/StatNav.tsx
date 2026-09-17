@@ -1,5 +1,4 @@
-import Link from 'next/link'
-
+import { AdBreakLink } from '@/components/AdBreakLink'
 import { STAT_PAGES, type StatPageKey } from '@/lib/site'
 
 /**
@@ -53,6 +52,11 @@ const ICONS: Record<StatPageKey, React.ReactNode> = {
  * 서버 컴포넌트다 — 링크뿐이라 JS 가 필요 없다. `usePathname()` 을 쓰면 이 카드 하나
  * 때문에 통계 페이지 전체가 클라이언트 경계를 넘는다.
  *
+ * ⚠ 링크가 `AdBreakLink` 다. **분석 화면으로 깊이 들어가는 이동**이라, 나중에 광고를 켰을
+ *   때 전면 광고가 뜰 수 있는 자리로 골랐다(→ components/AdBreakLink.tsx). 광고가 꺼져
+ *   있는 동안은 `<Link>` 와 완전히 같이 동작하므로 지금은 아무 차이가 없다. 그 컴포넌트도
+ *   서버 컴포넌트라 이 파일은 서버에 남는다.
+ *
  * 현재 항목은 링크가 아니라 `<div>` 로 낸다. 자기 자신으로 가는 링크는 눌러도 아무 일이
  * 일어나지 않아 사용자를 헷갈리게 하고, 스크린리더에도 갈 곳처럼 읽힌다.
  */
@@ -84,9 +88,9 @@ export function StatNav({ current }: { current: StatPageKey }) {
             {body}
           </div>
         ) : (
-          <Link key={page.key} className="stat-card" href={page.href} data-accent={page.accent}>
+          <AdBreakLink key={page.key} className="stat-card" href={page.href} data-accent={page.accent}>
             {body}
-          </Link>
+          </AdBreakLink>
         )
       })}
     </nav>

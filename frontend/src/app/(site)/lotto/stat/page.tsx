@@ -152,7 +152,7 @@ export default async function StatHotColdPage() {
               },
               {
                 label: "비율 30%",
-                text: "6 ÷ 20 입니다. 지난 20회의 기록이며 다음 회차와는 무관합니다.",
+                text: "6 ÷ 20 입니다. 고른 20회 안에서 몇 번 얼굴을 비쳤는지를 말해 줍니다.",
               },
               {
                 label: "7회 전",
@@ -200,7 +200,7 @@ export default async function StatHotColdPage() {
               },
               {
                 label: "주의",
-                text: "지나간 구간을 둘로 나눠 세어 본 결과일 뿐, 앞으로 이어진다는 뜻이 아닙니다.",
+                text: "고른 구간을 둘로 잘라 어느 쪽에서 더 자주 나왔는지 견준 값입니다.",
               },
             ]}
             example="앞 25회 2번 · 뒤 25회 5번 → “후반에 더”"
@@ -232,7 +232,7 @@ export default async function StatHotColdPage() {
           />
         </SpecimenGrid>
 
-        <GuideNote title="‘나올 때가 됐다’ 는 건 없습니다">
+        <GuideNote title="‘나올 때가 됐다’ 는 느낌에 대하여">
           <p className="spec-figure">
             <strong>8,145,060</strong>
             <span>45개 중 6개를 고르는 방법의 수. 매 회차 모두 같습니다.</span>
@@ -244,7 +244,7 @@ export default async function StatHotColdPage() {
             동전은 자기가 방금 무엇이었는지 모르니까요.
           </p>
           <p>
-            그래서 이 표는 유리한 번호를 찾는 곳이 아닙니다. 내가 늘 쓰는 번호가
+            그래서 이 표는 지나온 기록을 들여다보는 곳입니다. 내가 늘 쓰는 번호가
             지난 구간 동안 어떻게 지냈는지, 어떤 번호와 자주 짝을 이뤘는지
             확인하는 곳입니다.
           </p>

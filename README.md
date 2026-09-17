@@ -16,7 +16,6 @@ backend/      웹 API 전용. Postgres 읽기 → REST. 예측·꿈해몽 계산
 frontend/     Next.js App Router. 렌더링·SEO·애널리틱스                     :3000
 docs/wiki/    LLM Wiki — 세 세션이 공유하는 지식체계
 docs/raw/     원본 기획·시안 (읽기 전용)
-frontend_old/ 구 Vite 앱. 참조용 아카이브. Phase 3 완료 후 삭제 예정
 work_order/   구 작업지시서 아카이브
 ```
 

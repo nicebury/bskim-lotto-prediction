@@ -96,10 +96,11 @@ async def run(progress: JobProgress) -> None:
                 promote=True,
                 today=today,
                 settings=settings,
-                # 화이트리스트 채널은 LLM 판정을 건너뛴다. 공식 채널의 제목은
-                # '제1238회 당첨번호' 형식이라 판정할 것이 없고 쿼터만 쓴다.
-                # 규칙 필터는 그대로 적용된다 — 화이트리스트가 면제는 아니다.
-                use_llm=False,
+                # 2026-09-08: 화이트리스트도 LLM 판정한다.
+                # 종전에는 면제했으나 공식 채널에도 홍보·이벤트 영상이 섞이고,
+                # 애드센스 심사자는 채널 소유자를 보지 않고 제목을 본다.
+                # 신규만 판정하도록 순서를 고쳐서 하루 3건 남짓, 연 55원이다.
+                use_llm=settings.llm_judge_enabled,
             )
 
     progress.collected = stat["stored"]

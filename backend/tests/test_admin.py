@@ -28,29 +28,72 @@ from app.routers import admin
 
 from .conftest import _table_exists
 
-TOKEN = "test-admin-token-0123456789abcdef"
+USERNAME = "bskim"
+PASSWORD = "test-password-0123456789"
 SECRET = "test-session-secret-fedcba9876543210"
+# base32 여야 인증 앱이 읽는다. 고정값이라 테스트가 매번 같은 코드를 만든다.
+TOTP_SECRET = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+
+
+def _hash(password: str) -> str:
+    """생성 스크립트와 **같은 함수**로 해시한다.
+
+    테스트가 자기만의 해시를 만들면, 스크립트가 형식을 바꿔도 테스트는 통과한다 —
+    실제로 로그인이 안 되는데 초록불만 켜지는 최악의 조합이다.
+    """
+    import importlib.util
+    import pathlib as _p
+
+    spec = importlib.util.spec_from_file_location(
+        "mac", _p.Path(__file__).resolve().parent.parent / "scripts" / "make_admin_credentials.py"
+    )
+    mac = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mac)  # type: ignore[union-attr]
+    return mac.hash_password(password)
+
+
+def _otp() -> str:
+    import pyotp
+
+    return pyotp.TOTP(TOTP_SECRET).now()
+
+
+@pytest.fixture(scope="session")
+def password_hash() -> str:
+    """scrypt 는 일부러 느리다(0.1초). 세션에 한 번만 만든다."""
+    return _hash(PASSWORD)
 
 
 @pytest.fixture
-def admin_env(monkeypatch):
+def admin_env(monkeypatch, password_hash):
     """운영자 설정을 켠 상태. 실제 `.env_backend` 값에 의존하지 않는다.
 
-    테스트가 사용자의 실제 토큰을 필요로 하면, 그 값이 없는 CI 에서 조용히 skip 되어
+    테스트가 사용자의 실제 자격증명을 필요로 하면, 그 값이 없는 CI 에서 조용히 skip 되어
     **인증 검증이 통째로 사라진다.** 값을 주입해 항상 돌게 한다.
     """
-    monkeypatch.setattr(settings, "ADMIN_TOKEN", TOKEN)
+    monkeypatch.setattr(settings, "ADMIN_USERNAME", USERNAME)
+    monkeypatch.setattr(settings, "ADMIN_PASSWORD_HASH", password_hash)
+    monkeypatch.setattr(settings, "ADMIN_TOTP_SECRET", TOTP_SECRET)
     monkeypatch.setattr(settings, "ADMIN_SESSION_SECRET", SECRET)
     monkeypatch.setattr(settings, "ADMIN_SESSION_HOURS", 12)
+    monkeypatch.setattr(settings, "ADMIN_COOKIE_SECURE", False)
     # 시도 기록이 테스트 사이에 남으면 뒤 테스트가 429 로 엉뚱하게 실패한다.
     admin._login_attempts.clear()
     yield
     admin._login_attempts.clear()
 
 
+def _creds(**over) -> dict:
+    body = {"username": USERNAME, "password": PASSWORD, "otp": _otp()}
+    body.update(over)
+    return body
+
+
 @pytest.fixture
 def disabled_env(monkeypatch):
-    monkeypatch.setattr(settings, "ADMIN_TOKEN", "")
+    monkeypatch.setattr(settings, "ADMIN_USERNAME", "")
+    monkeypatch.setattr(settings, "ADMIN_PASSWORD_HASH", "")
+    monkeypatch.setattr(settings, "ADMIN_TOTP_SECRET", "")
     monkeypatch.setattr(settings, "ADMIN_SESSION_SECRET", "")
     admin._login_attempts.clear()
     yield
@@ -92,7 +135,7 @@ async def test_설정이_비면_503_이지_통과가_아니다(client, disabled_
     # 전제 자체를 못 박아 둔다. 이 성질이 바뀌면 이 방어의 이유가 사라진다.
     assert _s.compare_digest("", "") is True
 
-    assert (await client.post("/api/admin/login", json={"token": "x"})).status_code == 503
+    assert (await client.post("/api/admin/login", json=_creds())).status_code == 503
     assert (await client.get("/api/admin/job-logs")).status_code == 503
 
 
@@ -106,27 +149,35 @@ async def test_설정이_비어도_로그아웃은_막지_않는다(client, disa
 
 
 @pytest.mark.integration
-async def test_틀린_토큰은_401_이고_이유를_알려주지_않는다(client, admin_env):
-    for bad in ("", "x", TOKEN[:-1], TOKEN + "x", TOKEN.upper()):
-        r = await client.post("/api/admin/login", json={"token": bad})
-        # 빈 문자열은 스키마(min_length=1)에서 422 로 먼저 걸린다 — 그것도 통과는 아니다.
-        assert r.status_code in (401, 422), bad
-        if r.status_code == 401:
-            # 무엇이 틀렸는지 구분되는 문구가 없어야 한다
-            detail = r.json()["detail"]
-            assert "짧" not in detail and "없" not in detail
+async def test_셋_중_하나만_틀려도_401_이고_이유를_알려주지_않는다(client, admin_env):
+    """★ 아이디가 맞았는지조차 알려주지 않는다 — 그 자체가 공격자에게 주는 정보다."""
+    cases = {
+        "아이디 틀림": _creds(username="other"),
+        "비밀번호 틀림": _creds(password="wrong-password-xx"),
+        "OTP 틀림": _creds(otp="000000"),
+        "전부 틀림": {"username": "a", "password": "b", "otp": "111111"},
+    }
+    details = set()
+    for label, body in cases.items():
+        r = await client.post("/api/admin/login", json=body)
+        assert r.status_code == 401, label
+        details.add(r.json()["detail"])
+
+    # 네 경우가 **같은 문구**여야 한다. 다르면 어느 것이 맞았는지 드러난다.
+    assert len(details) == 1, details
 
 
 @pytest.mark.integration
-async def test_맞는_토큰은_쿠키를_주는데_토큰_원문이_아니다(client, admin_env):
-    """★ 쿠키에 원문을 담으면 XSS 한 번에 영구 토큰이 샌다."""
-    r = await client.post("/api/admin/login", json={"token": TOKEN})
+async def test_맞는_자격증명은_쿠키를_주는데_원문이_아니다(client, admin_env):
+    """★ 쿠키에 원문을 담으면 XSS 한 번에 영구 자격증명이 샌다."""
+    r = await client.post("/api/admin/login", json=_creds())
     assert r.status_code == 200
 
     raw = client.cookies.get(admin.SESSION_COOKIE)
     assert raw
-    assert TOKEN not in raw
+    assert PASSWORD not in raw
     assert SECRET not in raw
+    assert TOTP_SECRET not in raw
     # 형식은 `{발급시각}.{HMAC}`
     issued, _, sig = raw.partition(".")
     assert issued.isdigit() and len(sig) == 64
@@ -139,14 +190,14 @@ async def test_맞는_토큰은_쿠키를_주는데_토큰_원문이_아니다(c
 @pytest.mark.integration
 async def test_분당_한도를_넘으면_429(client, admin_env):
     codes = [
-        (await client.post("/api/admin/login", json={"token": "wrong"})).status_code
+        (await client.post("/api/admin/login", json=_creds(password="wrong"))).status_code
         for _ in range(admin._LOGIN_MAX_PER_MINUTE + 3)
     ]
     assert codes[0] == 401
     assert 429 in codes
-    # 한도에 걸린 뒤에는 **맞는 토큰이어도** 막힌다 — 성공/실패를 가른 뒤 세면
+    # 한도에 걸린 뒤에는 **맞는 자격증명이어도** 막힌다 — 성공/실패를 가른 뒤 세면
     # 그 차이가 다시 정보가 된다.
-    assert (await client.post("/api/admin/login", json={"token": TOKEN})).status_code == 429
+    assert (await client.post("/api/admin/login", json=_creds())).status_code == 429
 
 
 # ── 세션 검증 ─────────────────────────────────────────────────────────────
@@ -208,7 +259,7 @@ async def test_미래_시각_쿠키는_거부한다(client, admin_env, require_j
 
 @pytest.fixture
 async def logged_in(client, admin_env):
-    r = await client.post("/api/admin/login", json={"token": TOKEN})
+    r = await client.post("/api/admin/login", json=_creds())
     assert r.status_code == 200
     return client
 
@@ -286,3 +337,109 @@ async def test_로그아웃하면_다시_401(logged_in, require_job_log):
     assert (await logged_in.get("/api/admin/job-logs")).status_code == 200
     assert (await logged_in.post("/api/admin/logout")).status_code == 204
     assert (await logged_in.get("/api/admin/job-logs")).status_code == 401
+
+
+@pytest.mark.integration
+async def test_HTTPS_면_Secure_가_붙는다(client, admin_env):
+    """리버스 프록시가 `X-Forwarded-Proto` 를 알려 주고 uvicorn 이 그것을 신뢰하면
+    스킴이 `https` 가 되어 `Secure` 가 붙는다.
+
+    ASGI 스코프의 scheme 을 직접 https 로 만들어 그 경로를 재현한다.
+    """
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="https://test"
+    ) as https_c:
+        r = await https_c.post("/api/admin/login", json=_creds())
+        assert r.status_code == 200
+        assert "Secure" in r.headers.get("set-cookie", "")
+
+
+@pytest.mark.integration
+async def test_중계자가_HTTPS_라고_알리면_Secure_가_붙는다(client, admin_env):
+    """★ 이 구조에서는 요청 스킴만으로 판단할 수 없다.
+
+    브라우저는 프론트(Next)와만 말하고 **Next 서버가 백엔드를 중계**하므로, 백엔드에
+    닿는 요청은 내부망 평문 HTTP 다 — 사용자가 HTTPS 를 써도 백엔드는 알 방법이 없다.
+    중계자가 원래 스킴을 알려 주면 그것을 믿는다.
+    """
+    r = await client.post(
+        "/api/admin/login", json=_creds(), headers={"X-Forwarded-Proto": "https"}
+    )
+    assert r.status_code == 200
+    assert "Secure" in r.headers.get("set-cookie", "")
+
+
+@pytest.mark.integration
+async def test_설정으로_Secure_를_강제할_수_있다(client, admin_env, monkeypatch):
+    """운영에서 켜야 할 때 못 켜는 일이 없어야 한다 — 헤더가 없어도 설정이 이긴다."""
+    monkeypatch.setattr(settings, "ADMIN_COOKIE_SECURE", True)
+    r = await client.post("/api/admin/login", json=_creds())
+    assert r.status_code == 200
+    assert "Secure" in r.headers.get("set-cookie", "")
+
+
+@pytest.mark.integration
+async def test_평문_HTTP_기본값에서는_Secure_가_없다(client, admin_env):
+    """로컬 http 에서 Secure 를 붙이면 브라우저가 쿠키를 저장하지 않아 조용히 실패한다."""
+    r = await client.post("/api/admin/login", json=_creds())
+    assert r.status_code == 200
+    assert "Secure" not in r.headers.get("set-cookie", "")
+
+
+# ── OTP ──────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.integration
+async def test_비밀번호가_맞아도_OTP_없이는_못_들어온다(client, admin_env):
+    """★ 2단계의 존재 이유다. 비밀번호가 새어도 이것이 남는다."""
+    r = await client.post(
+        "/api/admin/login",
+        json={"username": USERNAME, "password": PASSWORD, "otp": "000000"},
+    )
+    assert r.status_code == 401
+
+
+@pytest.mark.integration
+async def test_OTP_가_맞아도_비밀번호_없이는_못_들어온다(client, admin_env):
+    r = await client.post(
+        "/api/admin/login",
+        json={"username": USERNAME, "password": "nope-nope-nope", "otp": _otp()},
+    )
+    assert r.status_code == 401
+
+
+@pytest.mark.integration
+async def test_OTP_설정이_비면_비밀번호만으로_통과시키지_않는다(
+    client, admin_env, monkeypatch
+):
+    """★ 2단계를 켜 두었다고 믿는 사람에게 1단계만 돌려주는 것이 가장 나쁜 실패다."""
+    monkeypatch.setattr(settings, "ADMIN_TOTP_SECRET", "")
+    r = await client.post("/api/admin/login", json=_creds())
+    assert r.status_code == 503  # 통과(200)도 401 도 아닌, 설정 오류로 죽는다
+
+
+@pytest.mark.integration
+async def test_지난_코드는_거부한다(client, admin_env):
+    """`valid_window=1` 은 앞뒤 30초까지다. 그보다 오래된 코드는 안 된다."""
+    import pyotp
+
+    old_code = pyotp.TOTP(TOTP_SECRET).at(int(time.time()) - 300)
+    r = await client.post("/api/admin/login", json=_creds(otp=old_code))
+    assert r.status_code == 401
+
+
+def test_생성_스크립트의_해시를_서버가_검증한다(password_hash):
+    """스크립트와 서버가 **같은 형식**을 쓰는지 본다.
+
+    둘이 갈라지면 로그인이 안 되는데 원인은 "비밀번호가 틀렸다" 로만 보인다.
+    """
+    assert admin._verify_password(PASSWORD, password_hash) is True
+    assert admin._verify_password("틀린비밀번호", password_hash) is False
+    # 형식이 깨진 설정을 '인증 성공' 으로 바꾸지 않는다
+    assert admin._verify_password(PASSWORD, "garbage") is False
+    assert admin._verify_password(PASSWORD, "") is False
+
+
+def test_잘못된_OTP_비밀키는_통과가_아니라_실패다():
+    assert admin._verify_otp("123456", "not-base32!!") is False
+    assert admin._verify_otp("123456", "") is False

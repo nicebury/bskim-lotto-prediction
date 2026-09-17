@@ -57,6 +57,37 @@ const nextConfig: NextConfig = {
   //   다시 쓴다. 실측이 끝나면 `git checkout -- next-env.d.ts` 로 되돌린다. 안 되돌리면
   //   사라진 `.next-prod/types/...` 를 가리켜 `tsc --noEmit` 이 깨진다. 절차는 README 참조.
   distDir: process.env.NEXT_DIST_DIR || '.next',
+
+  /*
+   * ⚠ **WSL 에서 `/mnt/d` 의 파일 변경은 개발 서버가 감지하지 못한다.**
+   *
+   * 2026-09-08 에 실제로 사고가 났다. 개발 서버가 9월 2일에 뜬 뒤 **엿새 동안 그날의
+   * 화면을 계속 서빙**했고, 그 사이 고친 것이 하나도 반영되지 않았다. 에러도 경고도 나지
+   * 않아 "구현이 안 되어 있다" 로 보였다.
+   *
+   * 원인은 Next 도 우리 코드도 아니다. 윈도우 드라이브를 WSL 이 9P/DrvFs 로 마운트하는데,
+   * 그 파일시스템은 리눅스의 `inotify` 이벤트를 **올려 보내지 않는다.** webpack 은 변경
+   * 통지를 기다리다 아무것도 못 받고 그대로 앉아 있게 된다.
+   *
+   * 그래서 통지를 기다리는 대신 **주기적으로 직접 확인**하게 한다(폴링). 1초 간격이면
+   * 저장하고 화면을 보는 사이에 반영되고, CPU 부담도 눈에 띄지 않는다.
+   *
+   * ⚠ **개발에서만 켠다.** 빌드는 한 번 훑고 끝나므로 감시가 필요 없다.
+   * ⚠ `aggregateTimeout` 은 여러 파일을 잇달아 저장할 때 재빌드를 한 번으로 묶는 시간이다.
+   *   없으면 저장할 때마다 컴파일이 겹쳐 돈다.
+   * ⚠ Turbopack(`next dev --turbopack`)으로 바꾸면 **이 설정은 무시된다.** 그때는 같은
+   *   증상이 다시 나므로 Turbopack 쪽 감시 옵션을 따로 찾아야 한다.
+   */
+  webpack: (config, { dev }) => {
+    if (dev) {
+      config.watchOptions = {
+        poll: 1000,
+        aggregateTimeout: 300,
+        ignored: ['**/node_modules', '**/.next', '**/.next-prod', '**/.git'],
+      }
+    }
+    return config
+  },
 }
 
 export default nextConfig

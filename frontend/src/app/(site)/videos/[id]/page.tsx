@@ -10,9 +10,22 @@ import { BallRow } from "@/components/LottoBall";
 import { KeyValueList } from "@/components/stats";
 import { VideoCard } from "@/components/video/VideoCard";
 import { VideoEmbed } from "@/components/video/VideoEmbed";
+import { NextShorts } from "@/components/video/NextShorts";
 import { YouTubeAttribution } from "@/components/video/YouTubeAttribution";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  FlameIcon,
+  InfoIcon,
+  NoStoreIcon,
+  PlayGlyph,
+  PortraitIcon,
+  SlipIcon,
+  SpreadIcon,
+  TilesIcon,
+} from "@/components/icons";
 import { getRoundOptional, getVideo, getVideos } from "@/lib/api";
-import type { RoundDetail, VideoDetail } from "@/lib/api-types";
+import type { RoundDetail, VideoDetail, VideoItem } from "@/lib/api-types";
 import {
   formatDrawDate,
   formatDuration,
@@ -117,6 +130,24 @@ export default async function VideoDetailPage({ params }: Params) {
 
   const traits = draw?.traits ?? null;
 
+  /*
+    ── 쇼츠 배치 · 다음 쇼츠(2026-09-17) ───────────────────────
+    `shorts_hint === 'likely'` 이면 세로 플레이어 옆에 제목과 **다음 쇼츠**를 둔다.
+    ⚠ 다음 쇼츠는 쇼츠 목록(최신순)에서 **이 영상 바로 뒤** 것이다. 목록 끝이면 처음으로 감는다.
+      이 영상이 목록 첫 쪽에 없으면(오래된 쇼츠) 맨 앞 것을 권한다 — 빈 카드보다 낫다.
+    ⚠ 60개만 본다. 쇼츠 탭 두 쪽 분량이고, 그보다 뒤의 쇼츠에서 "다음" 을 정확히 잇자고 요청을
+      늘리지 않는다.
+  */
+  const isShorts = video.shorts_hint === "likely";
+  let nextShorts: VideoItem | null = null;
+  if (isShorts) {
+    const shorts = (await getVideos("shorts", 1, 60)).items;
+    const at = shorts.findIndex((item) => item.id === video.id);
+    const candidate = at >= 0 ? (shorts[at + 1] ?? shorts[0]) : shorts[0];
+    nextShorts = candidate && candidate.id !== video.id ? candidate : null;
+  }
+  const backHref = isShorts ? "/videos?kind=shorts" : "/videos";
+
   return (
     <div className="container">
       <Breadcrumb
@@ -131,33 +162,63 @@ export default async function VideoDetailPage({ params }: Params) {
       />
 
       <article>
+        {/*
+          ── 목록으로 ───────────────────────────────────────
+          (2026-09-17 사용자 요청) 상세 맨 위에 둔다 — 브레드크럼만으로는 눌러야 할 곳으로 잘
+          읽히지 않았다. 쇼츠에서 왔으면 쇼츠 탭으로 돌려보낸다.
+        */}
+        <nav className="media-backbar" aria-label="영상 목록으로 이동">
+          <Link className="media-back" href={backHref}>
+            <ArrowLeftIcon width={18} height={18} />
+            {isShorts ? "쇼츠 목록으로" : "영상 목록으로"}
+          </Link>
+        </nav>
+
         {/* ── 1. 임베드 플레이어 ────────────────────────────── */}
-        <section className="section">
-          <VideoEmbed videoKey={video.video_key} title={video.title} />
+        {/*
+          ⚠ 쇼츠는 **세로 플레이어 | 제목·다음 쇼츠** 두 칸이다. 세로 영상 아래에 제목을 두면
+            넓은 화면에서 오른쪽이 통째로 비고, 제목을 보려면 스크롤해야 한다.
+          ⚠ 제목은 **원문 그대로** 싣는다(→ forbidden-expressions.md 외부 텍스트 절).
+            `h1` 에 남의 문장이 들어가는 유일한 화면이라 바로 아래에 출처를 밝힌다.
+        */}
+        <section className="section video-stage" data-portrait={isShorts ? "" : undefined}>
+          <div className="video-stage-player">
+            <VideoEmbed
+              videoKey={video.video_key}
+              title={video.title}
+              // 계약의 추정값. `likely` 일 때만 세로로 시작한다(`unknown` 은 가로).
+              shortsHint={video.shorts_hint}
+            />
+          </div>
 
-          {/*
-            ⚠ 제목은 **원문 그대로** 싣는다. 낱말을 바꾸거나 지우지 않는다
-              (→ docs/wiki/40-domain/forbidden-expressions.md 외부 텍스트 절).
-            ⚠ `h1` 에 남의 문장이 들어가는 유일한 화면이다. 그래서 바로 아래에 출처를 밝힌다.
-          */}
-          <h1 className="video-title">{video.title}</h1>
-
-          <p className="video-meta">
-            {video.channel && <span>{video.channel}</span>}
-            {formatViews(video.views) && <span>{formatViews(video.views)}</span>}
-            <span>{formatPubDate(video.published_at)}</span>
-            {formatDuration(video.duration_sec) && (
-              <span>{formatDuration(video.duration_sec)}</span>
+          <div className="video-stage-info">
+            {isShorts && (
+              <p className="video-shorts-tag">
+                <PortraitIcon width={14} height={14} /> 쇼츠
+                <span className="sr-only"> (재생시간·게시일로 추정)</span>
+              </p>
             )}
-          </p>
+            <h1 className="video-title">{video.title}</h1>
 
-          {/* III.F.2 — 출처 표시 의무. 플레이어가 있는 화면에서는 특히 분명해야 한다. */}
-          <YouTubeAttribution videoKey={video.video_key} channel={video.channel} />
+            <p className="video-meta">
+              {video.channel && <span>{video.channel}</span>}
+              {formatViews(video.views) && <span>{formatViews(video.views)}</span>}
+              <span>{formatPubDate(video.published_at)}</span>
+              {formatDuration(video.duration_sec) && (
+                <span>{formatDuration(video.duration_sec)}</span>
+              )}
+            </p>
 
-          <Disclaimer spaced>
-            영상의 제목과 내용은 해당 채널이 만든 것이며 본 사이트의 의견이 아닙니다. 로또
-            추첨은 매 회차 앞선 결과와 무관하게 진행되며 당첨을 보장하지 않습니다.
-          </Disclaimer>
+            {/* III.F.2 — 출처 표시 의무. 플레이어가 있는 화면에서는 특히 분명해야 한다. */}
+            <YouTubeAttribution videoKey={video.video_key} channel={video.channel} />
+
+            <Disclaimer spaced>
+              영상의 제목과 내용은 해당 채널이 만든 것이며 본 사이트의 의견이 아닙니다. 로또
+              추첨은 매 회차 앞선 결과와 무관하게 진행되며 당첨을 보장하지 않습니다.
+            </Disclaimer>
+
+            {nextShorts && <NextShorts current={video.video_key} next={nextShorts} />}
+          </div>
         </section>
 
         {/*
@@ -261,27 +322,96 @@ export default async function VideoDetailPage({ params }: Params) {
           </section>
         )}
 
-        {/* ── 8. 안내 ───────────────────────────────────── */}
-        <section className="section prose" aria-labelledby="about-title">
+        {/*
+          ── 8. 이 영상에 대하여 ─────────────────────────────
+          ⚠ 2026-09-17 재설계(사용자: "텍스트만 단순 나열하지 말고"). 문장은 그대로 두고 그릇을
+            나눴다 — ① 사실 카드 셋(어디서 왔나 · 파일 · 조회수) ② 회차를 못 붙인 사정(해당할 때만)
+            ③ 이어 볼 곳 타일 ④ 목록으로 버튼.
+          ⚠ 서버 렌더링한다. 회차 없는 영상 페이지에 남는 우리 글이 이것뿐이다.
+        */}
+        <section className="section video-about" aria-labelledby="about-title">
           <h2 id="about-title">이 영상에 대하여</h2>
-          <p>
-            이 영상은 유튜브에서 공식 방법으로 가져온 정보로 만든 목록의 한 편이며, 재생은
-            유튜브 공식 플레이어가 합니다. 영상 파일은 본 사이트에 저장되어 있지 않고,
-            조회수도 유튜브에 그대로 쌓입니다.
-          </p>
+
+          <ul className="video-facts">
+            <li>
+              <span className="video-fact-icon" aria-hidden="true">
+                <PlayGlyph width={18} height={18} />
+              </span>
+              <h3>유튜브 공식 플레이어로 재생</h3>
+              <p>유튜브에서 공식 방법으로 가져온 정보로 만든 목록의 한 편입니다. 재생은 유튜브 공식 플레이어가 합니다.</p>
+            </li>
+            <li>
+              <span className="video-fact-icon" aria-hidden="true">
+                <NoStoreIcon width={18} height={18} />
+              </span>
+              <h3>영상 파일은 저장하지 않아요</h3>
+              <p>영상 파일은 본 사이트에 저장되어 있지 않습니다.</p>
+            </li>
+            <li>
+              <span className="video-fact-icon" aria-hidden="true">
+                <FlameIcon width={18} height={18} />
+              </span>
+              <h3>조회수는 유튜브에 쌓여요</h3>
+              <p>여기서 보셔도 조회수는 유튜브에 그대로 쌓입니다.</p>
+            </li>
+          </ul>
+
           {!draw && (
-            <p>
-              이 영상은 어느 회차인지 확인되지 않아 당첨번호를 함께 보여드리지 못했습니다.
-              회차 번호만 보고 짐작해 붙이면 연금복권 영상에 로또 번호가 붙는 것 같은 일이
-              생기므로, <strong>확실하지 않을 때는 붙이지 않습니다.</strong>
-            </p>
+            <div className="video-norond">
+              <span className="video-fact-icon" aria-hidden="true">
+                <InfoIcon width={18} height={18} />
+              </span>
+              <div>
+                <h3>어느 회차 영상인지 확인되지 않았어요</h3>
+                <p>
+                  그래서 당첨번호를 함께 보여드리지 못했습니다. 회차 번호만 보고 짐작해 붙이면
+                  연금복권 영상에 로또 번호가 붙는 것 같은 일이 생기므로,{" "}
+                  <strong>확실하지 않을 때는 붙이지 않습니다.</strong>
+                </p>
+              </div>
+            </div>
           )}
-          <p>
-            회차별 당첨번호는 <Link href="/lotto/latest">회차별 당첨번호</Link>에서, 번호별
-            출현 기록은 <Link href="/lotto/stat">번호별 출현빈도</Link>에서 직접 확인하실 수
-            있습니다. 영상 목록은 <Link href="/videos">로또 영상</Link>으로 돌아가 보실 수
-            있습니다.
-          </p>
+
+          <p className="video-links-title">직접 확인해 보세요</p>
+          <ul className="video-links">
+            <li>
+              <Link href="/lotto/latest">
+                <SlipIcon width={20} height={20} />
+                <span>
+                  <strong>회차별 당첨번호</strong>
+                  <small>회차마다 당첨번호와 당첨금</small>
+                </span>
+                <ArrowRightIcon width={16} height={16} />
+              </Link>
+            </li>
+            <li>
+              <Link href="/lotto/stat">
+                <SpreadIcon width={20} height={20} />
+                <span>
+                  <strong>번호별 출현빈도</strong>
+                  <small>번호마다 나온 기록</small>
+                </span>
+                <ArrowRightIcon width={16} height={16} />
+              </Link>
+            </li>
+            <li>
+              <Link href="/videos">
+                <TilesIcon width={20} height={20} />
+                <span>
+                  <strong>로또 영상</strong>
+                  <small>다른 영상 둘러보기</small>
+                </span>
+                <ArrowRightIcon width={16} height={16} />
+              </Link>
+            </li>
+          </ul>
+
+          <div className="video-about-back">
+            <Link className="btn btn-secondary media-back-btn" href={backHref}>
+              <ArrowLeftIcon width={18} height={18} />
+              목록으로 돌아가기
+            </Link>
+          </div>
         </section>
       </article>
     </div>

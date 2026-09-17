@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { GUIDES, NAV_ITEMS, POLICY_PAGES } from "@/lib/site";
+import { FOOTER_SERVICE_LINKS, GUIDES, POLICY_PAGES } from "@/lib/site";
 import { LogoMark } from "./LogoMark";
 
 /**
@@ -23,24 +23,99 @@ export function Footer({ siteName }: { siteName: string }) {
               {siteName}
             </Link>
             <p>
-              로또 당첨결과, 번호 통계, 복권 뉴스, 통계와 AI 기반 번호추천
+              로또 당첨결과, 번호 통계, 복권 뉴스, 통계 기반 번호추천과 AI 꿈해몽
               정보를 제공하는 복권 데이터 대시보드입니다.
             </p>
           </div>
 
           <nav className="footer-col" aria-labelledby="footer-service">
-            <h2 id="footer-service">서비스</h2>
+            {/*
+              ⚠ `<details>` 다. **모바일에서만 접힌다** — 데스크톱에서는 CSS 가 `summary` 를
+                숨기고 목록을 펼쳐 둔다. JS 를 쓰지 않으므로 서버 컴포넌트 그대로다.
+              ⚠ 접어도 **DOM 에는 그대로 있다.** 푸터 링크는 사람용 사이트맵 역할을 하고
+                (→ `/sitemap.xml` 링크를 걷어낸 근거), 검색엔진도 `details` 안을 읽는다.
+            */}
+            <details className="footer-fold">
+              <summary>
+                <h2 id="footer-service">서비스</h2>
+                {/*
+                  ⚠ **개수를 보여준다.** 갈매기만으로는 "눌러도 되는 것" 인지, 눌러서
+                    무엇이 나오는지 알 수 없다. 숫자가 "안에 링크가 몇 개 있다" 를 말한다 —
+                    꿈해몽의 접이식(`Disclosure`)에서 쓴 것과 같은 문법이다.
+                */}
+                <span className="footer-fold-count" aria-hidden="true">
+                  {FOOTER_SERVICE_LINKS.length}
+                </span>
+                {/*
+                  ⚠ 갈매기는 **마크업의 SVG** 다. CSS 그러데이션 두 장을 겹쳐 그렸더니
+                    선이 교차해 `×` 가 됐다(실측, 2026-09-01). 모양을 정확히 그려야 하는
+                    것은 CSS 트릭으로 흉내 내지 않는다 — 다른 접이식(`Disclosure`·`Faq`)도
+                    같은 이유로 SVG 를 쓴다.
+                */}
+                <span className="footer-fold-mark" aria-hidden="true">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </span>
+              </summary>
             <ul>
-              {NAV_ITEMS.map((item) => (
+              {FOOTER_SERVICE_LINKS.map((item) => (
                 <li key={item.href}>
                   <Link href={item.href}>{item.label}</Link>
                 </li>
               ))}
             </ul>
+            </details>
           </nav>
 
           <nav className="footer-col" aria-labelledby="footer-guide">
-            <h2 id="footer-guide">가이드</h2>
+            {/*
+              ⚠ `<details>` 다. **모바일에서만 접힌다** — 데스크톱에서는 CSS 가 `summary` 를
+                숨기고 목록을 펼쳐 둔다. JS 를 쓰지 않으므로 서버 컴포넌트 그대로다.
+              ⚠ 접어도 **DOM 에는 그대로 있다.** 푸터 링크는 사람용 사이트맵 역할을 하고
+                (→ `/sitemap.xml` 링크를 걷어낸 근거), 검색엔진도 `details` 안을 읽는다.
+            */}
+            <details className="footer-fold">
+              <summary>
+                <h2 id="footer-guide">가이드</h2>
+                {/*
+                  ⚠ **개수를 보여준다.** 갈매기만으로는 "눌러도 되는 것" 인지, 눌러서
+                    무엇이 나오는지 알 수 없다. 숫자가 "안에 링크가 몇 개 있다" 를 말한다 —
+                    꿈해몽의 접이식(`Disclosure`)에서 쓴 것과 같은 문법이다.
+                */}
+                <span className="footer-fold-count" aria-hidden="true">
+                  {GUIDES.length}
+                </span>
+                {/*
+                  ⚠ 갈매기는 **마크업의 SVG** 다. CSS 그러데이션 두 장을 겹쳐 그렸더니
+                    선이 교차해 `×` 가 됐다(실측, 2026-09-01). 모양을 정확히 그려야 하는
+                    것은 CSS 트릭으로 흉내 내지 않는다 — 다른 접이식(`Disclosure`·`Faq`)도
+                    같은 이유로 SVG 를 쓴다.
+                */}
+                <span className="footer-fold-mark" aria-hidden="true">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </span>
+              </summary>
             <ul>
               {GUIDES.map((guide) => (
                 <li key={guide.slug}>
@@ -48,6 +123,7 @@ export function Footer({ siteName }: { siteName: string }) {
                 </li>
               ))}
             </ul>
+            </details>
           </nav>
 
           {/*
@@ -57,7 +133,44 @@ export function Footer({ siteName }: { siteName: string }) {
               사람용 사이트맵 역할은 이 푸터의 메뉴 목록 자체가 한다.
           */}
           <nav className="footer-col" aria-labelledby="footer-policy">
-            <h2 id="footer-policy">정보</h2>
+            {/*
+              ⚠ `<details>` 다. **모바일에서만 접힌다** — 데스크톱에서는 CSS 가 `summary` 를
+                숨기고 목록을 펼쳐 둔다. JS 를 쓰지 않으므로 서버 컴포넌트 그대로다.
+              ⚠ 접어도 **DOM 에는 그대로 있다.** 푸터 링크는 사람용 사이트맵 역할을 하고
+                (→ `/sitemap.xml` 링크를 걷어낸 근거), 검색엔진도 `details` 안을 읽는다.
+            */}
+            <details className="footer-fold">
+              <summary>
+                <h2 id="footer-policy">정보</h2>
+                {/*
+                  ⚠ **개수를 보여준다.** 갈매기만으로는 "눌러도 되는 것" 인지, 눌러서
+                    무엇이 나오는지 알 수 없다. 숫자가 "안에 링크가 몇 개 있다" 를 말한다 —
+                    꿈해몽의 접이식(`Disclosure`)에서 쓴 것과 같은 문법이다.
+                */}
+                <span className="footer-fold-count" aria-hidden="true">
+                  {POLICY_PAGES.length}
+                </span>
+                {/*
+                  ⚠ 갈매기는 **마크업의 SVG** 다. CSS 그러데이션 두 장을 겹쳐 그렸더니
+                    선이 교차해 `×` 가 됐다(실측, 2026-09-01). 모양을 정확히 그려야 하는
+                    것은 CSS 트릭으로 흉내 내지 않는다 — 다른 접이식(`Disclosure`·`Faq`)도
+                    같은 이유로 SVG 를 쓴다.
+                */}
+                <span className="footer-fold-mark" aria-hidden="true">
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </span>
+              </summary>
             <ul>
               {POLICY_PAGES.map((page) => (
                 <li key={page.href}>
@@ -65,6 +178,7 @@ export function Footer({ siteName }: { siteName: string }) {
                 </li>
               ))}
             </ul>
+            </details>
           </nav>
         </div>
 

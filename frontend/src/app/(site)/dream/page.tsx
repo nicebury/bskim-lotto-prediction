@@ -25,7 +25,7 @@ const KEYWORD_PREVIEW = DREAM_INDEXED_KEYWORDS.length;
 export const metadata: Metadata = {
   title: "꿈해몽 로또 번호 추천",
   description:
-    "꿈꾼 내용을 적으면 AI가 꿈 속 핵심 상징을 찾아 연관된 참고용 로또 번호를 추천합니다. 당첨을 보장하지 않습니다.",
+    "꿈꾼 내용을 적으면 AI가 꿈 속 핵심 상징을 찾아 연관된 참고용 로또 번호를 추천합니다. 전해 내려온 해석을 소재로 한 재미용 콘텐츠입니다.",
   alternates: { canonical: "/dream" },
   openGraph: {
     type: "website",

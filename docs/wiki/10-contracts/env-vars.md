@@ -123,7 +123,7 @@ PG_PASSWORD=                  # init_roles.sql 로 만든 비번
 # 추첨 방송은 20:35 시작이고 끝나는 시각이 회차마다 달라 세 번 시도한다.
 # ★ 요일은 이름으로 쓴다. APScheduler 는 0=월…6=일 이라 `6` 은 토요일이 아니라 일요일이다.
 LOTTO_CRON=40,50 20 * * sat;0 21 * * sat
-NEWS_CRON=0 * * * *           # 매시간. 쿼터 25,000 중 72회(0.3%)만 쓴다
+NEWS_CRON=0 7,12,17,22 * * *           # 매시간. 쿼터 25,000 중 72회(0.3%)만 쓴다
 
 # lotto 잡이 '오류로' 죽었을 때의 재시도. 위 크론 3회와는 별개다.
 LOTTO_RETRY_DELAY_MIN=60
@@ -141,7 +141,7 @@ NAVER_NEWS_DISPLAY=50         # 최대 100
 
 # 발행일(KST)이 실행일로부터 이 일수보다 오래된 기사는 저장하지 않는다.
 # 1 = 오늘과 어제. 0 이면 당일만이라 자정 직전 기사를 영영 놓친다.
-NEWS_MAX_AGE_DAYS=1
+NEWS_MAX_AGE_DAYS=2
 
 # ── 뉴스 주제 적합성 필터 ─────────────────────────
 # 검색 API 는 본문 전문을 뒤져 '복권기금' 이 각주에 한 줄 있는 보도자료까지 준다.
@@ -183,11 +183,11 @@ YOUTUBE_API_KEY=
 # search.list 는 2026-06-01 부터 자체 쿼터 버킷이고 하루 100회가 상한이다.
 # 네이버(25,000회)와 자릿수가 달라 매시간 크론이 불가능하다.
 #   채널  3 units/회 × 4회 =  12 units
-#   검색  4 calls/회 × 6회 =  24 calls / 100
+#   검색  4 calls/회 × 4회 =  16 calls / 100
 #   갱신  1 unit/일
 #   → 합계 약 20 units / 10,000 (0.2%)
-YOUTUBE_CHANNEL_CRON=0 */6 * * *;20,50 21 * * sat;20 22 * * sat
-YOUTUBE_SEARCH_CRON=15 */4 * * *
+YOUTUBE_CHANNEL_CRON=0 7,12,17,22 * * *
+YOUTUBE_SEARCH_CRON=10 7,12,17,22 * * *
 YOUTUBE_REFRESH_CRON=30 4 * * *
 
 # 화이트리스트 채널(UC 로 시작). 2026-08-27 RSS 실측으로 확정한 공식 채널 둘.
@@ -277,16 +277,21 @@ TZ=Asia/Seoul
 RECOMMEND_MAX_CONCURRENCY=1
 
 # ── 운영자 전용 화면 (수집 로그) ───────────────────
-# `openssl rand -hex 32` 로 생성한다. 이 값을 아는 사람만 /admin 에 들어온다.
+# 손으로 만들지 않는다: uv run python scripts/make_admin_credentials.py
 # ★ 비어 있으면 /api/admin/* 가 전부 503 을 낸다. 빈 문자열끼리 compare_digest
 #   비교는 통과하므로, 빈 값을 '인증 없음'으로 두면 아무나 들어온다 —
 #   인증이 없는 것보다 나쁘다(있다고 착각하게 만든다).
 #   워커의 WORKER_JOB_KEY 와 같은 규약이다.
-ADMIN_TOKEN=
-# 로그인 세션 쿠키 서명 키. ADMIN_TOKEN 과 **다른 값**이어야 한다 —
-# 같으면 쿠키에서 토큰을 역산할 여지가 생긴다.
+ADMIN_USERNAME=
+# 비밀번호 **원문을 두지 않는다.** scrypt$n$r$p$salt$hash 해시다.
+ADMIN_PASSWORD_HASH=
+# TOTP(RFC 6238) 비밀키(base32). 인증 앱이 30초마다 여섯 자리를 만든다.
+ADMIN_TOTP_SECRET=
+# 세션 쿠키 서명 키. 위 값들과 **다른 값**이어야 한다.
 ADMIN_SESSION_SECRET=
 ADMIN_SESSION_HOURS=12
+# 운영(HTTPS)에서는 반드시 true. 로컬 http 에서 true 면 로그인이 조용히 실패한다.
+ADMIN_COOKIE_SECURE=false
 ```
 
 백엔드에는 `WORKER_JOB_KEY` 가 **없다.** 백엔드는 워커를 부르지 않는다.
@@ -373,6 +378,11 @@ NAVER_SITE_VERIFICATION=
 
 # ── 애드센스 (승인 후. 비어 있으면 광고 미렌더링) ──
 NEXT_PUBLIC_ADSENSE_CLIENT=
+# 광고 자리별 실제 슬롯 ID. '이름=숫자' 를 쉼표로 잇는다.
+#   NEXT_PUBLIC_ADSENSE_SLOTS=home-mid=1234567890,lotto-mid=2345678901
+# ★ 숫자 ID 는 승인 후 대시보드에서 '광고 단위' 를 만들어야 나온다. 사람이 읽는 이름을
+#   그대로 두면 애드센스가 알아보지 못해 광고가 한 개도 나오지 않는다.
+NEXT_PUBLIC_ADSENSE_SLOTS=
 
 # ── 무료 이미지 (Pexels) ─────────────────────────
 # 상세페이지 이미지를 빌드/개발 시점에 골라 public 에 내려받는 큐레이션용.
@@ -391,6 +401,8 @@ PEXELS_API_KEY=
 
 빈 문자열과 미정의는 다르다. `NEXT_PUBLIC_ADSENSE_CLIENT` 가 빈 문자열이면 광고 컴포넌트는 `null` 을 반환해야 한다 — 이것이 [[adsense-readiness|애드센스 승인 전 광고 미노출]] 규칙의 구현이다.
 
+⚠ **`NEXT_PUBLIC_ADSENSE_SLOTS` 를 슬롯마다 나누지 않는 이유**가 여기 있다. Next.js 는 `process.env.NEXT_PUBLIC_X` 라는 **정적 표현식 전체**를 치환하므로 `process.env[name]` 같은 동적 접근은 치환되지 않아 브라우저에서 `undefined` 가 된다. 변수 **하나**를 정적으로 읽고 그 문자열을 파싱하면 슬롯이 몇 개로 늘어도 이 함정을 피한다.
+
 ---
 
 ## 사용자에게 요청할 항목
@@ -406,13 +418,14 @@ PEXELS_API_KEY=
 | `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` | worker | ✅ 채움 (2026-07-09 확인) | — |
 | `YOUTUBE_API_KEY` | worker | 미발급 | 영상 수집 |
 | `API_KEY` (LLM) / `MODEL` / `LLM` | worker | ✅ 채움 (2026-08-28, `gpt-5-nano`) | — |
-| `ADMIN_TOKEN` / `ADMIN_SESSION_SECRET` | backend | **미생성 — 사용자가 채워야 한다** | 운영자 로그 화면. 백엔드 구현은 2026-08-28 완료됐고 **값만 기다린다.** 비어 있는 동안 `/api/admin/*` 는 503 이고 공개 API 는 정상이다. `openssl rand -hex 32` 를 **두 번** 돌려 서로 다른 값을 넣는다 — 같으면 기동을 거부한다 |
+| `ADMIN_USERNAME`/`ADMIN_PASSWORD_HASH`/`ADMIN_TOTP_SECRET`/`ADMIN_SESSION_SECRET` | backend | **미생성 — 사용자가 채워야 한다** | 운영자 로그 화면. 백엔드 구현은 2026-08-28 완료됐고 **값만 기다린다.** 비어 있는 동안 `/api/admin/*` 는 503 이고 공개 API 는 정상이다. `openssl rand -hex 32` 를 **두 번** 돌려 서로 다른 값을 넣는다 — 같으면 기동을 거부한다 |
 | `NEXT_PUBLIC_GA_ID` | frontend | 미발급 | Phase 4 |
 | `NEXT_PUBLIC_NAVER_ANALYTICS_ID` | frontend | 미발급 | Phase 4 |
 | `GOOGLE_SITE_VERIFICATION` / `NAVER_SITE_VERIFICATION` | frontend | 미발급 | Phase 4 |
 | `NEXT_PUBLIC_SITE_URL` | frontend | **도메인 미확정** | Phase 4 |
 | `NEXT_PUBLIC_CONTACT_EMAIL` | frontend | ✅ 채움 (2026-07-09) | — |
 | `NEXT_PUBLIC_ADSENSE_CLIENT` | frontend | 승인 후 | 광고 게재 |
+| `NEXT_PUBLIC_ADSENSE_SLOTS` | frontend | 승인 후 | 광고 게재. 비면 수동 슬롯이 뜨지 않는다 |
 | `PEXELS_API_KEY` | frontend | ✅ 채움 (2026-07-15, `.env_frontend`) | — (서버 전용 키. 브라우저 노출 금지) |
 
 네이버 API 키가 채워졌고 일일 쿼터도 **25,000** 으로 확인되어 `NEWS_CRON` 이 확정됐다 ([[naver-search-api]]).

@@ -350,9 +350,11 @@ class TestClassify403(unittest.TestCase):
 
 
 class TestLlmParseVerdicts(unittest.TestCase):
+    # 2026-09-08: 뉴스·영상 공용이 되면서 키 이름이 provider_video_key → key 로
+    # 바뀌었다. 호출자가 {"key", "title_nm", "source_nm"} 로 맞춰 넘긴다.
     CHUNK = [
-        {"provider_video_key": "k0", "title_nm": "a"},
-        {"provider_video_key": "k1", "title_nm": "b"},
+        {"key": "k0", "title_nm": "a"},
+        {"key": "k1", "title_nm": "b"},
     ]
 
     def _resp(self, content: str) -> dict:

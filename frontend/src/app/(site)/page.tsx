@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AdSlot } from "@/components/AdSlot";
+import { CardSlider } from "@/components/CardSlider";
 import { VideoCard } from "@/components/video/VideoCard";
 import { Card, EmptyState, MoreLink } from "@/components/Card";
 import { Disclaimer } from "@/components/Disclaimer";
@@ -49,8 +50,8 @@ export default async function HomePage() {
       getFrequency(HOME_WINDOW),
       getPairs(HOME_WINDOW), // 동반 출현 탭. 백엔드가 아직 안 주면 null → 탭이 "준비 중".
       getNews(1, 3),
-      // 영상 3개. 백엔드가 아직 안 만들었으면 빈 봉투 → 그 단이 통째로 빠진다.
-      getVideos("all", 1, 3),
+      // 영상 6편. 백엔드가 아직 안 만들었으면 빈 봉투 → 그 단이 통째로 빠진다.
+      getVideos("all", 1, 6),
       ...HOME_STRATEGIES.map((strategy) => serverRecommend(strategy, 1)),
     ]);
 
@@ -86,13 +87,15 @@ export default async function HomePage() {
             곳에서 쉽고 빠르게 확인할 수 있습니다.
           </p>
           {/*
-            히어로 CTA 2버튼(002 R7). 'AI' 는 예측이 아니라 '조합' 언어에 정합하게
-            "AI 번호 조합 추천" 으로 쓴다([[forbidden-expressions]] AI 라벨 규칙).
+            히어로 CTA 2버튼(002 R7).
+            ⚠ 2026-09-02 에 "AI 번호추천" → "정밀 분석 추천" 으로 바꿨다. 이 기능은 학습하는
+              모델이 아니라 가중 선형합 + 몬테카를로다([[prediction-algorithm]] "머신러닝이
+              아니다"). 꿈해몽의 AI 는 임베딩 모델을 실제로 쓰므로 그대로 둔다.
             최신 회차는 네비·하단 결과 카드로 접근 가능해 히어로에서 뺀다.
           */}
           <div className="hero-cta">
             <Link className="btn btn-primary" href="/lotto/recommend">
-              AI 번호 조합 추천
+              정밀 분석 추천
             </Link>
             <Link className="btn btn-secondary" href="/dream">
               꿈으로 번호찾기
@@ -190,9 +193,8 @@ export default async function HomePage() {
       </section>
 
       {/*
-        ── 영상 3편 ───────────────────────────────────
-        ⚠ **여기서 재생하지 않는다.** 썸네일만 걸고 누르면 전용 페이지로 보낸다
-          (docs/raw/004-유튜브영상수집계획.md: "홈·카드는 썸네일 3개만"). 임베드
+        ── 영상 6편 ───────────────────────────────────
+        ⚠ **여기서 재생하지 않는다.** 썸네일만 걸고 누르면 전용 페이지로 보낸다. 임베드
           플레이어는 전용 페이지에만 둔다 — 홈에 iframe 을 깔면 느려지고, 정책 III.G.1.d
           의 "독립적 가치" 판단도 홈까지 끌고 들어오게 된다.
         ⚠ 출처 표시(III.F.2)는 **홈 카드에도** 붙는다. `VideoCard` 가 담당한다.
@@ -204,13 +206,24 @@ export default async function HomePage() {
             <h2 id="video-title">로또 영상</h2>
             <MoreLink href="/videos" />
           </div>
-          <ul className="video-grid">
+          {/*
+            ⚠ 격자가 아니라 **슬라이더**다(2026-08-31 사용자 요청). 격자는 화면이 넓어질수록
+              카드가 함께 커져 영상 하나가 화면을 다 먹었다 — 슬라이더는 카드 폭이 고정이다.
+
+            ⚠ **`compact` 로 카드를 좁히고 세 편에서 여섯 편으로 늘렸다**(2026-09-02 사용자
+              요청). 원래 "홈은 썸네일 3개" 는 홈이 **세로 격자**였을 때의 선택이다
+              (docs/raw/004-유튜브영상수집계획.md) — 세 개만 해도 화면을 한참 차지했다.
+              슬라이더는 옆으로 넘기므로 개수가 세로 길이를 늘리지 않아 그 제약이 사라졌다.
+              ⚠ **정책이 정한 것은 개수가 아니라 "홈에서 재생하지 않는다" 다.** 썸네일만
+                거는 한 여섯 편도 세 편과 같다.
+          */}
+          <CardSlider label="로또 영상" compact>
             {videos.map((video) => (
               <li key={video.id}>
                 <VideoCard video={video} />
               </li>
             ))}
-          </ul>
+          </CardSlider>
         </section>
       )}
 
@@ -220,17 +233,18 @@ export default async function HomePage() {
           <h2 id="guide-title">로또 가이드</h2>
           <MoreLink href="/guide" />
         </div>
-        <div className="guide-grid">
+        <CardSlider label="로또 가이드">
           {GUIDES.map((guide) => (
-            <GuideCard
-              key={guide.slug}
-              href={`/guide/${guide.slug}`}
-              title={guide.title}
-              summary={guide.summary}
-              accent={guide.accent}
-            />
+            <li key={guide.slug}>
+              <GuideCard
+                href={`/guide/${guide.slug}`}
+                title={guide.title}
+                summary={guide.summary}
+                accent={guide.accent}
+              />
+            </li>
           ))}
-        </div>
+        </CardSlider>
       </section>
 
       {/*
@@ -316,8 +330,8 @@ export default async function HomePage() {
                 text: "여러 기준으로 조합을 만들고, 만들어진 조합의 성향을 설명합니다.",
               },
               {
-                label: "한계",
-                text: "어떤 방식도 결과에 영향을 주지 않습니다. 그 사실을 감추지 않습니다.",
+                label: "솔직히",
+                text: "추첨은 매 회차 무작위입니다. 그래서 이 도구는 고르는 재미를 맡습니다.",
               },
             ]}
             example="완전 랜덤 · 번호대 균형 · 최근 통계 참고 · 꿈 키워드"

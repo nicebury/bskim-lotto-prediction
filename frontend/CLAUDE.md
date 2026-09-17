@@ -17,7 +17,6 @@ Next.js App Router 로 화면을 렌더링하고, SEO 메타데이터와 애널�
 - DB 직접 접근
 - **비즈니스 계산.** 빈도·패턴·HOT/COLD 를 브라우저에서 다시 집계하지 않는다. 서버와 숫자가 달라지면 어느 쪽이 맞는지 아무도 모른다
 - `worker/` 또는 `backend/` 의 코드 수정
-- `frontend_old/` 수정 — **참조만.** 삭제는 Phase 3 완료 후 사용자 확인을 거친다
 - 애드센스 승인 전 광고 코드 삽입
 
 ## 매 턴 지킬 것
@@ -26,6 +25,10 @@ Next.js App Router 로 화면을 렌더링하고, SEO 메타데이터와 애널�
 - **볼 색상은 동행복권 공식 5구간.** 시안(`docs/raw/메인샘플.png`)의 볼 색을 따르지 않는다. 색만으로 구간을 전달하지 않는다 — `aria-label` 에 구간을 명시한다
 - **mobile-first CSS.** 기본이 모바일이고 `min-width` 로 확장한다. `body` 는 절대 가로로 스크롤되지 않는다
 - **터치 타겟 최소 44×44px**
+- **카드·안내상자·제목 왼쪽에 강조 세로 띠를 넣지 않는다.** `border-left: 3px solid`,
+  `box-shadow: inset 3px 0 0` 같은 것이다. 같은 지적을 두 번 받았다(FAQ 항목 2026-08,
+  가이드 안내 카드 2026-09-16) — **기성 템플릿처럼 보이고, 띠가 전하는 정보가 없다.**
+  위계는 제목의 크기·굵기, 배경(`--color-surface`), 1px 테두리로 만든다
 - **CLS 방지.** 볼·차트·뉴스 썸네일·광고 슬롯에 `min-height` 또는 `aspect-ratio` 를 예약한다
 - **서버용 `API_BASE_URL` 과 브라우저용 `NEXT_PUBLIC_API_BASE_URL` 을 섞지 않는다.** `NEXT_PUBLIC_*` 은 번들에 박혀 공개된다 — 비밀값을 넣지 않는다
 - **환경변수 파일은 `.env_frontend` 다.** Next.js 는 이 이름을 자동으로 읽지 않으므로 `next.config.ts` 최상단에서 `dotenv` 로 명시 로드한다. 이걸 빼면 모든 변수가 에러 없이 `undefined` 가 된다 → `docs/wiki/10-contracts/env-vars.md`

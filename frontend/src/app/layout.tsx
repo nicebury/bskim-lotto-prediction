@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     template: `%s | ${SITE_NAME}`,
   },
   description:
-    '최신 로또 당첨결과, 번호 출현 통계, 복권 뉴스, 통계와 AI 기반 번호추천을 한 곳에서 확인하세요.',
+    '최신 로또 당첨결과, 번호 출현 통계, 복권 뉴스, 통계 기반 번호추천과 AI 꿈해몽을 한 곳에서 확인하세요.',
   applicationName: SITE_NAME,
   alternates: { canonical: '/' },
   openGraph: {
@@ -41,7 +41,7 @@ export const metadata: Metadata = {
     url: SITE_URL,
     title: `${SITE_NAME} — 로또 6/45 당첨결과·번호 통계·번호 추천`,
     description:
-      '최신 로또 당첨결과, 번호 출현 통계, 복권 뉴스, 통계와 AI 기반 번호추천을 한 곳에서 확인하세요.',
+      '최신 로또 당첨결과, 번호 출현 통계, 복권 뉴스, 통계 기반 번호추천과 AI 꿈해몽을 한 곳에서 확인하세요.',
     /*
       공유 카드 이미지. metadataBase 기준으로 절대화된다.
       width/height 를 명시해야 카카오톡·트위터가 자리를 미리 잡는다(공유 카드의 CLS).

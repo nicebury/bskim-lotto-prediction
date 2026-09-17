@@ -162,7 +162,7 @@ export default async function PatternPage() {
               },
               {
                 label: "뜻",
-                text: "조합의 개수가 다를 뿐, 가운데가 잘 나오는 것이 아닙니다.",
+                text: "가운데 값을 가진 조합이 그만큼 많다는 뜻입니다.",
               },
             ]}
             example="합계 130~139 구간이 가장 두껍습니다"

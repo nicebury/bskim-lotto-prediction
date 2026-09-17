@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 
 import type { Metadata } from "next";
@@ -11,10 +12,10 @@ import {
   SpecimenCard,
   SpecimenGrid,
 } from "@/components/GuideSection";
-import { ArticleIcon, ClockIcon, FilterIcon } from "@/components/icons";
+import { ArticleIcon, ClockIcon, FilterIcon, NewsIcon } from "@/components/icons";
 import { Card, EmptyState } from "@/components/Card";
 import { NewsFilter } from "@/components/NewsFilter";
-import { NewsList } from "@/components/NewsList";
+import { NewsFeed } from "@/components/NewsFeed";
 import { Pagination } from "@/components/Pagination";
 import { getNews } from "@/lib/api";
 import type { NewsPeriod } from "@/lib/api-types";
@@ -85,10 +86,14 @@ export default function NewsPage({
         ]}
       />
 
-      <section className="section">
-        <h1>복권 뉴스</h1>
-        <p className="muted" style={{ marginTop: "var(--space-2)" }}>
-          로또와 복권 관련 최신 소식을 모았습니다. 제목을 누르면 원문으로
+      {/* 머리. 영상 목록과 같은 문법(`media-hero`)이라 두 모음 화면이 한 사이트로 읽힌다. */}
+      <section className="media-hero" aria-labelledby="news-title">
+        <p className="media-eyebrow">
+          <NewsIcon width={14} height={14} /> 복권 소식 모음
+        </p>
+        <h1 id="news-title">복권 뉴스</h1>
+        <p className="media-lede">
+          로또와 복권 관련 최신 소식을 모았습니다. 제목을 누르면 언론사 원문으로
           이동합니다.
         </p>
       </section>
@@ -222,6 +227,14 @@ export default function NewsPage({
   );
 }
 
+/**
+ * 요청 시각의 KST 날짜(`YYYY-MM-DD`).
+ * ⚠ `en-CA` 로케일은 날짜를 ISO 순서로 찍는다. 서버 시간대와 무관하게 서울 기준 날짜를 얻는다.
+ */
+function todayKst(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
+}
+
 /** 스트리밍 중 자리를 잡아 두는 껍데기. 높이만 예약하고 내용은 비운다. */
 function NewsResultsSkeleton() {
   return (
@@ -269,29 +282,37 @@ async function NewsResults({
       <NewsFilter keyword={keyword} period={period} />
 
       {/* 현재 조회 조건과 건수를 알려 준다 — 필터가 적용됐음을 명확히. */}
-      <p className="news-result-meta">
-        {keyword ? (
+      <p className="media-meta">
+        {keyword && (
           <>
-            <strong>&lsquo;{keyword}&rsquo;</strong> · {PERIOD_LABEL[period]}
+            <strong>&lsquo;{keyword}&rsquo;</strong> 검색 ·{" "}
           </>
-        ) : (
-          PERIOD_LABEL[period]
-        )}{" "}
-        <span className="muted">검색 결과 {formatNumber(total)}건</span>
+        )}
+        <span>{PERIOD_LABEL[period]}</span>
+        <span className="media-meta-count">{formatNumber(total)}건</span>
+        {keyword && (
+          <Link className="media-meta-clear" href={period !== "1w" ? `/news?period=${period}` : "/news"}>
+            검색 지우기
+          </Link>
+        )}
       </p>
 
-      <Card>
-        {items.length > 0 ? (
-          <NewsList items={items} />
-        ) : (
+      {items.length > 0 ? (
+        /*
+          ⚠ 주요 기사(크게)는 **첫 쪽에서만** 세운다. 2쪽의 첫 기사는 '가장 최근' 이 아니다.
+          ⚠ `today` 는 요청 시각의 KST 날짜다. 이 라우트는 searchParams 때문에 요청마다 그려지므로
+            "오늘 · 어제" 라벨이 캐시에 굳어 날짜가 지나도 남는 일이 없다.
+        */
+        <NewsFeed items={items} featured={page === 1} today={todayKst()} />
+      ) : (
+        <Card>
           <EmptyState>
             {hasFilter
               ? "조건에 맞는 뉴스가 없습니다. 키워드나 기간을 바꿔 보세요."
               : "표시할 뉴스가 없습니다. 잠시 후 다시 확인해 주세요."}
           </EmptyState>
-        )}
-      </Card>
-
+        </Card>
+      )}
       <Pagination
         page={page}
         total={total}

@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState, type SVGProps } from "react";
 
 import { browserRecommend } from "@/lib/api";
+import { loadReco, saveReco } from "@/lib/reco-store";
+import { RecommendProgress } from "./RecommendProgress";
 import type { RecommendSet, RecommendStrategy } from "@/lib/api-types";
 import { STRATEGIES, strategyMeta } from "@/lib/strategies";
 import { traitRows, traitSentence, traitSummaryLine } from "@/lib/traits";
@@ -10,6 +12,15 @@ import { BulkActions } from "./BulkActions";
 import { Card, EmptyState } from "./Card";
 import { LottoBall } from "./LottoBall";
 import { NumberActions } from "./NumberActions";
+import {
+  DiceIcon,
+  LayersIcon,
+  PairIcon,
+  ReturnIcon,
+  ScaleIcon,
+  SegmentsIcon,
+} from "./icons";
+import { CountStepper } from "./simulator/CountStepper";
 import { KeyValueList } from "./stats";
 
 /**
@@ -21,8 +32,6 @@ import { KeyValueList } from "./stats";
  * 생성 후 조합의 성향을 함께 보여준다. 단순 번호 출력이 아니라 "번호를 해석해주는 경험"이
  * 체류시간을 만든다(초안 10.1). 해석은 전부 **사실 서술**이다 — 확률·적중률을 말하지 않는다.
  */
-/** 추천 개수 선택지. 계약이 허용하는 범위 그대로다(1~10). */
-const SET_COUNTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 export function RecommendStudio({
   initialStrategy,
@@ -37,7 +46,16 @@ export function RecommendStudio({
   /** 백엔드가 응답에 담아 준 면책 문구. 없으면 호출부가 폴백을 넘긴다. */
   disclaimer: string;
 }) {
+  /** 지금 **고른** 방식. 아직 뽑지 않았을 수 있다. */
   const [strategy, setStrategy] = useState<RecommendStrategy>(initialStrategy);
+  /**
+   * 아래 결과가 **실제로 어떤 방식으로 뽑혔는지**.
+   *
+   * ⚠ 고른 방식과 따로 둔다(2026-09-17). 카드를 누르면 곧바로 뽑던 것을 "고르고 → 뽑기"
+   *   로 바꿨기 때문에, 카드만 바꾸고 아직 안 뽑은 순간에는 둘이 다르다. 하나로 두면
+   *   결과 제목이 "번호대 균형" 인데 번호는 "통계 종합" 으로 뽑힌 것인 거짓 화면이 된다.
+   */
+  const [resultStrategy, setResultStrategy] = useState<RecommendStrategy>(initialStrategy);
   /**
    * 한 번에 만들 조합 수. 계약상 1~10 이다([[api-contract]]).
    * 서버가 처음 넘겨준 개수를 그대로 이어받아 화면과 값이 어긋나지 않게 한다.
@@ -46,62 +64,27 @@ export function RecommendStudio({
   const [sets, setSets] = useState<RecommendSet[]>(initialSets);
   const [hotWindow, setHotWindow] = useState<number | null>(initialHotWindow);
   const [loading, setLoading] = useState(false);
-
-  /*
-   * 기준 줄에 옆으로 더 있다는 것을 알리기 위한 상태.
-   *
-   * ⚠ 페이드만으로는 부족했다 — "그냥 보면 메뉴 3개만 있는 것처럼 보인다"(사용자 지적).
-   *   그래서 **좌우 화살표**를 함께 둔다. 화살표는 "여기 더 있다" 를 말할 뿐 아니라
-   *   밀지 못하는 사용자(마우스만 쓰는 좁은 창)에게 실제 이동 수단이 된다.
-   * ⚠ 넘치지 않을 때는 아예 렌더링하지 않는다. 640px 이상에서는 줄바꿈해 다 보이므로
-   *   화살표가 나올 일이 없다. 비활성 화살표를 띄워 두면 "왜 안 눌리지" 가 된다.
-   */
-  const pickerRef = useRef<HTMLDivElement>(null);
-  const [canLeft, setCanLeft] = useState(false);
-  const [canRight, setCanRight] = useState(false);
-
-  const syncArrows = useCallback(() => {
-    const el = pickerRef.current;
-    if (!el) return;
-    // 1px 여유 — 브라우저가 소수점 스크롤 위치를 주어 정확히 0/최대가 되지 않는다.
-    setCanLeft(el.scrollLeft > 1);
-    setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
-  }, []);
-
-  useEffect(() => {
-    const el = pickerRef.current;
-    if (!el) return;
-    syncArrows();
-    el.addEventListener("scroll", syncArrows, { passive: true });
-    // 화면 폭이 바뀌면 넘침 여부 자체가 달라진다(640px 에서 줄바꿈으로 전환).
-    const ro = new ResizeObserver(syncArrows);
-    ro.observe(el);
-    return () => {
-      el.removeEventListener("scroll", syncArrows);
-      ro.disconnect();
-    };
-  }, [syncArrows]);
-
-  /** 보이는 폭의 80% 만큼 민다. 100% 를 밀면 경계의 칩을 건너뛴 것처럼 보인다. */
-  const nudge = (dir: -1 | 1) => {
-    const el = pickerRef.current;
-    if (!el) return;
-    el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: "smooth" });
-  };
   const [error, setError] = useState<string | null>(null);
 
-  const generate = async (
-    next: RecommendStrategy,
-    nextCount: number = count,
-  ) => {
-    setStrategy(next);
-    setCount(nextCount);
+  const generate = async () => {
+    const next = strategy;
     setLoading(true);
     setError(null);
     try {
-      const result = await browserRecommend(next, nextCount);
+      const result = await browserRecommend(next, count);
       setSets(result.sets);
       setHotWindow(result.hot_window);
+      setResultStrategy(next);
+      /*
+        ⚠ 분석 화면에 갔다 돌아왔을 때 되살리려고 담아 둔다. '분석' 을 누를 때가 아니라
+          **결과를 받을 때** 담는다 — 뒤로가기·스와이프처럼 버튼을 거치지 않는 이동도
+          있기 때문이다(→ lib/reco-store.ts).
+      */
+      saveReco("six", {
+        sets: result.sets,
+        hotWindow: result.hot_window,
+        strategy: next,
+      });
     } catch (err) {
       // 회차가 50개 미만이면 백엔드가 422 와 함께 사유를 준다. 그대로 보여준다.
       setError(
@@ -113,138 +96,153 @@ export function RecommendStudio({
     }
   };
 
+  /*
+   * 돌아왔을 때 뽑아 둔 번호를 되살린다(2026-09-01 사용자가 "중요" 로 표시).
+   *
+   * ⚠ **서버가 넘겨준 첫 결과(`initialSets`)가 있으면 건드리지 않는다.** 그것은 이 페이지가
+   *   서버에서 렌더링될 때 이미 받아 둔 값이고, 담아 둔 것보다 새롭다.
+   * ⚠ 첫 마운트에 한 번만 본다 — 새로 뽑은 뒤 옛 결과로 되돌아가면 안 된다.
+   */
+  useEffect(() => {
+    if (initialSets.length > 0) return;
+    const saved = loadReco<SavedSix>("six", isSavedSix);
+    if (!saved) return;
+    setSets(saved.sets);
+    setHotWindow(saved.hotWindow);
+    setStrategy(saved.strategy);
+    setResultStrategy(saved.strategy);
+    setCount(saved.sets.length || 5);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 첫 마운트 한 번만 되살린다.
+  }, []);
+
   const meta = strategyMeta(strategy);
+  const resultMeta = strategyMeta(resultStrategy);
+  const SelectedIcon = STRATEGY_ICON[strategy];
 
   return (
-    <div>
+    <div className="pick">
       {/*
-        추천 기준 선택.
-
-        ⚠ 종전에는 `.tabs`(알약 트랙 + `overflow-x: auto`)였는데 **모바일에서 아래에 가로
-          스크롤바가 생겨** 메뉴처럼 보이지 않았다(사용자 지적). 이제 버튼을 그대로 늘어
-          놓고, 넘치면 **손가락으로 밀어서** 넘긴다 — 스크롤바는 감추고 스냅을 건다.
-          640px 이상에서는 줄바꿈해 한눈에 다 보이므로 밀 일이 없다.
-        ⚠ `role="tablist"` 를 쓰지 않는다. 탭 위젯은 좌우 방향키로 이동하고 Tab 으로는
-          하나만 잡히는 규약인데, 여기 버튼들은 각각 독립적으로 눌러야 하고 누르면 결과가
-          새로 생성된다 — 탭 전환이 아니라 실행에 가깝다. `aria-pressed` 가 맞는 표현이다.
+        ⚠ **누른 뒤 무엇이 도는지 보여준다**(2026-09-02 사용자 요청). 6가지 추천은 응답이
+          빨라서 결과만 슬쩍 바뀌었고, 그러면 눌린 것인지조차 알기 어려웠다.
       */}
-      <div
-        className="strategy-picker-wrap"
-        data-more={canRight ? "" : undefined}
-      >
-        {canLeft && (
-          <button
-            type="button"
-            className="strategy-nav is-prev"
-            onClick={() => nudge(-1)}
-            aria-label="이전 기준 보기"
-          >
-            <ChevronIcon dir="left" />
-          </button>
-        )}
+      <RecommendProgress open={loading} />
 
-        <div
-          className="strategy-picker"
-          ref={pickerRef}
-          role="group"
-          aria-label="추천 기준 선택"
-        >
-          {STRATEGIES.map((item) => (
-            <button
+      {/*
+        ── ① 방식 고르기 ─────────────────────────────────────
+        ⚠ 2026-09-17 재설계. 종전에는 가로로 미는 알약 칩 여섯 + 아래 설명 한 줄 + 숫자 칩 열
+          + 버튼이었고, 칩을 누르는 순간 곧바로 뽑혔다. 사용자 지적: "어떤 추천방법을 선택해서
+          몇 개를 선택하는지 직관적이지 않고 난잡하다".
+
+          지금은 **카드 여섯 장**(아이콘 · 이름 · 무엇에서 뽑는지)을 한눈에 깔고, 고른 뒤
+          아래 주문 줄에서 "○○ 방식으로 N개" 를 확인하고 뽑는다. 누르자마자 뽑히지 않으므로
+          카드를 훑어보며 비교할 수 있다.
+
+        ⚠ 카드 전체가 버튼처럼 눌리지만 **실제 버튼은 이름 줄뿐**이다(늘린 링크 기법,
+          `::after` 가 카드를 덮는다). 긴 설명까지 버튼 안에 넣으면 낭독기가 버튼 이름으로
+          세 문장을 읽는다 — 설명은 `aria-describedby` 로 따로 들린다.
+        ⚠ 설명 문단은 여섯 개 모두 **DOM 에 있다.** 좁은 화면에서는 고른 카드의 것만 보이고
+          넓은 화면에서는 전부 보인다. 이 설명이 페이지의 고유 본문이라 검색엔진이 읽어야 한다.
+      */}
+      <p className="pick-step" id="six-strategy-label">
+        <span className="pick-step-num" aria-hidden="true">1</span>
+        어떤 방식으로 뽑을까요?
+      </p>
+      <ul className="strategy-cards" role="group" aria-labelledby="six-strategy-label">
+        {STRATEGIES.map((item) => {
+          const Icon = STRATEGY_ICON[item.key];
+          const active = item.key === strategy;
+          return (
+            <li
               key={item.key}
-              type="button"
-              className="strategy-chip"
-              data-active={item.key === strategy ? "" : undefined}
-              aria-pressed={item.key === strategy}
-              disabled={loading}
-              onClick={() => generate(item.key)}
+              className="strategy-card"
+              data-key={item.key}
+              data-active={active ? "" : undefined}
             >
-              {item.label}
-            </button>
-          ))}
+              <span className="strategy-card-icon" aria-hidden="true">
+                <Icon />
+              </span>
+              <button
+                type="button"
+                className="strategy-card-btn"
+                aria-pressed={active}
+                aria-describedby={`strategy-desc-${item.key}`}
+                disabled={loading}
+                onClick={() => setStrategy(item.key)}
+              >
+                <span className="strategy-card-name">
+                  {item.label}
+                  {/*
+                    통제군 표시. 맨 앞에 두는 이유가 "나머지를 견주는 기준" 인데 다른 다섯과
+                    똑같이 생기면 그냥 첫 항목으로 읽힌다(→ lib/strategies.ts).
+                  */}
+                  {item.key === "pure_random" && (
+                    <em className="strategy-card-tag">비교 기준</em>
+                  )}
+                </span>
+                <span className="strategy-card-short">{item.short}</span>
+              </button>
+              <span className="strategy-card-check" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="14" height="14">
+                  <path
+                    d="M5 12.5l4.5 4.5L19 7.5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </span>
+              <p className="strategy-card-desc" id={`strategy-desc-${item.key}`}>
+                {item.description}
+              </p>
+            </li>
+          );
+        })}
+      </ul>
+
+      {/*
+        ── ② 개수 + 뽑기 ─────────────────────────────────────
+        주문서처럼 한 줄에 모은다. **고른 방식의 아이콘과 이름이 여기 다시 나온다** —
+        위에서 무엇을 골랐는지 스크롤을 올리지 않고 확인하고 누른다.
+      */}
+      <div className="pick-order">
+        <div className="pick-order-count">
+          <p className="pick-step" id="six-count-label">
+            <span className="pick-step-num" aria-hidden="true">2</span>
+            몇 개 뽑을까요?
+          </p>
+          <CountStepper
+            value={count}
+            onChange={setCount}
+            labelId="six-count-label"
+            disabled={loading}
+          />
         </div>
 
-        {canRight && (
+        <div className="pick-order-go">
+          <p className="pick-order-line" id="six-order-line">
+            <span className="pick-order-icon" data-key={strategy} aria-hidden="true">
+              <SelectedIcon />
+            </span>
+            <span>
+              <strong>{meta.label}</strong> 방식으로 <strong>{count}개</strong>
+            </span>
+          </p>
           <button
             type="button"
-            className="strategy-nav is-next"
-            onClick={() => nudge(1)}
-            aria-label="다음 기준 보기"
+            className="btn btn-primary pick-go"
+            onClick={() => void generate()}
+            disabled={loading}
+            aria-describedby="six-order-line"
           >
-            <ChevronIcon dir="right" />
+            {loading ? "뽑는 중…" : "번호 뽑기"}
           </button>
-        )}
-      </div>
-
-      {/*
-        글자로도 한 번 더 알린다. 화살표를 못 알아보는 사용자가 있고, 이 사이트의 주 사용자
-        층에게 "옆으로 숨은 것" 은 발견성이 낮다(→ docs/wiki/20-design/responsive-rules.md).
-        끝까지 밀면 사라지므로 계속 잔소리하지 않는다.
-      */}
-      {/*
-        ⚠ 조건부로 **렌더링**하지 않고 항상 그린 뒤 보이기만 토글한다.
-          `canRight` 는 마운트 뒤에야 정해지므로, 없다가 생기면 아래 내용이 밀려
-          레이아웃이 흔들린다(실측 CLS 0 → 0.02). 자리를 처음부터 차지하면 흔들리지 않는다.
-          `visibility: hidden` 이라 접근성 트리에서도 빠진다.
-      */}
-      <p className="strategy-hint" data-show={canRight ? "" : undefined}>
-        <span aria-hidden="true">→</span> 옆으로 밀면 {STRATEGIES.length}가지
-        기준을 모두 볼 수 있어요
-      </p>
-
-      <p
-        className="muted"
-        style={{ fontSize: "var(--fs-sm)", marginTop: "var(--space-3)" }}
-      >
-        {meta.description}
-      </p>
-
-      {/*
-        추천 개수. 계약이 1~10 을 허용하므로 열 개를 모두 낸다 — 선택지를 줄이면
-        "왜 5개만 되지" 가 된다. 좁은 화면에서는 줄바꿈해 두 줄이 된다.
-      */}
-      <div className="set-count">
-        <span className="set-count-label" id="set-count-label">
-          추천 개수
-        </span>
-        <div
-          className="set-count-chips"
-          role="group"
-          aria-labelledby="set-count-label"
-        >
-          {SET_COUNTS.map((n) => (
-            <button
-              key={n}
-              type="button"
-              className="set-count-chip"
-              data-active={n === count ? "" : undefined}
-              aria-pressed={n === count}
-              disabled={loading}
-              onClick={() => generate(strategy, n)}
-            >
-              {n}
-            </button>
-          ))}
         </div>
-      </div>
-
-      <div className="hero-cta">
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => generate(strategy)}
-          disabled={loading}
-        >
-          {loading ? "생성 중…" : `${count}조합 다시 생성`}
-        </button>
       </div>
 
       {/* 비동기 상태를 스크린리더에 알린다. */}
-      <div
-        aria-live="polite"
-        aria-busy={loading}
-        style={{ marginTop: "var(--space-6)" }}
-      >
+      <div aria-live="polite" aria-busy={loading} className="pick-result">
         {error ? (
           <Card>
             <EmptyState>{error}</EmptyState>
@@ -258,10 +256,24 @@ export function RecommendStudio({
           </Card>
         ) : (
           <>
+            {/*
+              결과가 **어느 방식으로** 뽑혔는지. 카드만 바꾸고 아직 안 뽑았으면 위 선택과
+              다를 수 있어 여기서 분명히 적는다(`resultStrategy` 주석).
+            */}
+            <p className="pick-result-head">
+              <strong>{resultMeta.label}</strong> 방식으로 뽑은 번호{" "}
+              <strong>{sets.length}개</strong>
+              {resultStrategy !== strategy && (
+                <span className="pick-result-stale">
+                  · 고른 방식으로 보려면 &lsquo;번호 뽑기&rsquo;를 누르세요
+                </span>
+              )}
+            </p>
+
             {/* 조합이 여럿일 때 하나씩 열 번 복사하지 않아도 되게. 개별 버튼은 그대로 둔다. */}
             <BulkActions
               sets={sets.map((set) => set.numbers)}
-              strategyLabel={meta.label}
+              strategyLabel={resultMeta.label}
             />
 
             <ol
@@ -272,7 +284,7 @@ export function RecommendStudio({
             >
               {sets.map((set, index) => (
                 <li key={set.numbers.join("-")}>
-                  <Card as="article" title={`${index + 1}번째 조합`}>
+                  <Card as="article" title={`추천 ${index + 1}`}>
                     <div
                       className="ball-row"
                       style={{ justifyContent: "space-between" }}
@@ -286,7 +298,7 @@ export function RecommendStudio({
                       className="reco-traits"
                       style={{ marginTop: "var(--space-4)" }}
                     >
-                      {traitSentence(set.traits, "이 조합", hotWindow)}
+                      {traitSentence(set.traits, "이 번호", hotWindow)}
                     </p>
 
                     <div style={{ marginTop: "var(--space-4)" }}>
@@ -296,7 +308,7 @@ export function RecommendStudio({
                     {/* 번호를 가져가려고 들어온 자리다. 세 가지를 모두 낸다. */}
                     <NumberActions
                       numbers={set.numbers}
-                      strategyLabel={meta.label}
+                      strategyLabel={resultMeta.label}
                       subtitle={traitSummaryLine(set.traits)}
                     />
                   </Card>
@@ -321,21 +333,41 @@ export function RecommendStudio({
   );
 }
 
-/** 좌우 이동 화살표. 방향만 다르고 규격은 하나다. */
-function ChevronIcon({ dir }: { dir: "left" | "right" }) {
-  return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d={dir === "left" ? "M15 5l-7 7 7 7" : "M9 5l7 7-7 7"} />
-    </svg>
-  );
+/**
+ * 방식 → 아이콘.
+ *
+ * ⚠ 키를 `RecommendStrategy` 로 묶는다. 계약에 방식이 하나 늘면 여기서 타입 에러가 난다 —
+ *   아이콘 없는 카드가 조용히 생기지 않게.
+ */
+const STRATEGY_ICON: Record<
+  RecommendStrategy,
+  (props: SVGProps<SVGSVGElement>) => React.ReactElement
+> = {
+  pure_random: DiceIcon,
+  ensemble: LayersIcon,
+  balanced_range: SegmentsIcon,
+  golden_combo: ScaleIcon,
+  cold_return: ReturnIcon,
+  pair_affinity: PairIcon,
+};
+
+/** 담아 두는 모양. 화면이 되살리는 데 필요한 것만 담는다. */
+interface SavedSix {
+  sets: RecommendSet[];
+  hotWindow: number | null;
+  strategy: RecommendStrategy;
+}
+
+/**
+ * 담아 둔 JSON 이 쓸 수 있는 모양인지 확인한다.
+ *
+ * ⚠ `strategy` 가 아는 값인지까지 본다. 모르는 기준이 들어오면 `strategyMeta` 가 빈 값을
+ *   돌려주고 화면이 이름 없는 카드가 된다 — 배포로 기준이 바뀐 뒤에 실제로 생길 수 있다.
+ */
+function isSavedSix(value: unknown): value is SavedSix {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Partial<SavedSix>;
+  if (!Array.isArray(v.sets)) return false;
+  if (v.hotWindow !== null && typeof v.hotWindow !== "number") return false;
+  return STRATEGIES.some((s) => s.key === v.strategy);
 }

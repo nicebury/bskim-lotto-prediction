@@ -1,0 +1,647 @@
+/*
+ * 가이드 허브 (`/guide`) 전용.
+ *
+ * ── 이 파일이 따로 있는 이유 ────────────────────────────────────────
+ * 2026-09-17 에 `/guide2` 시안이 채택되어 허브를 통째로 교체했다. 그 전까지는
+ * "버려질 때 어디까지가 시안인지 알 수 있게" 파일을 갈라 두었는데, 채택 뒤에도
+ * 합치지 않는다 — `components.css` 는 이미 22만 자이고, 한 화면만 쓰는 규칙
+ * 100여 개를 거기 섞으면 다시는 떼어낼 수 없다.
+ *
+ * ── ⚠ 클래스 접두어 `gh-` (guide hub) ──────────────────────────────
+ * `.guide-*` 는 이미 `GuideCard`(파스텔 링크 카드)와 `GuideSection`(표본 카드)이 나눠
+ * 쓰고 있어 한 번 충돌한 전력이 있다. 여기서는 `gh-` 만 쓴다.
+ * ⚠ 그 둘은 **허브 교체 뒤에도 살아 있다** — 홈 슬라이더·`/lotto`·`GuideNav` 가
+ *   쓰고 있다. 이 파일의 규칙과 헷갈리지 않게 접두어를 지킨다.
+ *
+ * ── ⚠ 색·크기 규칙 ─────────────────────────────────────────────────
+ * 원시 hex 와 px 을 새로 만들지 않는다. 전부 `tokens.css` 변수이고, 중간색이 필요하면
+ * `color-mix(in oklab, …)` 로 유도한다. 테두리 굵기(1px·3px)만 예외인데, 이는
+ * `components.css` 전체가 이미 그렇게 쓰고 있어 토큰이 없다.
+ *
+ * ── 색 언어 ────────────────────────────────────────────────────────
+ * 강조색은 `--color-primary` **하나**다. 카드마다 다른 파스텔(`--svc-*-bg`)은 강조가
+ * 아니라 **항목을 구분하는 색표**이고, 뜻을 가리키지 않는다(사이트 전체 규약).
+ *   `--gh-svc` : 그 카드의 진한 서비스색. 테두리·후광에만 쓴다.
+ *   ⚠ 이 색을 **글자색으로 쓰지 않는다.** 6종 전부 파스텔 위에서 AA 미달이다
+ *     (reco 1.91 ~ stats 3.64 실측). 제목은 `--color-text`, 칩은 `--color-primary` 다.
+ *
+ * ── 모서리 규칙(하나로 통일) ────────────────────────────────────────
+ *   판(카드·히어로·안내)  → `--radius-card`
+ *   칩·알약(주제·구매방식) → `--radius-pill`
+ *   버튼                  → `--radius-sm` (기존 `.btn` 그대로)
+ *
+ * ── 움직임 ─────────────────────────────────────────────────────────
+ * JS 를 한 줄도 쓰지 않는다. 진입 스태거는 CSS 애니메이션, 스크롤 리빌은
+ * `animation-timeline: view()` 다. 셋 다 `prefers-reduced-motion` 에서 사라진다.
+ */
+
+/* ────────────────────────────────────────────────────────────
+ * 공통 키프레임
+ *
+ * ⚠ `transform` 이 아니라 **`translate`** 를 움직인다. 카드에는 hover 로 살짝 떠오르는
+ *   `transform: translateY()` 가 따로 걸려 있는데, 같은 속성을 애니메이션이 잡고 있으면
+ *   hover 가 먹지 않는다. 별개 속성으로 갈라 두면 둘이 겹쳐도 서로를 지우지 않는다.
+ * ⚠ `to` 를 적지 않는다. 암묵 `to` 는 요소의 원래 값이라, 요소가 원래 어디에 있든
+ *   제자리로 끝난다.
+ * ──────────────────────────────────────────────────────────── */
+
+@keyframes gh-rise {
+  from {
+    opacity: 0;
+    translate: 0 14px;
+  }
+}
+
+/*
+ * 스크롤 리빌 전용 — **투명도를 건드리지 않는다.**
+ *
+ * ⚠ 처음에는 위 `gh-rise` 를 그대로 스크롤에 물렸는데 axe 가 `color-contrast` 를
+ *   잡았다(2026-09-16 실측, 1280px 라이트·다크). 스크롤 타임라인은 시간이 아니라
+ *   **스크롤 위치**로 진행하므로, 화면에 반쯤 걸친 카드는 계속 반투명한 상태로 멈춰
+ *   있다 — 그 순간 요약문이 4.5:1 을 못 넘었다(3.46 / 칩 4.43).
+ *   시간 애니메이션이면 눈 깜짝할 새 지나가지만 스크롤은 사용자가 멈출 수 있다.
+ * ⚠ 그래서 리빌은 **위치만** 움직인다. 카드가 떠오르는 느낌은 그대로 남고 글자 대비는
+ *   어느 순간에도 온전하다. 페이드는 첫 화면 진입(`gh-rise`)에만 쓴다 — 그쪽은 560ms
+ *   안에 끝나고 사용자가 멈춰 세울 수 없다.
+ */
+@keyframes gh-slide {
+  from {
+    translate: 0 18px;
+  }
+}
+
+/*
+ * 진입 스태거. 인라인 `--gh-d` 로 지연을 준다.
+ * 근거: 제목 → 설명 → 버튼 순으로 읽히게 하는 **위계 장치**다. 장식이 아니다.
+ * ⚠ `both` 라 지연 동안 요소가 숨는다. 그래서 첫 화면 밖에는 쓰지 않는다 —
+ *   스크롤해야 보이는 곳에 쓰면 이미 다 끝난 뒤에 도착한다.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .gh-rise {
+    animation: gh-rise 560ms var(--ease-out) both;
+    animation-delay: var(--gh-d, 0ms);
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 1. 히어로 — 좌 텍스트 / 우 일러스트
+ * ──────────────────────────────────────────────────────────── */
+
+.gh-hero {
+  position: relative;
+  margin-top: var(--space-5);
+  padding: var(--space-8) var(--space-5);
+  border-radius: var(--radius-card);
+  /*
+    두 겹이다. 아래는 홈 히어로와 같은 브랜드 그라디언트(같은 사이트로 읽히게),
+    위는 오른쪽 위에서 들어오는 옅은 빛. 한 겹만 쓰면 평평한 색판이 된다.
+  */
+  background:
+    radial-gradient(
+      90% 120% at 100% 0%,
+      color-mix(in oklab, var(--color-primary) 13%, transparent),
+      transparent 62%
+    ),
+    linear-gradient(135deg, var(--color-primary-soft), var(--color-primary-soft2));
+}
+
+.gh-hero h1 {
+  /*
+    ⚠ 새 크기를 만들지 않고 `--fs-hero` 를 쓴다. 이 토큰이 정확히 이 용도(첫 화면
+      헤드라인)로 존재하고, 여기서만 더 키우면 사이트의 타이포 계단이 어긋난다.
+      '세련됨' 은 글자 크기가 아니라 구성과 그림에서 낸다.
+  */
+  font-size: var(--fs-hero);
+  font-weight: var(--fw-black);
+  letter-spacing: var(--ls-hero);
+  line-height: var(--lh-tight);
+  /* `<br>` 로 직접 끊으므로 브라우저의 자동 균형 잡기를 끈다. */
+  text-wrap: initial;
+}
+
+/* 강조 어절만 브랜드색. 문장 전체를 칠하면 강조가 사라진다. */
+.gh-hero h1 em {
+  font-style: normal;
+  color: var(--color-primary);
+}
+
+.gh-hero p {
+  margin-top: var(--space-4);
+  max-width: 38ch;
+  color: var(--color-text-muted);
+  line-height: var(--lh-body);
+  /* 한글은 어절 중간에서 끊기면 읽기 리듬이 깨진다. */
+  word-break: keep-all;
+}
+
+.gh-hero-copy > div {
+  margin-top: var(--space-6);
+}
+
+/*
+ * 히어로 일러스트.
+ * ⚠ 모바일에서도 **숨기지 않는다.** 홈 히어로는 첫 화면을 CTA 에 양보하느라 숨기지만,
+ *   여기는 전환 화면이 아니라 안내 목록이고 그림이 이 시안의 요점이다. 대신 폭을
+ *   충분히 줄여 제목·설명·버튼이 먼저 보이게 한다.
+ * ⚠ `width`/`height` 속성이 붙어 있고 `height: auto` 라 로드 전에도 비율만큼 자리를
+ *   차지한다(CLS 0).
+ */
+.gh-hero-art {
+  margin-top: var(--space-5);
+}
+
+.gh-hero-art img {
+  display: block;
+  width: 100%;
+  max-width: 300px;
+  height: auto;
+  margin-inline: auto;
+}
+
+@media (min-width: 640px) {
+  .gh-hero {
+    padding: var(--space-8) var(--space-8);
+  }
+  .gh-hero-art img {
+    max-width: 380px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .gh-hero {
+    display: grid;
+    grid-template-columns: 1.05fr 0.95fr;
+    align-items: center;
+    gap: var(--space-8);
+    /* 첫 화면을 히어로가 다 먹지 않게 한다. 아래 카드가 살짝 보이는 편이 낫다. */
+    padding: var(--space-12);
+  }
+  .gh-hero-art {
+    margin-top: 0;
+  }
+  .gh-hero-art img {
+    max-width: 100%;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 2. 벤토 그리드
+ *
+ * ⚠ **칸 수를 내용 수에 정확히 맞춘다.** 빈 칸이 남으면 그건 레이아웃을 잘못 짠 것이지
+ *   빈 타일을 채워 넣을 일이 아니다. 아래 span 규칙은 `CARDS` 의 **배열 순서**를 전제로
+ *   자동 배치에 맡긴다 — 순서를 바꾸면 깨진다(page.tsx 주석 참고).
+ *
+ *   375px  : 1열, 전부 한 칸
+ *   640px  : 2열  [당첨확인 2] [수령 2] [사실 1][자동수동 1] [건전 2]
+ *   1024px : 4열  [당첨확인 2×2줄][수령 2] / [사실 1][자동수동 1] / [건전 4]
+ * ──────────────────────────────────────────────────────────── */
+
+.gh-bento {
+  display: grid;
+  gap: var(--space-4);
+  /* 카드 그림 한 줄 높이. 그림 칸과 그림 없는 칸이 같은 값을 본다. */
+  --gh-art-h: 172px;
+}
+
+@media (min-width: 640px) {
+  .gh-bento {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .gh-cell[data-slot='how-to-check'],
+  .gh-cell[data-slot='prize-claim'],
+  .gh-cell[data-slot='responsible-lottery'] {
+    grid-column: span 2;
+  }
+}
+
+@media (min-width: 1024px) {
+  .gh-bento {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  /*
+   * ⚠ 첫 카드의 `grid-row: span 2` 를 걷어냈다(사용자 지적, 2026-09-16).
+   *   두 줄을 차지하니 세로 740px 짜리 덩어리가 되어 **시선이 거기서 멈추고
+   *   나머지 네 장을 못 봤다.** 가장 많이 찾는 화면이라는 위계는 크기가 아니라
+   *   **순서와 히어로 CTA**("당첨번호 확인 방법" 버튼)가 이미 전한다.
+   *   지금은 2+2 / 2+2 / 4 로 행 높이가 고르다.
+   */
+  .gh-cell[data-slot='how-to-check'],
+  .gh-cell[data-slot='prize-claim'],
+  .gh-cell[data-slot='lotto-rule'],
+  .gh-cell[data-slot='auto-vs-manual'] {
+    grid-column: span 2;
+  }
+  .gh-cell[data-slot='responsible-lottery'] {
+    grid-column: span 4;
+  }
+}
+
+/* ── 카드 ──────────────────────────────────────── */
+
+.gh-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border-radius: var(--radius-card);
+  /* 테두리를 회색이 아니라 **그 카드의 색**으로 옅게 뽑는다. 판과 테두리가 한 덩어리로
+     읽혀 카드가 떠 보인다. 22% 면 다크에서도 형태가 남는다. */
+  border: 1px solid color-mix(in oklab, var(--gh-svc) 22%, transparent);
+  background: var(--gh-bg);
+  color: var(--color-text);
+  transition:
+    transform var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out);
+}
+
+/*
+ * 카드별 색.
+ * ⚠ `--gh-svc` 는 테두리·후광 전용이다. 글자에 쓰면 파스텔 위에서 AA 를 못 넘는다.
+ */
+.gh-cell[data-accent='lotto'] {
+  --gh-svc: var(--svc-lotto);
+  --gh-bg: var(--svc-lotto-bg);
+}
+.gh-cell[data-accent='news'] {
+  --gh-svc: var(--svc-news);
+  --gh-bg: var(--svc-news-bg);
+}
+.gh-cell[data-accent='stats'] {
+  --gh-svc: var(--svc-stats);
+  --gh-bg: var(--svc-stats-bg);
+}
+.gh-cell[data-accent='reco'] {
+  --gh-svc: var(--svc-reco);
+  --gh-bg: var(--svc-reco-bg);
+}
+.gh-cell[data-accent='dream'] {
+  --gh-svc: var(--svc-dream);
+  --gh-bg: var(--svc-dream-bg);
+}
+
+.gh-cell:hover {
+  color: var(--color-text);
+  box-shadow: var(--shadow-card-hover);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .gh-cell:hover {
+    transform: translateY(-3px);
+  }
+}
+
+/* ── 카드 속 그림 ──────────────────────────────── */
+
+.gh-cell-art {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+/*
+ * 그림 뒤 후광.
+ * ⚠ 장식이 아니라 **대비 장치**다. 일러스트가 배경 투명 PNG 라, 연한 부분이 파스텔
+ *   판에 녹아 형태가 흐려진다. 같은 계열의 옅은 원을 깔면 양쪽 테마에서 윤곽이 산다.
+ * ⚠ `z-index` 를 쓰지 않는다. 형제 순서만으로 충분하고, 전역 z 축을 더럽히지 않는다.
+ */
+.gh-cell-art::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-pill);
+  background: radial-gradient(
+    58% 58% at 50% 50%,
+    color-mix(in oklab, var(--gh-svc) 24%, transparent),
+    transparent 72%
+  );
+}
+
+/*
+ * ⚠ 폭이 아니라 **높이**로 크기를 맞춘다(2026-09-16).
+ *   종전에는 `max-width: 260px` 하나로 묶었는데, 일러스트가 두 규격이라
+ *   가로형(1200×675)은 146px, 정사각(400×400)은 260px 로 **높이가 두 배 가까이**
+ *   벌어졌다. 그리드 행 높이는 그 중 큰 쪽에 맞춰지므로 정사각 그림이 든 행만
+ *   혼자 부풀고, 같은 행의 그림 없는 카드에는 채울 수 없는 빈 자리가 생겼다.
+ *   높이를 고정하면 다섯 장의 그림이 같은 크기로 읽히고 행 리듬이 잡힌다.
+ * ⚠ `width`/`height` 속성은 그대로 둔다 — 비율 예약이 거기서 나오므로 CLS 가 없다.
+ */
+.gh-cell-art img {
+  position: relative;
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: var(--gh-art-h);
+  transition: transform var(--dur) var(--ease-out);
+}
+
+/*
+ * ⚠ 첫 카드를 키우던 특례(그림 460px · 제목 `--fs-h2` · `flex: 1`)를 전부 걷어냈다
+ *   (사용자 지적, 2026-09-16). 두 줄짜리 칸이 없어졌으므로 이 확대는 근거를 잃었고,
+ *   그대로 두면 같은 높이의 칸 안에서 그림만 혼자 커져 균형이 깨진다.
+ *   다섯 장이 같은 규격을 쓰는 것이 이 그리드의 기본값이다.
+ */
+
+/* 그림이 살짝 다가온다. 어디를 누르는지 알려 주는 피드백이다. */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .gh-cell:hover .gh-cell-art img {
+    transform: scale(1.04);
+  }
+}
+
+/* ── 카드 속 글 ────────────────────────────────── */
+
+.gh-cell-body h3 {
+  font-size: var(--fs-h3);
+}
+
+.gh-cell-body p {
+  margin-top: var(--space-2);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+  /* 파스텔 위에서는 subtle 이 아니라 muted 다(tokens.css 주석). */
+  color: var(--color-text-muted);
+}
+
+/*
+ * 주제 칩 — 이 시안의 정보 밀도가 올라간 자리.
+ * 상세페이지의 실제 목차라 **열기 전에 내용을 안다**. 기존 카드에는 이게 없었다.
+ * 흰 알약 위 `--color-primary` 는 6.37:1 로 넉넉히 통과한다.
+ */
+.gh-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.gh-topics li {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-primary);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+}
+
+/*
+ * ⚠ 여기 있던 `.gh-ways`(자동·수동·반자동 타일)를 전부 걷어냈다(2026-09-17).
+ *   그림이 없는 카드가 그림 자리를 채우려고 쓰던 장치인데, `auto-vs-manual` 전용
+ *   일러스트가 들어와 다섯 장이 모두 그림 카드가 됐다. 세 방식은 아래 `.gh-topics`
+ *   로 옮겼다 — 같은 정보를 다른 카드와 같은 자리에서 같은 모양으로 읽는 편이 낫다.
+ *   그림 없는 카드가 다시 생긴다면 배치부터 다시 잡는다(칩으로 때우지 않는다).
+ */
+
+
+/* ── 카드 하단 안내 ────────────────────────────── */
+
+.gh-cell-go {
+  /* 카드 높이가 제각각이어도 이 줄은 항상 바닥에 붙는다. */
+  margin-top: auto;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+}
+
+/* ── 맨 아래 가로 카드는 안에서 좌우로 나눈다 ───── */
+
+@media (min-width: 1024px) {
+  .gh-cell[data-slot='responsible-lottery'] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.7fr);
+    grid-template-areas:
+      'body art'
+      'go   art';
+    align-items: center;
+    gap: var(--space-4) var(--space-8);
+  }
+  /*
+    ⚠ 영역 배치라 DOM 순서는 그대로다. 그림이 먼저 나오지만 화면에서는 오른쪽이다.
+      그림은 `alt=""` 인 장식이라 읽는 순서가 어긋나도 잃는 것이 없다.
+  */
+  .gh-cell[data-slot='responsible-lottery'] .gh-cell-art {
+    grid-area: art;
+  }
+  .gh-cell[data-slot='responsible-lottery'] .gh-cell-body {
+    grid-area: body;
+  }
+  .gh-cell[data-slot='responsible-lottery'] .gh-cell-go {
+    grid-area: go;
+  }
+  .gh-cell[data-slot='responsible-lottery'] .gh-cell-art img {
+    max-width: 340px;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 3. 숫자 밴드
+ *
+ * ⚠ 여기만 카드가 아니다. 위아래가 전부 판이라 이것까지 상자로 만들면 화면이 상자로만
+ *   채워진다. 얇은 선 하나로 나누고 숫자를 크게 둔다.
+ * ⚠ 모든 행에 위아래 선을 다 긋지 않는다. 한쪽만 긋고 마지막은 뺀다.
+ * ──────────────────────────────────────────────────────────── */
+
+.gh-facts {
+  display: grid;
+}
+
+/*
+ * ⚠ 좁은 화면에서는 **표처럼** 읽는다 — 항목명 왼쪽, 값 오른쪽.
+ *   세 줄이 같은 자리에서 끝나야 눈이 값만 따라 내려갈 수 있다.
+ */
+.gh-fact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-block: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.gh-fact:last-child {
+  border-bottom: 0;
+}
+
+/* 항목명. 값이 주인공이므로 이쪽은 물러선다. */
+.gh-fact dt {
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+/*
+ * 값.
+ * ⚠ 토큰 체계의 `--fs-h1`(1.75rem)보다 크게 잡는다. 제목이 아니라 **수치 표시**라,
+ *   본문 제목과 같은 크기면 밴드가 그냥 글 한 줄로 읽힌다. `--fs-hero` 와 같은
+ *   방식(clamp)이라 이 파일 안에서 예외가 아니다.
+ * ⚠ 강조색은 `--color-primary` **하나**다. 칸마다 다른 색을 주면 세 값이 서로
+ *   다른 종류의 정보처럼 보인다 — 셋은 같은 종류다.
+ */
+.gh-fact dd {
+  font-size: clamp(1.9rem, 1.25rem + 2.2vw, 2.6rem);
+  font-weight: var(--fw-black);
+  letter-spacing: var(--ls-title);
+  line-height: 1.1;
+  color: var(--color-primary);
+  /* 숫자 폭이 들쭉날쭉하면 세 칸이 흔들려 보인다. */
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * 단위.
+ * ⚠ 값과 같은 크기로 두면 '1,000원' 에서 눈이 '원' 까지 끌려가 수가 흐려진다.
+ *   작고 연하게 두되 **같은 색**을 쓴다 — 색까지 바꾸면 딸린 말이 아니라 다른
+ *   정보로 읽힌다.
+ */
+.gh-fact-unit {
+  margin-left: 0.15em;
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-semibold);
+  letter-spacing: normal;
+}
+
+@media (min-width: 640px) {
+  .gh-facts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  /*
+   * 넓은 화면에서는 세 칸이 나란히 선다. **항목명이 위, 값이 아래**다.
+   * ⚠ `column-reverse` 를 썼다가 되돌렸다 — 값이 위로 올라가 "1,000원" 을 먼저 읽고
+   *   그게 무엇인지는 아래에서 확인하게 됐는데, 이 밴드를 고친 이유가 바로 그
+   *   순서를 없애는 것이었다. 좁은 화면(항목명 왼쪽 → 값 오른쪽)과도 방향이 같다.
+   */
+  .gh-fact {
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding-block: var(--space-2);
+    padding-inline: var(--space-5);
+    border-bottom: 0;
+    /* 세로 구획선. 첫 칸 왼쪽에는 긋지 않는다 — 바깥 테두리가 되어 버린다. */
+    border-left: 1px solid var(--color-border);
+  }
+  .gh-fact:first-child {
+    border-left: 0;
+    padding-inline-start: 0;
+  }
+}
+
+.gh-facts-note {
+  margin-top: var(--space-4);
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+  line-height: var(--lh-body);
+  word-break: keep-all;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 4. 안내 — 조용한 한 단
+ * ──────────────────────────────────────────────────────────── */
+
+.gh-note {
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid var(--color-border);
+  /*
+   * ⚠ 왼쪽 강조 세로 띠(`border-left: 3px solid var(--color-primary)`)를 걷어냈다
+   *   — 장식이 과하고 기성 템플릿처럼 보인다는 지적(사용자, 2026-09-16).
+   *   같은 지적이 `.faq-item[open]` 에서 한 번 더 있었다(components.css).
+   *   안내라는 사실은 제목("읽기 전에 알아 두면 좋은 것")과 surface 배경이 이미
+   *   전하므로, 띠를 더해도 읽히는 정보가 늘지 않는다. 다시 넣지 않는다.
+   */
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+.gh-note h2 {
+  font-size: var(--fs-h2);
+}
+
+.gh-note p {
+  margin-top: var(--space-3);
+  max-width: 64ch;
+  color: var(--color-text-muted);
+  line-height: var(--lh-body);
+  word-break: keep-all;
+}
+
+/*
+ * 안내 두 가지.
+ * ⚠ 줄글 두 문단을 항목 둘로 나눈 자리다. 두 문단은 각각 다른 것을 말하고 있었는데
+ *   같은 크기 같은 색으로 이어져 있어 **한 덩어리로 보였다**(사용자 지적).
+ * ⚠ 640px 부터 2열이다. 두 항목이 나란히 서면 '둘' 이라는 사실이 한눈에 들어온다.
+ *   좁은 화면에서는 세로로 쌓되 항목 사이 간격을 넉넉히 줘 경계를 만든다.
+ */
+.gh-note-list {
+  display: grid;
+  gap: var(--space-5);
+  margin-top: var(--space-4);
+  list-style: none;
+  padding: 0;
+}
+
+@media (min-width: 640px) {
+  .gh-note-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-6);
+  }
+}
+
+/*
+ * 항목 제목 — 본문의 첫 문장을 올린 것이다.
+ * ⚠ `<h3>` 가 아니라 `<p>` 다. 이 절의 제목은 위의 `<h2>` 하나이고, 두 항목은
+ *   목차에 오를 만한 절이 아니다. 제목처럼 **보이게** 하되 문서 구조는 늘리지 않는다.
+ * ⚠ `.gh-note p` 의 muted 를 되돌린다 — 제목이 본문보다 연하면 위계가 뒤집힌다.
+ */
+.gh-note-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: 0;
+  font-size: var(--fs-h3);
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+}
+
+.gh-note-head + p {
+  margin-top: var(--space-2);
+}
+
+/*
+ * ⚠ 크기를 `em` 으로 잡아 제목 글자와 함께 움직이게 한다. px 로 박으면 사용자가
+ *   글자를 키웠을 때 아이콘만 제자리에 남아 균형이 깨진다.
+ * ⚠ `flex: none` — 한글 제목이 두 줄로 접힐 때 아이콘이 눌려 찌그러지는 것을 막는다.
+ */
+.gh-note-icon {
+  flex: none;
+  width: 1.15em;
+  height: 1.15em;
+  color: var(--color-primary);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 스크롤 리빌
+ *
+ * 근거: 카드가 스크롤과 함께 하나씩 도착해 **읽는 순서**를 만든다. 다섯 장이 한꺼번에
+ * 박혀 있는 것이 지금 화면이 밋밋한 이유 중 하나다.
+ *
+ * ⚠ JS 가 0줄이다. 스크롤 이벤트도, IntersectionObserver 도 쓰지 않는다.
+ * ⚠ `@supports` 로 감싼다. 미지원 브라우저에서 선언만 무시되면 애니메이션이 문서
+ *   타임라인에서 **로드 즉시 한 번** 재생돼 화면 밖 카드가 이미 다 끝난 상태가 된다.
+ *   통째로 막아 두는 편이 안전하다 — 못 받는 브라우저는 그냥 정지 화면을 본다.
+ * ⚠ 범위를 entry 안에서 끝낸다. 요소가 화면에 다 들어오기 전에 완성돼야 읽는 도중에
+ *   글자가 흐려지는 일이 없다.
+ * ──────────────────────────────────────────────────────────── */
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .gh-cell,
+    .gh-fact {
+      animation-name: gh-slide;
+      animation-fill-mode: both;
+      animation-timing-function: linear;
+      animation-timeline: view();
+      animation-range: entry 6% entry 62%;
+    }
+  }
+}

@@ -300,14 +300,65 @@ _KIND_TO_SHORTS_CD: dict[str, Optional[str]] = {
 
 VIDEO_GAMES = ("lotto", "pension")
 
+# ── 2026-09-17 추가: 검색(q) · 정렬(sort) · 기간(period) ───────────────
+#
+# 셋 다 생략하면 종전과 같은 결과가 나온다(하위호환). 프론트가 먼저 배포돼도 화면이
+# 깨지지 않아야 한다는 계약의 요구가 여기서 온다.
+
+VIDEO_SORTS = ("latest", "views")
+
+# sort → ORDER BY 절.
+#
+# ★ **정렬 키를 끝까지 확정한다.** 첫 키만으로 줄을 세우면 동률인 행들의 순서를 DB 가
+# 그때그때 정해, 페이지 경계에서 같은 영상이 두 번 보이거나 아예 빠진다. `video_id` 는
+# 유일하므로 마지막 키로 두면 순서가 항상 하나로 정해진다.
+#
+# ★ `views` 의 `NULLS LAST` 가 핵심이다. Postgres 는 DESC 에서 NULL 을 **가장 먼저**
+# 놓는 것이 기본이라, 그냥 두면 조회수를 **모르는** 영상이 조회수 1위 자리를 차지한다.
+# 워커가 조회수를 아직 못 채운 행이 목록 맨 위에 오는 것은 사실을 왜곡하는 표시다.
+#
+# ⚠ 이 값은 f-string 으로 SQL 에 직접 박힌다. **반드시 이 dict 를 거친 값만** 넣는다 —
+# 라우터가 허용값 밖을 422 로 거르고, 여기서 다시 KeyError 로 막는 2중 구조다.
+_VIDEO_ORDER_BY: dict[str, str] = {
+    "latest": "published_dttm DESC, video_id DESC",
+    "views": "view_cnt DESC NULLS LAST, published_dttm DESC, video_id DESC",
+}
+
+# period → 최근 며칠. all 은 기간 제한 없음(None). `news` 의 `_PERIOD_DAYS` 와 같은
+# 방식이지만 **허용값 목록이 다르다** — 계약이 영상에는 1w/1m/3m/all 넷만 열었다.
+# 목록을 공유하지 않는 이유가 그것이다. 한쪽을 늘리면 다른 쪽이 조용히 따라 늘어난다.
+VIDEO_PERIOD_DAYS: dict[str, Optional[int]] = {
+    "1w": 7,
+    "1m": 30,
+    "3m": 90,
+    "all": None,
+}
+
+# 검색어 길이 상한. 계약이 정한 값이다.
+#
+# 상한을 두는 이유는 ILIKE '%...%' 가 인덱스를 타지 못해 **전건 스캔**이기 때문이다.
+# 긴 문자열일수록 행마다의 비교 비용이 커지는데, 그렇게 긴 검색어가 실제로 맞는 영상을
+# 찾아 줄 가능성은 없다 — 비용만 남는다.
+VIDEO_Q_MAX_LENGTH = 50
+
 
 def _video_where(
-    kind: str, round_no: Optional[int], game: Optional[str]
+    kind: str,
+    round_no: Optional[int],
+    game: Optional[str],
+    q: Optional[str] = None,
+    since_days: Optional[int] = None,
 ) -> tuple[str, list]:
     """영상 조회 필터를 count 와 list 가 공유한다.
 
     `total` 이 '필터 적용 후' 건수여야 하므로 두 쿼리가 반드시 같은 WHERE 를 써야 한다
     (페이지네이션 봉투 규약). 한 곳에서 만들어 양쪽에 넘긴다 — `_news_where` 와 같은 이유다.
+
+    `q`·`since_days` 는 2026-09-17 에 더했고 **기본값이 있어 생략하면 종전과 같다.**
+    기존 호출부를 그대로 두기 위해서다(계약이 요구한 하위호환).
+
+    표시 조건(`_VIDEO_VISIBLE`)은 언제나 **맨 먼저** 걸린다. 검색·기간은 그 위에 얹히는
+    것이지 그것을 대신하지 않는다 — 검색으로 찾아내면 비공개 영상이 나오는 일은 없다.
     """
     clauses: list[str] = [_VIDEO_VISIBLE]
     params: list = []
@@ -324,6 +375,29 @@ def _video_where(
     if round_no is not None:
         clauses.append("round_no = %s")
         params.append(round_no)
+
+    if q:
+        # 제목·채널명·키워드 중 하나라도 대소문자 무시 포함. `_news_where` 와 같은
+        # 규칙이지만 **대상 컬럼이 다르다** — 영상에는 요약문(`summary_desc`)이 없고
+        # 대신 채널명으로 찾고 싶다는 요구가 있었다(계약의 q 항목).
+        #
+        # `keyword_list` 는 text[] 라 unnest 해 각 원소를 검사한다.
+        #
+        # ⚠ `channel_nm` 이 NULL 인 행은 그 항이 NULL 이 되지만, OR 로 묶여 있어
+        # 제목이나 키워드가 맞으면 그대로 걸린다. 셋 다 맞지 않으면 결과가 NULL 이고
+        # WHERE 는 NULL 을 통과시키지 않으므로 의도대로 제외된다.
+        pattern = f"%{_like_escape(q)}%"
+        clauses.append(
+            "(title_nm ILIKE %s OR channel_nm ILIKE %s "
+            "OR EXISTS (SELECT 1 FROM unnest(keyword_list) k WHERE k ILIKE %s))"
+        )
+        params += [pattern, pattern, pattern]
+
+    if since_days is not None:
+        # `published_dttm` 은 NOT NULL 이라 뉴스와 달리 '발행일을 모르는 행' 을 따로
+        # 걱정할 필요가 없다.
+        clauses.append("published_dttm >= now() - make_interval(days => %s)")
+        params.append(since_days)
 
     return " WHERE " + " AND ".join(clauses), params
 
@@ -357,8 +431,15 @@ async def count_videos(
     kind: str = "all",
     round_no: Optional[int] = None,
     game: Optional[str] = None,
+    q: Optional[str] = None,
+    since_days: Optional[int] = None,
 ) -> int:
-    where, params = _video_where(kind, round_no, game)
+    """`total` 은 **필터 적용 후** 건수다.
+
+    검색·기간을 `list_videos` 에만 넘기고 여기를 빠뜨리면, 화면은 3건을 보여주면서
+    "총 611건" 이라고 말하는 상태가 된다. 두 함수가 같은 인자를 받는 이유다.
+    """
+    where, params = _video_where(kind, round_no, game, q, since_days)
     row = await _fetchone(
         pool, f"SELECT count(*) AS c FROM lotto_video{where}", tuple(params)
     )
@@ -373,20 +454,28 @@ async def list_videos(
     kind: str = "all",
     round_no: Optional[int] = None,
     game: Optional[str] = None,
+    q: Optional[str] = None,
+    since_days: Optional[int] = None,
+    sort: str = "latest",
 ) -> list[dict]:
-    """최신 영상이 먼저.
+    """기본은 최신 영상이 먼저(`sort='latest'`).
 
     `published_dttm` 은 NOT NULL 이라 뉴스와 달리 `NULLS LAST` 가 필요 없다. 같은 시각이면
     `video_id` 로 순서를 확정한다 — 정렬이 불안정하면 페이지 경계에서 같은 영상이 두 번
-    보이거나 아예 빠진다.
+    보이거나 아예 빠진다. `sort='views'` 의 정렬 규칙은 `_VIDEO_ORDER_BY` 주석에 있다.
+
+    ⚠ `sort` 는 SQL 에 문자열로 들어가므로 **화이트리스트 dict 를 반드시 거친다.**
+    허용값 밖이면 여기서 KeyError 로 죽는다 — 조용히 기본 정렬로 넘어가면 호출자는
+    자기가 요청한 정렬이 무시된 것을 끝내 알지 못한다.
     """
-    where, params = _video_where(kind, round_no, game)
+    where, params = _video_where(kind, round_no, game, q, since_days)
+    order_by = _VIDEO_ORDER_BY[sort]
     rows = await _fetchall(
         pool,
         f"""
         SELECT {_VIDEO_COLUMNS}
           FROM lotto_video{where}
-         ORDER BY published_dttm DESC, video_id DESC
+         ORDER BY {order_by}
          LIMIT %s OFFSET %s
         """,
         (*params, size, (page - 1) * size),

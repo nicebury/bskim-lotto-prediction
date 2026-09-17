@@ -127,10 +127,14 @@ worker/
 | 이름 | 기본 크론 (KST) | 환경변수 |
 |------|----------------|---------|
 | `lotto` | 매주 토 20:40 · 20:50 · 21:00 | `LOTTO_CRON` |
-| `news` | 매시간 | `NEWS_CRON` |
-| `video_channel` | 6시간마다 + 토 21:20 · 21:50 · 22:20 | `YOUTUBE_CHANNEL_CRON` |
-| `video_search` | 4시간마다 | `YOUTUBE_SEARCH_CRON` |
+| `news` | 매일 07 · 12 · 17 · 22시 | `NEWS_CRON` |
+| `video_channel` | 매일 07 · 12 · 17 · 22시 | `YOUTUBE_CHANNEL_CRON` |
+| `video_search` | 매일 07:10 · 12:10 · 17:10 · 22:10 | `YOUTUBE_SEARCH_CRON` |
 | `video_refresh` | 매일 04:30 | `YOUTUBE_REFRESH_CRON` |
+
+새벽을 비운 것은 그 시간대에 신규 기사·영상이 거의 없기 때문이고, **22시를 남긴 것은 토요일 추첨(20:35) 직후 콘텐츠가 21:00~22:30 에 몰리기 때문**이다. `lotto` 잡을 옮기지 않는 이유도 같다 — 추첨 직후를 노려야 그 주 회차를 당일에 얻는다.
+
+`video_search` 의 분을 10 으로 어긋낸 것은 정시의 채널 잡과 `videos.list`·LLM 호출이 겹치지 않게 하기 위해서다(락이 잡별이라 두 잡이 동시에 돈다).
 
 여러 크론을 **`;` 로 잇는다** — `40,50 20 * * sat;0 21 * * sat`. `OrTrigger` 로 합쳐지고 잡은 하나로 유지된다. 추첨 방송은 20:35 에 시작하지만 끝나는 시각이 회차마다 달라 세 번 시도한다. 먼저 결과가 보이는 실행이 가져가고 나머지는 0건 성공으로 끝난다.
 
@@ -224,6 +228,19 @@ UPDATE lotto_video SET refreshed_dttm = now() - interval '26 days';
 ```sql
 SELECT count(*) FROM lotto_video WHERE refreshed_dttm < now() - interval '30 days';
 ```
+
+## 수집분 재검증
+
+판정 기준(`llm_judge` 프롬프트)을 바꾸면 **이미 저장된 행은 다시 판단될 기회가 없다** — UNIQUE 제약 때문에 재수집 시 `DO NOTHING` 으로 죽는다. 기준을 강화했다면 기존 데이터에도 소급 적용해야 목록이 일관된다.
+
+```bash
+uv run python scripts/recheck_collected.py            # 드라이런(기본). 무엇이 지워질지만 본다
+uv run python scripts/recheck_collected.py --apply    # 실제 삭제
+```
+
+드라이런이 기본인 이유는 삭제가 되돌릴 수 없고, 프롬프트를 바꾼 직후에는 과잉 차단이 가장 위험하기 때문이다. **전량이 차단 판정되면 실행을 멈춘다** — 프롬프트나 응답 파싱이 깨졌다는 신호이지 정말 전부 지워야 한다는 뜻이 아니다(`video_refresh` 의 "응답 0건이면 삭제하지 않는다" 안전판과 같은 논리).
+
+비용은 900건 기준 약 16원이다.
 
 ## 초기 데이터 적재
 

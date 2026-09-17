@@ -260,3 +260,295 @@ async def test_표시_조건이_실제로_거른다(require_lotto_video):
             # ★ 연금복권 330회가 로또 330회로 새지 않는다
             assert await visible(rnd=1238, game="lotto") == {"ok-normal", "ok-shorts"}
             assert await visible(rnd=330, game="pension") == {"ok-unknown"}
+
+
+# ── 2026-09-17 추가: 검색(q) · 정렬(sort) · 기간(period) ──────────────────
+#
+# 계약(api-contract.md 영상 절 '2026-09-17 추가')이 요구한 것은 셋이다.
+#   ① q — title_nm·channel_nm·keyword_list 중 하나라도 대소문자 무시 포함, 50자 초과 422
+#   ② sort — latest | views. views 는 NULLS LAST → published_at → id
+#   ③ period — 1w | 1m | 3m | all
+# 그리고 **셋 다 생략하면 종전과 같아야 한다**(하위호환). 마지막 항목이 가장 깨지기 쉬워
+# 따로 테스트를 둔다 — 새 기능을 더하다 기존 호출의 결과를 바꾸면 프론트가 먼저
+# 배포돼 있는 동안 화면이 조용히 달라진다.
+
+
+def test_셋_다_생략하면_종전과_같은_where_다():
+    """★ 하위호환. 새 인자의 기본값이 기존 결과를 건드리면 안 된다."""
+    before_where, before_params = repo._video_where("all", 1238, "lotto")
+    after_where, after_params = repo._video_where("all", 1238, "lotto", None, None)
+
+    assert before_where == after_where
+    assert before_params == after_params
+    # 빈 문자열·공백도 '검색 안 함' 과 같아야 한다 — 라우터가 strip 해서 None 으로
+    # 바꿔 보내지만, repository 자체도 falsy 를 필터로 치지 않는다.
+    empty_where, empty_params = repo._video_where("all", 1238, "lotto", "", None)
+    assert empty_where == before_where and empty_params == before_params
+
+
+def test_q_는_제목_채널_키워드_셋을_본다():
+    """계약이 정한 검색 대상은 셋이다. 뉴스와 달리 요약문이 없고 채널명이 있다."""
+    where, params = repo._video_where("all", None, None, "로또", None)
+
+    assert "title_nm ILIKE %s" in where
+    assert "channel_nm ILIKE %s" in where
+    assert "unnest(keyword_list)" in where
+    # 세 항이 OR 로 묶여 하나의 괄호 안에 있어야 한다. AND 로 붙으면 셋을 모두 만족하는
+    # 영상만 남아 검색이 사실상 죽는다.
+    assert "OR" in where
+    # 패턴 하나를 세 자리에 똑같이 넘긴다
+    assert params == ["%로또%", "%로또%", "%로또%"]
+
+
+def test_q_의_와일드카드가_리터럴로_막힌다():
+    """`%` 하나가 전 영상과 매치하면 그것은 검색이 아니다.
+
+    `_news_where` 와 같은 `_like_escape` 를 쓴다 — 검색 규칙이 같다고 계약에 적혀 있으면
+    이스케이프 규칙도 같아야 한다. 한쪽만 고치면 같은 입력이 두 화면에서 다르게 동작한다.
+    """
+    _, params = repo._video_where("all", None, None, "100%_할인", None)
+    assert params[0] == r"%100\%\_할인%"
+
+
+def test_표시_조건은_검색_기간과_함께_써도_살아_있다():
+    """★ 검색으로 찾아내면 비공개 영상이 나오는 일은 없어야 한다."""
+    where, _ = repo._video_where("shorts", 1238, "lotto", "당첨", 7)
+    assert "privacy_status_cd = 'public'" in where
+    assert "embeddable_cd = 'yes'" in where
+    assert "made_for_kids_cd = 'no'" in where
+    # 모든 조건은 AND 로 결합한다(계약).
+    assert " OR privacy" not in where
+
+
+def test_기간은_published_dttm_을_기준으로_자른다():
+    where, params = repo._video_where("all", None, None, None, 7)
+    assert "published_dttm >= now() - make_interval(days => %s)" in where
+    assert params == [7]
+    # all(=None) 이면 기간 절이 아예 붙지 않는다
+    all_where, all_params = repo._video_where("all", None, None, None, None)
+    assert "make_interval" not in all_where and all_params == []
+
+
+def test_period_매핑이_계약의_값과_같다():
+    """1w=7 · 1m=30 · 3m=90 · all=무제한. 뉴스의 목록과 **공유하지 않는다**."""
+    assert repo.VIDEO_PERIOD_DAYS == {"1w": 7, "1m": 30, "3m": 90, "all": None}
+    # 뉴스에만 있는 값이 영상에 새어 들어오지 않았는지 본다. 목록을 공유하면 한쪽을
+    # 늘릴 때 다른 쪽이 조용히 따라 늘어난다.
+    assert "2w" not in repo.VIDEO_PERIOD_DAYS
+    assert "6m" not in repo.VIDEO_PERIOD_DAYS
+
+
+def test_정렬_키가_끝까지_확정된다():
+    """★ 동률의 순서를 DB 에 맡기면 페이지 경계에서 중복·누락이 생긴다."""
+    for sort in repo.VIDEO_SORTS:
+        order = repo._VIDEO_ORDER_BY[sort]
+        # 유일 컬럼으로 끝나야 순서가 하나로 정해진다
+        assert order.endswith("video_id DESC"), sort
+
+    assert repo._VIDEO_ORDER_BY["latest"] == "published_dttm DESC, video_id DESC"
+
+    views = repo._VIDEO_ORDER_BY["views"]
+    # ★ NULLS LAST 가 없으면 조회수를 **모르는** 영상이 1위 자리에 온다.
+    # Postgres 는 DESC 에서 NULL 을 가장 먼저 놓는 것이 기본이다.
+    assert "view_cnt DESC NULLS LAST" in views
+    # 동률은 최신순 → id 순으로 푼다
+    assert views.index("view_cnt") < views.index("published_dttm") < views.index("video_id")
+
+
+def test_허용값_밖의_sort_는_조용히_넘어가지_않는다():
+    """기본 정렬로 슬쩍 넘어가면 호출자는 자기 요청이 무시된 것을 끝내 알지 못한다.
+
+    라우터가 422 로 먼저 거르지만, repository 를 직접 부르는 경로에서도 막혀야 한다.
+    이 값은 f-string 으로 SQL 에 박히므로 화이트리스트를 거치는 것 자체가 방어다.
+    """
+    with pytest.raises(KeyError):
+        repo._VIDEO_ORDER_BY["oldest"]
+    with pytest.raises(KeyError):
+        repo._VIDEO_ORDER_BY["view_cnt DESC; DROP TABLE lotto_video"]
+
+
+@pytest.mark.integration
+async def test_알_수_없는_sort_와_period_는_422(client):
+    assert (await client.get("/api/videos?sort=oldest")).status_code == 422
+    assert (await client.get("/api/videos?sort=views%20DESC")).status_code == 422
+    # ⚠ 2w·6m 은 **뉴스에는 있고 영상에는 없는** 값이다. 목록을 공유하지 않는다는
+    # 결정이 실제로 지켜지는지 여기서 확인한다.
+    assert (await client.get("/api/videos?period=2w")).status_code == 422
+    assert (await client.get("/api/videos?period=6m")).status_code == 422
+
+    for sort in repo.VIDEO_SORTS:
+        assert (await client.get(f"/api/videos?sort={sort}")).status_code == 200
+    for period in repo.VIDEO_PERIOD_DAYS:
+        assert (await client.get(f"/api/videos?period={period}")).status_code == 200
+
+
+@pytest.mark.integration
+async def test_q_는_50자까지다(client):
+    """상한을 두는 이유는 ILIKE '%…%' 가 전건 스캔이기 때문이다."""
+    assert (await client.get("/api/videos?q=" + "가" * 50)).status_code == 200
+    assert (await client.get("/api/videos?q=" + "가" * 51)).status_code == 422
+
+    # 길이는 **공백을 턴 뒤** 잰다. 앞뒤 공백 때문에 거절당하는 것은 사용자가 이해할
+    # 수 없는 거절이다.
+    padded = "  " + "가" * 50 + "  "
+    assert (await client.get("/api/videos", params={"q": padded})).status_code == 200
+
+
+@pytest.mark.integration
+async def test_공백뿐인_q_는_검색하지_않은_것과_같다(client):
+    """검색창을 비웠는데 공백 한 칸이 남아 아무것도 안 나오는 일을 막는다."""
+    plain = (await client.get("/api/videos")).json()
+    blank = (await client.get("/api/videos", params={"q": "   "})).json()
+    assert blank["total"] == plain["total"]
+    assert [i["id"] for i in blank["items"]] == [i["id"] for i in plain["items"]]
+
+
+@pytest.mark.integration
+async def test_새_파라미터에도_캐시_상한이_붙는다(client):
+    """정책 제약은 어떤 질의 경로로 들어와도 똑같이 걸려야 한다."""
+    response = await client.get("/api/videos?q=로또&sort=views&period=1w")
+    cache = response.headers.get("cache-control", "")
+    max_age = int(cache.split("max-age=")[1].split(",")[0])
+    assert 0 < max_age <= 24 * 60 * 60
+
+
+@pytest.mark.integration
+async def test_검색_정렬_기간이_실제로_동작한다(require_lotto_video):
+    """문자열 검사가 아니라 **결과가 달라지는지** 본다.
+
+    `_video_where` 가 `>=` 대신 `<=` 를 쓰거나 OR 을 AND 로 붙여도 앞의 문자열 테스트는
+    통과한다. 실제 행을 넣고 무엇이 남는지 봐야 잡힌다. `lotto_video` 는 **워커 소유라
+    건드리지 않으므로** 같은 모양의 임시 테이블(세션 한정)에 repository 가 조립한 SQL 을
+    그대로 돌린다 — 위 `test_표시_조건이_실제로_거른다` 와 같은 방식이다.
+
+    ★ 여기서만 확인할 수 있는 것이 하나 있다. **`view_cnt` 가 NULL 인 행**이다. 개발 DB
+    에는 워커가 조회수를 전부 채워 둬 NULL 이 하나도 없어, 실데이터로는 `NULLS LAST` 가
+    동작하는지 영원히 알 수 없다.
+    """
+    import psycopg
+
+    from app.config import settings
+
+    # (key, title, channel, keywords, views, 며칠 전, shorts)
+    rows = [
+        ("v-old-top", "1200회 분석", "로또연구소", ["분석"], 999_999, 100, "unlikely"),
+        ("v-new-mid", "1238회 결과", "복권TV", ["결과"], 5_000, 3, "unlikely"),
+        ("v-new-low", "꿈해몽 이야기", "로또연구소", ["꿈"], 10, 3, "likely"),
+        ("v-new-null", "조회수 미상", "복권TV", ["미상"], None, 1, "unlikely"),
+        ("v-mid-hit", "지난달 영상", "잡담채널", ["로또연구소"], 70_000, 20, "unlikely"),
+    ]
+
+    async with await psycopg.AsyncConnection.connect(settings.database_dsn) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                CREATE TEMP TABLE lotto_video (
+                    video_id bigint, provider_video_key text, title_nm text,
+                    channel_nm text, thumbnail_url text, published_dttm timestamptz,
+                    duration_sec int, view_cnt bigint, shorts_estimate_cd text,
+                    made_for_kids_cd text, embeddable_cd text, privacy_status_cd text,
+                    round_no int, game_cd text, keyword_list text[]
+                )
+                """
+            )
+            for i, (key, title, ch, kws, views, days, sh) in enumerate(rows, 1):
+                await cur.execute(
+                    "INSERT INTO lotto_video VALUES "
+                    "(%s,%s,%s,%s,null,now() - make_interval(days => %s),"
+                    "null,%s,%s,'no','yes','public',null,'lotto',%s)",
+                    (i, key, title, ch, days, views, sh, kws),
+                )
+
+            async def query(*, q=None, days=None, sort="latest", kind="all") -> list[str]:
+                where, params = repo._video_where(kind, None, None, q, days)
+                order_by = repo._VIDEO_ORDER_BY[sort]
+                await cur.execute(
+                    f"SELECT provider_video_key FROM lotto_video{where} "
+                    f"ORDER BY {order_by}",
+                    tuple(params),
+                )
+                return [r[0] for r in await cur.fetchall()]
+
+            # ── q — 세 컬럼을 각각 맞힌다 ─────────────────────────────
+            # 제목으로
+            assert await query(q="꿈해몽") == ["v-new-low"]
+            # 채널명으로 (뉴스에는 없는 대상이다)
+            assert set(await query(q="복권TV")) == {"v-new-mid", "v-new-null"}
+            # 키워드 배열로. ★ 'v-mid-hit' 는 제목·채널이 아니라 **키워드**에만
+            # '로또연구소' 가 있다 — unnest 검사가 죽으면 이 행이 빠진다.
+            assert set(await query(q="로또연구소")) == {
+                "v-old-top", "v-new-low", "v-mid-hit",
+            }
+            # 대소문자 무시
+            assert await query(q="복권tv") == await query(q="복권TV")
+            # 와일드카드는 리터럴이다 — '%' 가 전건을 긁어오면 안 된다
+            assert await query(q="%") == []
+
+            # ── period — 경계를 넘는 행이 정확히 떨어진다 ─────────────
+            assert set(await query(days=7)) == {"v-new-mid", "v-new-low", "v-new-null"}
+            assert set(await query(days=30)) == {
+                "v-new-mid", "v-new-low", "v-new-null", "v-mid-hit",
+            }
+            assert len(await query(days=90)) == 4  # 100일 전 영상은 여전히 빠진다
+            assert len(await query()) == 5  # all 이면 전부
+
+            # ── sort ────────────────────────────────────────────────
+            # latest — 최신이 먼저
+            assert (await query(sort="latest"))[0] == "v-new-null"
+            # views — 조회수 내림차순, ★ NULL 은 **맨 뒤**
+            assert await query(sort="views") == [
+                "v-old-top", "v-mid-hit", "v-new-mid", "v-new-low", "v-new-null",
+            ]
+
+            # ── AND 결합 — 계약이 정한 것 ────────────────────────────
+            # "최근 1주 인기" = period=1w & sort=views. 최근 7일 것만 남고 그 안에서
+            # 현재 조회수로 줄을 선다. **7일간 늘어난 조회수가 아니다.**
+            assert await query(days=7, sort="views") == [
+                "v-new-mid", "v-new-low", "v-new-null",
+            ]
+            # q 와 kind 도 함께 AND 로 걸린다
+            assert await query(q="로또연구소", kind="shorts") == ["v-new-low"]
+            assert await query(q="로또연구소", days=7) == ["v-new-low"]
+
+
+@pytest.mark.integration
+async def test_total_은_검색_적용_후_건수다(client):
+    """화면이 3건을 보여주면서 '총 611건' 이라고 말하면 안 된다.
+
+    `count_videos` 에 필터를 넘기는 것을 빠뜨리면 정확히 그 상태가 된다 — items 는
+    줄어들고 total 만 그대로다.
+    """
+    plain = (await client.get("/api/videos?size=1")).json()
+    # 어떤 영상에도 없을 문자열로 검색하면 total 이 0 이어야 한다
+    narrowed = (await client.get("/api/videos?size=1&q=" + "gsQx7" * 5)).json()
+
+    assert narrowed["total"] == 0
+    assert narrowed["items"] == []
+    # 데이터가 아예 없는 개발 환경에서는 둘 다 0 이라 위 단언이 저절로 성립한다.
+    # 그 경우를 구분해 남긴다 — 조용히 통과해 초록불만 켜지면 아무것도 검증하지 않은 것이다.
+    if plain["total"] == 0:
+        pytest.skip("lotto_video 가 비어 있어 total 축소를 확인할 수 없습니다.")
+    assert narrowed["total"] < plain["total"]
+
+
+@pytest.mark.integration
+async def test_실데이터에서_조회수_정렬과_기간이_맞는다(client):
+    """개발 DB 의 실제 영상으로 본다. 임시 테이블이 흉내 낸 것과 같은지 대조하는 셈이다."""
+    body = (await client.get("/api/videos?sort=views&size=100")).json()
+    if body["total"] == 0:
+        pytest.skip("lotto_video 가 비어 있습니다.")
+
+    views = [i["views"] for i in body["items"]]
+    # None 은 맨 뒤에 몰려 있어야 한다
+    known = [v for v in views if v is not None]
+    assert views[: len(known)] == known, "NULL 조회수가 앞쪽에 섞였습니다"
+    assert known == sorted(known, reverse=True)
+
+    # period 는 total 을 좁히기만 한다 (1w ⊆ 1m ⊆ 3m ⊆ all)
+    totals = {}
+    for period in ("1w", "1m", "3m", "all"):
+        totals[period] = (await client.get(f"/api/videos?period={period}&size=1")).json()[
+            "total"
+        ]
+    assert totals["1w"] <= totals["1m"] <= totals["3m"] <= totals["all"]
+    assert totals["all"] == body["total"]

@@ -17,9 +17,9 @@ import { API_BASE_URL } from '@/lib/env'
  * 그래서 **프론트 서버가 중계한다.** 브라우저는 같은 출처(`/api/admin/*`)로만 말하고,
  * 백엔드 주소는 브라우저에 노출되지 않는다.
  *
- * ⚠ **프론트는 `ADMIN_TOKEN` 을 모른다.** 토큰은 로그인 요청 본문으로 지나갈 뿐이고,
- *   여기서 저장하거나 로그에 남기지 않는다. 인증의 주체는 백엔드다 — 두 곳이 각자
- *   인증하면 규칙이 갈라진다.
+ * ⚠ **프론트는 자격증명을 모른다.** 아이디·비밀번호·OTP 는 로그인 요청 본문으로 지나갈
+ *   뿐이고, 여기서 저장하거나 로그에 남기지 않는다. 인증의 주체는 백엔드다 — 두 곳이
+ *   각자 인증하면 규칙이 갈라진다.
  *
  * ⚠ 응답의 `Set-Cookie` 를 **그대로 흘려보낸다.** 도메인이 프론트로 바뀌므로 브라우저는
  *   이 사이트의 쿠키로 저장하고, 다음 요청에 자동으로 붙는다.
@@ -54,6 +54,21 @@ async function proxy(request: NextRequest, path: string[]) {
   const cookie = request.headers.get('cookie')
   if (cookie) headers.set('cookie', cookie)
   if (method === 'POST') headers.set('Content-Type', 'application/json')
+
+  /*
+    ⚠ **원래 요청이 HTTPS 였는지 백엔드에 알린다**(2026-08-31 계약 정정).
+      백엔드는 세션 쿠키에 `Secure` 를 붙일지 정해야 하는데, **여기서 중계하기 때문에**
+      백엔드에 닿는 요청은 내부망 평문 HTTP 다 — 사용자가 HTTPS 를 써도 백엔드는 알 방법이
+      없어 `Secure` 가 영영 안 붙는다. 화면은 멀쩡히 동작해 증상이 없는 종류의 사고다.
+
+      브라우저가 실제로 쓴 스킴을 그대로 전달한다. 프록시가 여럿이면 앞단이 이미 붙였을
+      수 있으므로 **그 값을 먼저 존중하고**, 없을 때만 우리가 아는 스킴을 쓴다.
+    ⚠ 스킴을 **요청 헤더에서 지어내지 않는다.** `x-forwarded-proto` 는 클라이언트가 위조할
+      수 있으므로, 앞단 프록시가 붙인 것을 믿을 수 있는 배포에서만 그대로 넘긴다.
+      우리가 만들어 넣는 값은 `request.nextUrl.protocol` — 이 서버가 아는 사실이다.
+  */
+  const forwardedProto = request.headers.get('x-forwarded-proto')
+  headers.set('x-forwarded-proto', forwardedProto ?? request.nextUrl.protocol.replace(':', ''))
 
   let upstream: Response
   try {

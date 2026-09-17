@@ -67,6 +67,10 @@ async def payloads(require_lotto_draw: None) -> dict[str, Any]:
                 "number": "/api/lotto/stats/number/15",
                 "news": "/api/news?size=3",
                 "videos": "/api/videos?size=3",
+                # 2026-09-17 에 더한 검색·정렬·기간 경로도 같은 검사를 받는다.
+                # 새 파라미터가 응답의 모양을 바꾸지는 않지만, **넣지 않으면 그 경로만
+                # 금지 필드명·DB 컬럼명·비KST 시각 검사를 피해 간다.**
+                "videos_views": "/api/videos?size=3&sort=views&period=1m",
                 "sitemap": "/api/meta/sitemap-entries",
             }
             out: dict[str, Any] = {}
@@ -78,6 +82,18 @@ async def payloads(require_lotto_draw: None) -> dict[str, Any]:
             r = await c.post("/api/lotto/recommend?strategy=pure_random&sets=2&seed=1")
             assert r.status_code == 200
             out["recommend"] = r.json()
+
+            # 시뮬레이터는 `trials` 최소값으로 부른다 — 여기서 볼 것은 응답의 모양이지
+            # 계산 시간이 아니다. 100,000 을 쓰면 이 검사 하나가 5초를 더 먹는다.
+            r = await c.post(
+                "/api/lotto/simulate", json={"sets": 1, "trials": 10_000, "seed": 1}
+            )
+            assert r.status_code == 200
+            out["simulate"] = r.json()
+
+            r = await c.get("/api/lotto/analyze?numbers=3,11,24,29,38,41")
+            assert r.status_code == 200
+            out["analyze"] = r.json()
 
             # 첫 요청만 20초. 이 하나 때문에 module 스코프를 쓴다.
             r = await c.post(
@@ -230,7 +246,7 @@ def test_모든_시각이_KST_다(payloads):
 # ── ④ 봉투 규약 ───────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("name", ["rounds", "news", "videos"])
+@pytest.mark.parametrize("name", ["rounds", "news", "videos", "videos_views"])
 def test_목록은_페이지네이션_봉투다(payloads, name: str):
     body = payloads[name]
     assert set(body) == {"total", "page", "size", "items"}, name
@@ -256,6 +272,14 @@ def test_정렬이_계약대로다(payloads):
 
     vids = [v["published_at"] for v in payloads["videos"]["items"]]
     assert vids == sorted(vids, reverse=True), "영상은 게시일 내림차순"
+
+    # `sort=views` — 조회수 내림차순이고 **모르는 값(None)은 맨 뒤**다. NULL 을 앞에
+    # 두면 조회수를 모르는 영상이 1위 자리를 차지해 사실을 왜곡한다(Postgres 의 DESC
+    # 기본값이 바로 그렇게 동작하므로 계약이 NULLS LAST 를 명시했다).
+    views = [v["views"] for v in payloads["videos_views"]["items"]]
+    known = [v for v in views if v is not None]
+    assert views[: len(known)] == known, "NULL 조회수가 앞쪽에 섞였습니다"
+    assert known == sorted(known, reverse=True), "영상 조회수순은 내림차순"
 
     # hot/cold 는 횟수 내림차순, 동점이면 번호 오름차순
     hot = payloads["hot_cold"]["hot"]

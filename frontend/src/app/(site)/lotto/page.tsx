@@ -137,7 +137,7 @@ export default async function LottoDashboardPage() {
                 href="/lotto/recommend"
                 data-accent="reco"
               >
-                <h3>통계와 AI 기반 추천번호 생성</h3>
+                <h3>통계 기반 추천번호 생성</h3>
                 <p>
                   랜덤, 번호대 균형, 최근 통계 참고 등 여섯 가지 방식으로 번호를
                   만들고 조합의 성향을 확인합니다.
@@ -249,7 +249,7 @@ export default async function LottoDashboardPage() {
               },
               {
                 label: "주의",
-                text: "최근에 자주 나왔거나 오래 나오지 않았다는 사실은 다음 회차에 아무 영향도 주지 않습니다.",
+                text: "지나간 회차에서 그 번호가 어떻게 지냈는지를 보여 줍니다.",
               },
             ]}
             example="“자주 나온 번호” = 지난 20회에 많이 나왔다는 기록"
@@ -265,8 +265,7 @@ export default async function LottoDashboardPage() {
           </p>
           <p>
             지난 회차에서 각 번호가 몇 번 나왔는지 세어 정리한 자료입니다. 내가
-            늘 쓰는 번호가 그동안 어떻게 지냈는지 확인하는 데 쓰고, 다음 회차를
-            고르는 근거로 쓰지 않습니다.
+            늘 쓰는 번호가 그동안 어떻게 지냈는지 들여다보기 좋습니다.
           </p>
           <p>
             번호를 고르는 방식은{" "}

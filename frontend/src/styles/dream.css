@@ -1,0 +1,240 @@
+/*
+ * 꿈해몽 결과 — 분석 결과 카드(2026-09-17 재설계).
+ * → components/DreamStudio.tsx (DreamEcho · DreamLane)
+ *
+ * ── 이 파일이 생긴 이유 ─────────────────────────────────────────────
+ * 사용자 요청: "정확히 일치하는 단어, 포함된 단어, 뜻이 비슷한 단어 UI 를 보기 좋게".
+ * 종전에는 세 갈래가 소제목 글자로만 나뉘어 훑어볼 때 구분되지 않았다.
+ *
+ * ⚠ **색·선 모양은 새로 만들지 않는다.** components.css 의 `[data-origin]`
+ *   (`--origin-ink` · `--origin-line`)을 그대로 읽는다. 조합 속 볼 테두리(실선/파선/점선)와
+ *   레인 테두리가 같아야 위에서 본 갈래를 아래에서 알아본다. 그래서 이 파일은
+ *   components.css **뒤**에 불러온다.
+ * ⚠ 강조 세로 띠 금지(frontend/CLAUDE.md). 갈래는 아이콘 배지·테두리 선 모양·라벨로 가른다.
+ * ──────────────────────────────────────────────────────────── */
+
+/* ── 적어 주신 꿈 — 형광펜 ──────────────────────────────── */
+
+.dream-echo {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border-radius: 18px;
+  background:
+    radial-gradient(90% 120% at 100% 0%, color-mix(in oklab, var(--svc-dream) 12%, transparent), transparent 60%),
+    var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+
+.dream-echo-label {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.04em;
+  color: var(--color-text-subtle);
+}
+
+.dream-echo p {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: var(--fw-medium);
+  line-height: 1.7;
+  color: var(--color-text);
+  word-break: keep-all;
+}
+
+/*
+ * 형광펜. 글자 아래 절반만 칠한다 — 전체를 칠하면 배지처럼 읽혀 문장이 끊긴다.
+ * ⚠ 색만으로 알리지 않는다. 굵기가 함께 바뀌고, 같은 단어가 아래 레인에 글자로 나온다.
+ */
+.dream-echo mark {
+  padding: 0 2px;
+  border-radius: 3px;
+  background: linear-gradient(
+    transparent 52%,
+    color-mix(in oklab, var(--color-primary) 30%, transparent) 52%
+  );
+  color: inherit;
+  font-weight: var(--fw-bold);
+}
+
+.dream-analysis-lede {
+  margin-bottom: var(--space-4);
+}
+
+/* ── 레인 ─────────────────────────────────────────────── */
+
+.dream-lanes {
+  display: grid;
+  gap: var(--space-3);
+}
+
+@media (min-width: 900px) {
+  .dream-lanes {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
+/*
+ * 레인 카드. 테두리 선 모양이 곧 갈래다(일치 실선 · 포함 파선 · 비슷 점선).
+ * ⚠ 테두리 색은 `--origin-ink` 를 옅게 섞는다. 진하게 두면 세 장이 모두 소리친다.
+ */
+.dream-lane {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+  padding: var(--space-4);
+  border-radius: 18px;
+  border: 1.5px var(--origin-line, solid) color-mix(in oklab, var(--origin-ink) 45%, var(--color-border));
+  background: var(--color-surface);
+}
+
+.dream-lane[data-origin='exact'] {
+  background:
+    radial-gradient(100% 70% at 100% 0%, color-mix(in oklab, var(--color-primary) 8%, transparent), transparent 65%),
+    var(--color-surface);
+}
+
+.dream-lane-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.dream-lane-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--origin-ink) 12%, var(--color-surface));
+  color: var(--origin-ink);
+}
+
+.dream-lane-title h4 {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+  word-break: keep-all;
+}
+
+.dream-lane-title p {
+  margin: 2px 0 0;
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+.dream-lane-tag {
+  margin-top: 2px;
+}
+
+.dream-lane-stat {
+  margin: var(--space-1) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+.dream-lane-stat strong {
+  color: var(--origin-ink);
+  font-weight: var(--fw-black);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 접혀 있을 때 앞 단어 미리보기. */
+.dream-lane-peek {
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+  word-break: keep-all;
+}
+
+/*
+ * 펼치기 버튼. 넓은 화면에서는 항상 펼쳐 두므로 감춘다(컴포넌트 주석).
+ * ⚠ 좁은 화면 터치 타겟 44px.
+ */
+.dream-lane-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: var(--space-1);
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
+.dream-lane-toggle:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.dream-lane-toggle svg {
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.dream-lane-toggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
+@media (min-width: 900px) {
+  .dream-lane-toggle {
+    display: none;
+  }
+}
+
+/* 단어별 번호. 단어는 알약, 번호는 작은 볼. */
+.dream-lane-words {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dream-lane-words[hidden] {
+  display: none;
+}
+
+.dream-lane-words li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: 12px;
+  background: var(--color-surface-2);
+}
+
+.dream-lane-word {
+  padding: 4px var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  border: 1px var(--origin-line, solid) color-mix(in oklab, var(--origin-ink) 50%, var(--color-border));
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.dream-lane-balls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* 넓혀 본 단어 묶음은 레인 아래. 레인과 붙지 않게 여백을 둔다. */
+.dream-lanes + .dream-disclosure {
+  margin-top: var(--space-4);
+  border-style: dashed;
+}

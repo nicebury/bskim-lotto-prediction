@@ -19,6 +19,7 @@
 
 import { API_BASE_URL, PUBLIC_API_BASE_URL } from './env'
 import type {
+  AnalyzeResult,
   DreamKeyword,
   DreamKeywordList,
   DreamResult,
@@ -36,11 +37,15 @@ import type {
   Round,
   RoundDetail,
   RoundIndex,
+  SimulateResult,
+  SimulateTrials,
   SitemapEntries,
   StatQuery,
   StatWindow,
   VideoDetail,
   VideoGame,
+  VideoPeriod,
+  VideoSort,
   VideoItem,
   VideoKind,
 } from './api-types'
@@ -184,6 +189,38 @@ export async function getRounds(page = 1, size = 20): Promise<Paged<Round>> {
     REVALIDATE.home,
   )
   return payload ?? { total: 0, page, size, items: [] }
+}
+
+/**
+ * 조합 분석. 번호 여섯 개를 주면 네 블록을 한 번에 돌려준다.
+ *
+ * → docs/wiki/10-contracts/api-contract-analysis.md
+ *
+ * ── ⚠ 이 함수가 `getAllRounds()` 를 대체했다 (2026-09-03) ───────────
+ * 백엔드가 구현하기 전에는 프론트가 **1,239회차를 200개씩 일곱 번 받아** `lib/analyze.ts`
+ * 에서 직접 계산했다. 화면을 먼저 보여 주려는 임시 조치였고, 계약 문서와 log 에 "백엔드가
+ * 만들면 걷어낸다" 고 적어 두었다.
+ *
+ * 백엔드 세션이 **전수 대조로 두 계산의 값이 같음을 확인**한 뒤(log.md 2026-09-03) 이제
+ * 걷어냈다. 얻은 것 셋:
+ *
+ *   ① **왕복 15번 → 1번.** 회차 7번 + `/stats/number/{n}` 6번 + `/stats/frequency` 1번이
+ *      전부 이 한 번으로 줄었다.
+ *   ② **계산이 한 곳에서만 돈다.** 두 곳에 있으면 언젠가 갈라지고, 그때는 어느 쪽이
+ *      맞는지 아무도 모른다([[component-boundaries]]).
+ *   ③ 백엔드만 아는 값(`bonus_count`·`recent_20`·히스토그램)이 함께 온다.
+ *
+ * ⚠ **번호를 정렬해 보낸다.** 계약이 서버에서 정규화한다고 정했지만, 같은 조합이 다른
+ *   주소를 갖지 않게 프론트에서도 맞춘다 — 캐시가 갈라지지 않는다.
+ * ⚠ 실패하면 `null`. 화면은 그때 안내를 그린다. 이 화면의 전부인 데이터라 조용히 빈
+ *   화면을 보이지 않는다.
+ */
+export function getAnalyze(numbers: number[]): Promise<AnalyzeResult | null> {
+  const sorted = [...numbers].sort((a, b) => a - b)
+  return getJson<AnalyzeResult>(
+    `/api/lotto/analyze?numbers=${sorted.join(',')}`,
+    REVALIDATE.stat,
+  )
 }
 
 /**
@@ -332,7 +369,14 @@ export async function getVideos(
   kind: VideoKind = 'all',
   page = 1,
   size = 20,
-  filter: { round?: number; game?: VideoGame } = {},
+  filter: {
+    round?: number
+    game?: VideoGame
+    /** 제목·채널·키워드 포함 검색(2026-09-17 계약 추가). 50자 상한 — 넘기면 422 라 여기서 자른다. */
+    q?: string
+    sort?: VideoSort
+    period?: VideoPeriod
+  } = {},
 ): Promise<Paged<VideoItem>> {
   const params = new URLSearchParams({ kind, page: String(page), size: String(Math.min(100, size)) })
   // 회차는 게임과 함께 보내야 의미가 있다. 하나만 보내면 계약이 걸러 준다.
@@ -340,6 +384,14 @@ export async function getVideos(
     params.set('round', String(filter.round))
     params.set('game', filter.game)
   }
+  /*
+    ⚠ 기본값은 **보내지 않는다.** API 기본값(`latest`·`all`)과 같아 결과가 같고, 주소가 같아야
+      데이터 캐시 키가 갈라지지 않는다 — 홈·상세의 기존 호출이 새 캐시를 만들지 않게.
+  */
+  const q = filter.q?.trim().slice(0, 50)
+  if (q) params.set('q', q)
+  if (filter.sort && filter.sort !== 'latest') params.set('sort', filter.sort)
+  if (filter.period && filter.period !== 'all') params.set('period', filter.period)
   const payload = await getJson<Paged<VideoItem>>(
     `/api/videos?${params.toString()}`,
     REVALIDATE.video,
@@ -597,6 +649,101 @@ export function browserRecommend(
  *   밖 번호는 422 다 — 여기서 자르지 않고 그대로 보낸다. 조용히 줄이면 사용자는 뺐다고
  *   믿는데 그 번호가 계속 나온다.
  */
+/**
+ * AI 번호추천 시뮬레이터 (2026-08-28 계약 신설).
+ *
+ * ⚠ **백엔드가 아직 만들지 않았으면 `null` 이다.** 그때는 호출부가 기존 API 를 조합해
+ *   화면을 채운다(→ `simulateFallback`). 화면은 똑같이 돌고, 이 엔드포인트가 생기면
+ *   호출 한 번으로 줄어들 뿐이다.
+ * ⚠ `trials` 는 계약이 셋으로 고정했다. 다른 값을 보내면 422 다.
+ */
+export async function browserSimulate(
+  sets: number,
+  trials: SimulateTrials,
+  seed?: number,
+): Promise<SimulateResult | null> {
+  try {
+    return await postJson<SimulateResult>(
+      '/api/lotto/simulate',
+      { sets: Math.min(10, Math.max(1, sets)), trials, seed: seed ?? null },
+      BROWSER_TIMEOUT_MS,
+    )
+  } catch {
+    /*
+      ⚠ 여기서만 실패를 삼킨다. 이 엔드포인트는 **없을 수 있는 것**이고, 없다고 화면이
+        멈추면 안 된다. 진짜 장애도 같이 삼켜지지만, 호출부가 폴백으로 다시 시도하므로
+        그때 드러난다.
+    */
+    return null
+  }
+}
+
+/**
+ * 시뮬레이터가 없을 때 기존 API 로 같은 화면을 채운다.
+ *
+ * ⚠ **수치를 지어내지 않는다.** 얻을 수 없는 단계는 `null` 로 두고 화면이 설명만 보여준다
+ *   (계약: "빈 값을 0 으로 채우지 않는다").
+ * ⚠ 번호는 `recommend?strategy=ensemble` 이 만든다 — 시뮬레이터와 **같은 갈래**다.
+ *   여기서 프론트가 조합을 만들지 않는다([[component-boundaries]] 비즈니스 계산 금지).
+ */
+export async function simulateFallback(
+  sets: number,
+  trials: SimulateTrials,
+): Promise<SimulateResult> {
+  const [reco, frequency, hotCold, pattern] = await Promise.all([
+    browserRecommend('ensemble', sets),
+    browserFrequency({ window: 'all' }).catch(() => null),
+    browserHotCold({ window: 20 }).catch(() => null),
+    browserPattern({ window: 'all' }).catch(() => null),
+  ])
+
+  // 빈도 맵 → 많이/적게 나온 순. 정렬은 표시 순서일 뿐 집계가 아니다.
+  const counts = frequency
+    ? Object.entries(frequency.counts)
+        .map(([n, c]) => ({ number: Number(n), count: c }))
+        .sort((a, b) => b.count - a.count || a.number - b.number)
+    : []
+
+  return {
+    sets: reco.sets,
+    trials,
+    seed: reco.seed,
+    hot_window: reco.hot_window,
+    stages: {
+      frequency: frequency
+        ? {
+            rounds_analyzed: frequency.rounds_analyzed,
+            include_bonus: frequency.include_bonus,
+            most: counts.slice(0, 5),
+            least: counts.slice(-5).reverse(),
+          }
+        : null,
+      cycle: hotCold
+        ? {
+            longest_waiting: hotCold.overdue
+              .slice(0, 5)
+              .map((o) => ({ number: o.number, rounds_since: o.rounds_since })),
+          }
+        : null,
+      trend: hotCold
+        ? {
+            window: hotCold.rounds_analyzed,
+            // 폴백에는 가중치 개념이 없다. 1 은 "가중하지 않았다" 는 사실이다.
+            recency_weight: 1,
+            rising: hotCold.hot.slice(0, 5).map((h) => ({ number: h.number, count: h.count })),
+          }
+        : null,
+      // ⚠ 패턴 비율은 계약의 시뮬레이터만 주는 값이다. 여기서 계산하면 그것이 곧 비즈니스
+      //   계산이므로 null 로 둔다 — 화면은 수치 없이 이 단계의 설명만 보여준다.
+      pattern: null,
+      ensemble: null,
+      // ⚠ 몬테카를로 실행 횟수는 백엔드만 안다. 사용자가 고른 값을 실제 값처럼 적지 않는다.
+      montecarlo: null,
+    },
+    disclaimer: reco.disclaimer,
+  }
+}
+
 export function browserDreamRecommend(
   text: string,
   setsPerTier = 5,

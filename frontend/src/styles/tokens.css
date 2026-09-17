@@ -93,6 +93,11 @@
   --svc-news-bg: #e1ecfe;
   --svc-pension: #9aa4b2;
   --svc-pension-bg: #edeff3;
+  /* 번호놀이터. 기존 여섯과 겹치지 않는 청록(hue 179) — 초록(152)·파랑(217) 사이에서
+     양쪽과 25도 이상 떨어진 자리다. 흰 글리프 대비 4.19, 파스텔 위 muted 4.85 로
+     기존 토큰의 기준선(4.69~4.89) 안에 든다. → docs/wiki/20-design/playground.md */
+  --svc-play: #0f8a89;
+  --svc-play-bg: #dbf4f2;
   /* 진한 타일 위 글리프. 라이트·다크 공통 — 배경색이 다크에서 바뀌지 않기 때문이다. */
   --svc-fg: #ffffff;
 
@@ -214,6 +219,7 @@
     --svc-dream-bg: #331226;
     --svc-news-bg: #10203c;
     --svc-pension-bg: #1c212b;
+    --svc-play-bg: #0b2828;
 
     --shadow-card: 0 1px 2px rgb(0 0 0 / 0.5);
     --shadow-card-hover: 0 4px 12px rgb(0 0 0 / 0.45);
@@ -262,6 +268,7 @@
   --svc-dream-bg: #331226;
   --svc-news-bg: #10203c;
   --svc-pension-bg: #1c212b;
+  --svc-play-bg: #0b2828;
 
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.5);
   --shadow-card-hover: 0 4px 12px rgb(0 0 0 / 0.45);

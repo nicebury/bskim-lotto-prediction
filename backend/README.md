@@ -126,9 +126,11 @@ docker exec -u postgres bskim-dev-pg18 psql -d prod_db \
 | GET | `/api/lotto/stats/pattern` | `sum_histogram`·`consecutive_counts` 포함 |
 | GET | `/api/lotto/stats/number/{n}` | 번호 하나. `rank` 는 서버가 45개를 정렬해 준다 |
 | POST | `/api/lotto/recommend` | `strategy`·`sets`(1~10)·`seed`. `disclaimer` 필수. `ensemble` 은 **한 번에 하나만** |
+| POST | `/api/lotto/simulate` | 앙상블 + **단계별 근거**. `trials` 는 1만/5만/10만만(그 외 422). `recommend?strategy=ensemble` 과 **같은 번호**를 낸다 |
+| GET | `/api/lotto/analyze` | `numbers=3,11,…` 6개. 역대 회차 대조 네 블록 |
 | GET | `/api/dream/keywords` | 임베딩 모델을 로드하지 않는다 |
 | POST | `/api/dream/recommend` | **첫 요청 20초**. 모자란 자리는 통계 점수로 채운다. `exclude`(최대 39)·응답 `from_text` |
-| GET | `/api/videos` | `kind`(all\|normal\|shorts)·`round`·`game`. **캐시 24시간 상한**, 표시 조건 WHERE 필수 |
+| GET | `/api/videos` | `kind`(all\|normal\|shorts)·`round`·`game`·`q`(50자)·`sort`(latest\|views)·`period`(1w\|1m\|3m\|all). **캐시 24시간 상한**, 표시 조건 WHERE 필수 |
 | GET | `/api/videos/{id}` | `game='lotto'` 일 때만 회차 정보를 함께 담는다 |
 | GET | `/api/news` | `lotto_news` 가 비면 빈 배열 |
 | POST | `/api/admin/login` · `/logout` | **운영자 전용.** `ADMIN_TOKEN` 이 비면 503 |
@@ -163,11 +165,42 @@ curl -s -o /dev/null -D- -H "Origin: http://127.0.0.1:3000" \
 
 **`/api/lotto/rounds/index` 가 `422` 를 반환한다** — 라우트 선언 순서가 뒤집혔다. FastAPI 는 등록 순서대로 매칭하므로 이 경로가 `/rounds/{round_no}` 뒤에 있으면 `index` 를 회차 번호로 읽는다. `app/routers/lotto.py` 에서 순서를 확인한다.
 
-**`/api/admin/*` 가 전부 `503` 을 반환한다** — `.env_backend` 에 `ADMIN_TOKEN` 또는 `ADMIN_SESSION_SECRET` 이 없다. `openssl rand -hex 32` 를 **두 번** 돌려 서로 다른 값으로 채운다. ⚠ 같은 값을 넣으면 **기동을 거부한다** — 같으면 쿠키 서명에서 토큰을 역산할 여지가 생긴다. 비어 있는 것을 '인증 없음' 으로 통과시키지 않는 이유: `secrets.compare_digest("", "")` 는 **True** 라서 빈 토큰을 보낸 누구나 들어온다. 공개 API 는 이 값들과 무관하게 정상 동작한다.
+### 운영자 화면(`/admin`) 을 여는 절차
+
+**아이디 + 비밀번호 + OTP** 2단계다(2026-08-31). 아이디·비밀번호'만' 으로는 종전 64자 랜덤 토큰보다 약해지므로 OTP 를 함께 받는다 — 외우기 쉬운 비밀번호의 약점을 30초마다 바뀌는 여섯 자리가 덮는다.
+
+```bash
+cd backend
+uv run python scripts/make_admin_credentials.py
+```
+
+아이디와 비밀번호를 물어본 뒤 **`.env_backend` 에 붙여 넣을 여섯 줄**과 인증 앱으로 찍을 **QR** 을 출력한다. Microsoft Authenticator 로 QR 을 찍고(안 되면 '기타 계정 → 코드 수동 입력'), 값을 `.env_backend` 에 넣고 백엔드를 다시 띄운다.
+
+그다음 브라우저에서 `/admin` 을 열어 **아이디 · 비밀번호 · 앱의 여섯 자리**를 입력한다. 세션은 12시간(`ADMIN_SESSION_HOURS`).
+
+⚠ **비밀번호와 OTP 는 출력 화면을 닫으면 다시 볼 수 없다.** 비밀번호는 비밀번호 관리자에, OTP 는 인증 앱에 그 자리에서 등록한다. 잃어버리면 스크립트를 다시 돌려 새로 만드는 수밖에 없다.
+
+**로컬에서 다른 기계가 못 들어오는 이유는 자격증명이 아니라 바인딩이다.** `uvicorn` 은 `--host` 를 주지 않으면 `127.0.0.1` 에 묶인다. `--host 0.0.0.0` 을 주는 순간 같은 네트워크의 다른 기기에서 접근 가능해지고, 그때부터는 자격증명이 유일한 방어다.
+
+**CORS 는 이 경로와 무관하다.** 브라우저는 프론트(`/api/admin/*`)와만 말하고 **Next 서버가 백엔드를 중계**한다. 백엔드 주소는 브라우저에 노출되지 않는다.
+
+#### ⚠ 배포 시: `ADMIN_COOKIE_SECURE=true` 를 반드시 켠다
+
+위의 중계 구조 때문에 **백엔드는 사용자가 HTTPS 를 쓰는지 알 수 없다** — 백엔드에 닿는 요청은 Next 서버에서 온 내부망 평문 HTTP 다. 그래서 세션 쿠키의 `Secure` 를 설정으로 정한다. 켜지 않으면 화면은 멀쩡히 동작하는데 **세션 쿠키가 평문으로 오갈 수 있다.**
+
+(프론트 중계가 `X-Forwarded-Proto: https` 를 붙여 주면 설정 없이도 올바르게 판단한다. 계약에 그렇게 적어 두었다.)
+
+**`/api/admin/*` 가 전부 `503` 을 반환한다** — `ADMIN_USERNAME`·`ADMIN_PASSWORD_HASH`·`ADMIN_TOTP_SECRET`·`ADMIN_SESSION_SECRET` 중 하나 이상이 비었다. `scripts/make_admin_credentials.py` 로 만든다. 비어 있는 것을 '인증 없음' 으로 통과시키지 않는 이유: `secrets.compare_digest("", "")` 는 **True** 라서 빈 값을 보낸 누구나 들어온다. ⚠ 특히 **OTP 비밀키만 비어도 503 이다** — 비밀번호만으로 통과시키면 2단계를 켰다고 믿는 사람에게 1단계만 돌려주는 셈이다. 공개 API 는 이 값들과 무관하게 정상 동작한다.
+
+**아이디·비밀번호는 맞는데 계속 `401`** — 앱의 여섯 자리를 확인한다. 폰과 서버의 시계가 30초 이상 어긋나면 코드가 안 맞는다(`valid_window=1` = 앞뒤 30초). 폰의 시간을 자동 설정으로 두고 서버 시각도 확인한다. 어느 것이 틀렸는지는 **일부러 알려 주지 않는다** — 아이디가 맞는지부터 알려 주는 셈이기 때문이다.
 
 **로그인은 되는데 바로 401 이 된다** — 서버 시계가 뒤로 갔거나, `ADMIN_SESSION_SECRET` 을 바꾼 뒤 옛 쿠키가 남아 있다. 브라우저에서 쿠키를 지우고 다시 로그인한다. 세션 만료는 `ADMIN_SESSION_HOURS`(기본 12)다.
 
-**영상 API 가 `422` 를 반환한다** — `kind` 는 `all|normal|shorts`, `game` 은 `lotto|pension` 만 받는다. ⚠ `kind=normal` 에 `shorts_hint='unknown'` 인 영상은 **일부러 넣지 않는다** — 추정값을 어느 한쪽으로 밀면 그 순간 확정이 된다. `all` 에서만 보인다.
+**영상 API 가 `422` 를 반환한다** — `kind` 는 `all|normal|shorts`, `game` 은 `lotto|pension`, `sort` 는 `latest|views`, `period` 는 `1w|1m|3m|all` 만 받는다. ⚠ `kind=normal` 에 `shorts_hint='unknown'` 인 영상은 **일부러 넣지 않는다** — 추정값을 어느 한쪽으로 밀면 그 순간 확정이 된다. `all` 에서만 보인다.
+
+⚠ **`period=2w` 와 `6m` 은 뉴스에는 있고 영상에는 없다.** 두 API 가 기간 목록을 공유하지 않는다 — 계약이 영상에 넷만 열었고, 목록을 공유하면 한쪽을 늘릴 때 다른 쪽이 조용히 따라 늘어나기 때문이다.
+
+**영상 검색·정렬이 먹지 않는 것 같다** — `q` 는 제목·**채널명**·키워드를 본다(뉴스와 달리 요약문이 없다). `%` 나 `_` 는 와일드카드가 아니라 리터럴로 찾는다. `sort=views` 는 조회수를 **모르는** 영상을 맨 뒤로 보낸다(`NULLS LAST`) — 개발 DB 에는 NULL 이 하나도 없어 실데이터로는 이 동작을 확인할 수 없고, `tests/test_video.py` 가 임시 테이블로 검증한다.
 
 **추천 API 가 `422` 를 반환한다** — 회차가 50개 미만이다. 워커가 먼저 데이터를 채워야 한다. `strategy=pure_random` 만은 이 경우에도 200 이다.
 

@@ -10,10 +10,20 @@ import {
   SpecimenCard,
   SpecimenGrid,
 } from "@/components/GuideSection";
-import { ArticleIcon, ClockIcon, InfoIcon } from "@/components/icons";
+import {
+  ArticleIcon,
+  ClockIcon,
+  FlameIcon,
+  InfoIcon,
+  LandscapeIcon,
+  PlayGlyph,
+  PortraitIcon,
+  SearchGlyph,
+  TilesIcon,
+} from "@/components/icons";
 import { VideoCard } from "@/components/video/VideoCard";
 import { getVideos } from "@/lib/api";
-import type { VideoKind } from "@/lib/api-types";
+import type { VideoKind, VideoPeriod, VideoSort } from "@/lib/api-types";
 import { formatNumber } from "@/lib/format";
 
 /**
@@ -31,52 +41,100 @@ export const revalidate = 21600; // 6시간
 
 /** 한 쪽에 보여줄 영상 수. 계약 상한은 100 이지만 화면에는 그렇게 많이 필요 없다. */
 const PAGE_SIZE = 24;
+/** 쇼츠 탭은 카드가 좁아 한 줄에 더 들어간다. 줄이 딱 떨어지게 6의 배수로 둔다. */
+const SHORTS_PAGE_SIZE = 30;
 
 /**
- * 목록 필터.
+ * 목록 갈래.
  *
  * ⚠ `unknown` 은 `일반` 에도 `쇼츠` 에도 들어가지 않고 **`전체` 에서만 보인다**(계약).
  *   모르는 것을 어느 한쪽으로 밀면 그 순간 추정이 확정이 된다. 화면 문구도 그렇게 쓴다.
  */
-const KINDS: { value: VideoKind; label: string }[] = [
-  { value: "all", label: "전체" },
-  { value: "normal", label: "일반 영상" },
-  { value: "shorts", label: "쇼츠" },
+const KINDS: { value: VideoKind; label: string; Icon: typeof TilesIcon }[] = [
+  { value: "all", label: "전체", Icon: TilesIcon },
+  { value: "normal", label: "일반 영상", Icon: LandscapeIcon },
+  { value: "shorts", label: "쇼츠", Icon: PortraitIcon },
 ];
 
-export const metadata: Metadata = {
-  title: "로또 당첨번호 영상",
-  description:
-    "로또 추첨 방송과 당첨번호 확인 영상을 모았습니다. 영상마다 그 회차의 당첨번호와 당첨금을 함께 볼 수 있습니다.",
-  alternates: { canonical: "/videos" },
-  openGraph: {
-    type: "website",
-    url: "/videos",
-    title: "로또 당첨번호 영상",
-    description: "로또 추첨 방송과 당첨번호 확인 영상 모음.",
-  },
-};
+/**
+ * 정렬(2026-09-17 추가 — 사용자 요청 "최신순, 최근 일주일 조회수 순 등").
+ *
+ * 화면의 선택지 하나가 API 의 `sort` + `period` 조합 하나다(→ api-contract.md 영상 절).
+ * ⚠ "최근 1주 인기" 는 **최근 7일 안에 올라온 영상을 지금 조회수로** 줄 세운 것이다.
+ *   주간 증가분이 아니다(조회수 이력이 없다). 그래서 문구에 "주간 조회수" 를 쓰지 않는다.
+ * ⚠ 백엔드가 아직 이 파라미터를 구현하지 않았으면 무시되고 최신순이 온다. 화면은 깨지지 않는다.
+ */
+const SORTS: {
+  value: string;
+  label: string;
+  sort: VideoSort;
+  period: VideoPeriod;
+  note: string;
+}[] = [
+  { value: "latest", label: "최신순", sort: "latest", period: "all", note: "올라온 순서" },
+  { value: "week", label: "최근 1주 인기", sort: "views", period: "1w", note: "최근 7일 안에 올라온 영상을 조회수 순으로" },
+  { value: "month", label: "최근 1개월 인기", sort: "views", period: "1m", note: "최근 30일 안에 올라온 영상을 조회수 순으로" },
+  { value: "popular", label: "전체 인기", sort: "views", period: "all", note: "모든 영상을 조회수 순으로" },
+];
 
-type SearchParams = { searchParams: Promise<{ kind?: string; page?: string }> };
+type Query = { kind?: string; page?: string; q?: string; sort?: string };
+type SearchParams = { searchParams: Promise<Query> };
+
+/**
+ * ⚠ 검색·정렬 결과 쪽은 **색인하지 않는다**(`noindex, follow`). 조건마다 주소가 생기면 같은
+ *   영상이 여러 URL 로 흩어지고, 검색어 페이지는 얇은 페이지로 읽힌다. 기본 목록과
+ *   갈래(kind) 링크만 색인한다. canonical 은 늘 `/videos` 다.
+ */
+export async function generateMetadata({ searchParams }: SearchParams): Promise<Metadata> {
+  const query = await searchParams;
+  const filtered =
+    Boolean(query.q?.trim()) || (query.sort !== undefined && query.sort !== "latest");
+  return {
+    title: "로또 당첨번호 영상",
+    description:
+      "로또 추첨 방송과 당첨번호 확인 영상을 모았습니다. 검색하고 최신순·인기순으로 골라 보세요. 영상마다 그 회차의 당첨번호와 당첨금을 함께 볼 수 있습니다.",
+    alternates: { canonical: "/videos" },
+    openGraph: {
+      type: "website",
+      url: "/videos",
+      title: "로또 당첨번호 영상",
+      description: "로또 추첨 방송과 당첨번호 확인 영상 모음.",
+    },
+    ...(filtered ? { robots: { index: false, follow: true } } : {}),
+  };
+}
 
 export default async function VideosPage({ searchParams }: SearchParams) {
   const query = await searchParams;
-
   // 계약에 없는 값은 조용히 기본값으로 되돌린다. 사용자가 주소창을 고쳐도 422 를 보여주지 않는다.
-  const kind: VideoKind =
-    KINDS.find((k) => k.value === query.kind)?.value ?? "all";
+  const kind: VideoKind = KINDS.find((k) => k.value === query.kind)?.value ?? "all";
+  const sortOption = SORTS.find((o) => o.value === query.sort) ?? SORTS[0];
+  // 계약 상한 50자. 넘기면 422 라 여기서 자른다.
+  const q = (query.q ?? "").trim().slice(0, 50);
   const parsedPage = Number.parseInt(query.page ?? "1", 10);
   const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+  const size = kind === "shorts" ? SHORTS_PAGE_SIZE : PAGE_SIZE;
 
-  const result = await getVideos(kind, page, PAGE_SIZE);
-  const lastPage = Math.max(1, Math.ceil(result.total / PAGE_SIZE));
+  const result = await getVideos(kind, page, size, {
+    q,
+    sort: sortOption.sort,
+    period: sortOption.period,
+  });
+  const lastPage = Math.max(1, Math.ceil(result.total / size));
 
-  /** 필터·쪽 이동 링크. 기본값은 주소에서 뺀다 — `/videos?kind=all&page=1` 은 군더더기다. */
-  const href = (next: { kind?: VideoKind; page?: number }) => {
+  /**
+   * 필터·쪽 이동 링크. 기본값은 주소에서 뺀다 — `/videos?kind=all&page=1` 은 군더더기다.
+   * `q: null` 은 "검색어를 지운다" 는 뜻이다(`undefined` 는 "지금 것을 유지").
+   */
+  const href = (next: { kind?: VideoKind; page?: number; sort?: string; q?: string | null }) => {
     const params = new URLSearchParams();
     const k = next.kind ?? kind;
     const p = next.page ?? 1;
+    const so = next.sort ?? sortOption.value;
+    const qq = next.q === null ? "" : (next.q ?? q);
+    if (qq) params.set("q", qq);
     if (k !== "all") params.set("kind", k);
+    if (so !== "latest") params.set("sort", so);
     if (p > 1) params.set("page", String(p));
     const qs = params.toString();
     return qs ? `/videos?${qs}` : "/videos";
@@ -91,39 +149,108 @@ export default async function VideosPage({ searchParams }: SearchParams) {
         ]}
       />
 
-      <section className="section">
-        <h1>로또 당첨번호 영상</h1>
-        <p className="muted" style={{ marginTop: "var(--space-2)" }}>
+      {/*
+        ── 머리 + 검색 ────────────────────────────────────
+        ⚠ 검색은 **GET 폼**이다(JS 0줄). JS 를 끈 사용자도 검색할 수 있고, 결과 주소를 공유할 수
+          있다. 지금 고른 갈래·정렬은 숨은 입력으로 함께 보내 검색해도 유지된다.
+      */}
+      <section className="media-hero" aria-labelledby="videos-title">
+        <p className="media-eyebrow">
+          <PlayGlyph width={14} height={14} /> YouTube 로또 영상
+        </p>
+        <h1 id="videos-title">로또 당첨번호 영상</h1>
+        <p className="media-lede">
           추첨 방송과 당첨번호 확인 영상을 모았습니다. 영상을 열면 그 회차의 당첨번호와
           당첨금을 함께 볼 수 있습니다.
         </p>
+
+        <form className="media-search" action="/videos" method="get" role="search">
+          <label className="sr-only" htmlFor="video-q">
+            영상 검색
+          </label>
+          <SearchGlyph className="media-search-icon" />
+          <input
+            id="video-q"
+            name="q"
+            type="search"
+            defaultValue={q}
+            maxLength={50}
+            placeholder="제목·채널로 검색 (예: 1242회, 추첨 방송)"
+            autoComplete="off"
+          />
+          {kind !== "all" && <input type="hidden" name="kind" value={kind} />}
+          {sortOption.value !== "latest" && (
+            <input type="hidden" name="sort" value={sortOption.value} />
+          )}
+          <button type="submit" className="btn btn-primary">
+            검색
+          </button>
+        </form>
       </section>
 
-      <section className="section" aria-labelledby="video-list-title">
-        <div className="section-head">
-          <h2 id="video-list-title">영상 목록</h2>
-          {result.total > 0 && (
-            <span className="section-note">전체 {formatNumber(result.total)}개</span>
-          )}
-        </div>
+      <section className="section media-list" aria-labelledby="video-list-title">
+        <h2 id="video-list-title" className="sr-only">
+          영상 목록
+        </h2>
 
         {/*
-          ⚠ 링크로 만든다. 버튼 + JS 로 만들면 JS 를 끈 사용자가 필터를 쓸 수 없고,
-            검색엔진이 각 갈래를 따라가지 못한다(완료 기준: JS 를 꺼도 본문이 보인다).
+          ── 갈래 탭 + 정렬 ──────────────────────────────
+          ⚠ 링크로 만든다. 버튼 + JS 로 만들면 JS 를 끈 사용자가 쓸 수 없고, 검색엔진이 각 갈래를
+            따라가지 못한다(완료 기준: JS 를 꺼도 본문이 보인다).
         */}
-        <nav className="video-kinds" aria-label="영상 갈래 선택">
-          {KINDS.map((item) => (
-            <Link
-              key={item.value}
-              href={href({ kind: item.value, page: 1 })}
-              className="video-kind"
-              data-active={item.value === kind ? "" : undefined}
-              aria-current={item.value === kind ? "page" : undefined}
-            >
-              {item.label}
+        <div className="media-toolbar">
+          <nav className="media-tabs" aria-label="영상 갈래 선택">
+            {KINDS.map((item) => (
+              <Link
+                key={item.value}
+                href={href({ kind: item.value, page: 1 })}
+                className="media-tab"
+                data-active={item.value === kind ? "" : undefined}
+                aria-current={item.value === kind ? "page" : undefined}
+              >
+                <item.Icon width={16} height={16} />
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+
+          <nav className="media-sorts" aria-label="정렬 선택">
+            {SORTS.map((option) => (
+              <Link
+                key={option.value}
+                href={href({ sort: option.value, page: 1 })}
+                className="media-sort"
+                data-active={option.value === sortOption.value ? "" : undefined}
+                aria-current={option.value === sortOption.value ? "true" : undefined}
+                title={option.note}
+              >
+                {option.value === "latest" ? (
+                  <ClockIcon width={14} height={14} />
+                ) : (
+                  <FlameIcon width={14} height={14} />
+                )}
+                {option.label}
+              </Link>
+            ))}
+          </nav>
+        </div>
+
+        {/* 지금 조건을 한 줄로. 검색 중이면 지우는 길도 여기 둔다. */}
+        <p className="media-meta">
+          {q && (
+            <>
+              <strong>&lsquo;{q}&rsquo;</strong> 검색 ·{" "}
+            </>
+          )}
+          <span>{sortOption.label}</span>
+          {sortOption.value !== "latest" && <span className="muted"> · {sortOption.note}</span>}
+          <span className="media-meta-count">{formatNumber(result.total)}개</span>
+          {q && (
+            <Link className="media-meta-clear" href={href({ q: null, page: 1 })}>
+              검색 지우기
             </Link>
-          ))}
-        </nav>
+          )}
+        </p>
 
         {kind !== "all" && (
           <p className="video-kind-note">
@@ -135,15 +262,23 @@ export default async function VideosPage({ searchParams }: SearchParams) {
         {result.items.length === 0 ? (
           <Card>
             <EmptyState>
-              아직 모인 영상이 없습니다. 영상 수집이 시작되면 이곳에 채워집니다.
+              {q
+                ? `‘${q}’ 에 맞는 영상이 없습니다. 다른 낱말로 찾아보거나 정렬·갈래를 바꿔 보세요.`
+                : "아직 모인 영상이 없습니다. 영상 수집이 시작되면 이곳에 채워집니다."}
             </EmptyState>
           </Card>
         ) : (
           <>
-            <ul className="video-grid">
+            <ul
+              className="video-grid"
+              data-variant={kind === "shorts" ? "portrait" : undefined}
+            >
               {result.items.map((video) => (
                 <li key={video.id}>
-                  <VideoCard video={video} />
+                  <VideoCard
+                    video={video}
+                    variant={kind === "shorts" ? "portrait" : "wide"}
+                  />
                 </li>
               ))}
             </ul>

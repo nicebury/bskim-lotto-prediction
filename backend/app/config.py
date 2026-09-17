@@ -61,19 +61,38 @@ class Settings(BaseSettings):
     RECOMMEND_MAX_CONCURRENCY: int = 1
 
     # ── 운영자 전용 화면 (/api/admin/*) ───────────────────────────────────
-    # 사용자 계정 테이블을 만들지 않는다. 쓰는 사람이 한 명이고, 계정 시스템은 그
+    # 사용자 계정 **테이블**을 만들지 않는다. 쓰는 사람이 한 명이고, 계정 시스템은 그
     # 자체로 공격면이자 유지보수 대상이다 (docs/wiki/10-contracts/api-contract.md).
+    # 계정 하나를 환경변수로 둔다.
     #
-    # ★ 비어 있으면 `/api/admin/*` 가 전부 503 이다. 빈 문자열끼리 `compare_digest`
-    # 비교는 **통과하므로**, 빈 값을 '인증 없음' 으로 두면 아무나 들어온다 — 인증이
-    # 없는 것보다 나쁘다. 인증이 있다고 착각하게 만들기 때문이다.
+    # ★ 필요한 값이 하나라도 비면 `/api/admin/*` 가 전부 503 이다. 빈 문자열끼리
+    # `compare_digest` 비교는 **통과하므로**, 빈 값을 '인증 없음' 으로 두면 아무나
+    # 들어온다 — 인증이 없는 것보다 나쁘다. 인증이 있다고 착각하게 만들기 때문이다.
     # 기동을 막지 않는 이유: 운영자 화면 하나 때문에 공개 API 전체가 안 뜨면 손해가
     # 더 크다. 그래서 그 경로만 503 으로 죽인다.
-    ADMIN_TOKEN: str = ""
-    # 세션 쿠키 서명 키. `ADMIN_TOKEN` 과 **다른 값**이어야 한다 — 같으면 쿠키에서
-    # 토큰을 역산할 여지가 생긴다. 같은 값이면 기동을 거부한다(아래 검사).
+    ADMIN_USERNAME: str = ""
+    # ⚠ 비밀번호 **원문을 두지 않는다.** `scripts/make_admin_credentials.py` 가 만든
+    # scrypt 해시(`scrypt$n$r$p$salt$hash`)를 넣는다. 서버가 털려도 원문이 나오지 않고,
+    # 다른 사이트에서 같은 비밀번호를 쓰고 있어도 그쪽이 함께 뚫리지 않는다.
+    ADMIN_PASSWORD_HASH: str = ""
+    # TOTP(RFC 6238) 비밀키(base32). Microsoft/Google Authenticator 가 이 값으로 30초마다
+    # 여섯 자리를 만든다. **비밀번호만으로는 열리지 않는다** — 사람이 외우는 비밀번호는
+    # 언젠가 약해지고, 그 약점을 이 두 번째 요소가 덮는다.
+    ADMIN_TOTP_SECRET: str = ""
+    # 세션 쿠키 서명 키. 위 값들과 **다른 값**이어야 한다 — 같으면 쿠키에서 자격증명을
+    # 역산할 여지가 생긴다. 같은 값이면 기동을 거부한다(아래 검사).
     ADMIN_SESSION_SECRET: str = ""
     ADMIN_SESSION_HOURS: int = 12
+    # ⚠ 세션 쿠키에 `Secure` 를 붙일지.
+    #
+    # 종전에는 요청 스킴(`request.url.scheme`)에서 정했으나 **이 구조에서는 그것이
+    # 틀린다.** 브라우저는 프론트(Next)와만 말하고 Next 서버가 백엔드를 중계하므로,
+    # 백엔드에 닿는 요청은 내부망 평문 HTTP 다 — 사용자가 HTTPS 를 쓰고 있어도 백엔드는
+    # 그 사실을 알 방법이 없다. 그래서 사람이 명시한다.
+    #
+    # **운영(HTTPS)에서는 반드시 true.** 로컬 http 개발에서 true 로 두면 브라우저가
+    # 쿠키를 저장하지 않아 로그인이 조용히 실패하므로 기본값은 false 다.
+    ADMIN_COOKIE_SECURE: bool = False
 
     def model_post_init(self, __context) -> None:
         """필수값을 검사한다.
@@ -102,26 +121,39 @@ class Settings(BaseSettings):
                 "0 이하로 두면 추천 요청이 영원히 대기합니다."
             )
 
-        # 둘이 같으면 쿠키 서명에서 토큰을 역산할 여지가 생긴다. 계약이 "다른 값이어야
-        # 한다" 고 정한 것을 사람의 주의력에 맡기지 않는다 — 복붙 한 번이면 같아진다.
-        # 값 자체는 메시지에 담지 않는다.
-        if (
-            self.ADMIN_TOKEN.strip()
-            and self.ADMIN_TOKEN.strip() == self.ADMIN_SESSION_SECRET.strip()
+        # 서명 키가 다른 비밀값과 같으면 쿠키 서명에서 그것을 역산할 여지가 생긴다.
+        # 계약이 "다른 값이어야 한다" 고 정한 것을 사람의 주의력에 맡기지 않는다 —
+        # 복붙 한 번이면 같아진다. 값 자체는 메시지에 담지 않는다.
+        secret = self.ADMIN_SESSION_SECRET.strip()
+        if secret and secret in (
+            self.ADMIN_PASSWORD_HASH.strip(),
+            self.ADMIN_TOTP_SECRET.strip(),
         ):
             raise RuntimeError(
-                "ADMIN_TOKEN 과 ADMIN_SESSION_SECRET 이 같습니다. "
-                "다른 값을 쓰세요 — 같으면 세션 쿠키에서 토큰을 역산할 여지가 생깁니다."
+                "ADMIN_SESSION_SECRET 이 다른 운영자 비밀값과 같습니다. "
+                "서로 다른 값을 쓰세요 — 같으면 세션 쿠키에서 그것을 역산할 여지가 생깁니다."
             )
 
     @property
     def admin_enabled(self) -> bool:
         """운영자 API 를 열 수 있는가.
 
-        토큰과 서명 키가 **둘 다** 있어야 한다. 서명 키가 없으면 쿠키를 서명할 수 없고,
-        서명 없는 쿠키는 누구나 위조할 수 있어 토큰 검사가 무의미해진다.
+        **넷이 모두** 있어야 한다. 하나라도 비면 그 경로 전체가 503 이다.
+
+        - 서명 키가 없으면 쿠키를 서명할 수 없고, 서명 없는 쿠키는 누구나 위조할 수
+          있어 나머지 검사가 무의미해진다.
+        - OTP 비밀키가 없다고 **비밀번호만으로 통과시키지 않는다.** 2단계를 켜 두었다고
+          믿는 사람에게 1단계만 돌려주는 것이 가장 나쁜 실패다.
         """
-        return bool(self.ADMIN_TOKEN.strip()) and bool(self.ADMIN_SESSION_SECRET.strip())
+        return all(
+            v.strip()
+            for v in (
+                self.ADMIN_USERNAME,
+                self.ADMIN_PASSWORD_HASH,
+                self.ADMIN_TOTP_SECRET,
+                self.ADMIN_SESSION_SECRET,
+            )
+        )
 
     @property
     def database_dsn(self) -> str:

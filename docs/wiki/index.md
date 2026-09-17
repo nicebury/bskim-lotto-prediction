@@ -13,7 +13,7 @@
 | **어떤 세션이든 시작할 때** | [component-boundaries](10-contracts/component-boundaries.md) ← 여기부터 |
 | 이 프로젝트가 처음 | [SCHEMA](SCHEMA.md) → [0001](00-decisions/0001-monorepo-3-sessions.md) |
 | 워커 세션 시작 | [worker-jobs](10-contracts/worker-jobs.md) · [db-schema](10-contracts/db-schema.md) · [naver-search-api](90-external/naver-search-api.md) |
-| 백엔드 세션 시작 | [api-contract](10-contracts/api-contract.md) · [db-schema](10-contracts/db-schema.md) · [prediction-algorithm](40-domain/prediction-algorithm.md) |
+| 백엔드 세션 시작 | [api-contract](10-contracts/api-contract.md) · [db-schema](10-contracts/db-schema.md) · [prediction-algorithm](40-domain/prediction-algorithm.md) · [api-contract-analysis](10-contracts/api-contract-analysis.md) |
 | 프론트 세션 시작 | [api-contract](10-contracts/api-contract.md) · [design-tokens](20-design/design-tokens.md) · [metadata-strategy](30-seo/metadata-strategy.md) |
 | 로컬 환경 구축 | [local-setup](50-ops/local-setup.md) |
 | UI 문구·필드명을 정할 때 | [forbidden-expressions](40-domain/forbidden-expressions.md) |
@@ -37,6 +37,7 @@
 - [0011 — 상세페이지 이미지는 빌드타임 큐레이션](00-decisions/0011-build-time-image-curation.md) — 런타임 호출·워커 수집이 아니라 사람이 골라 커밋한다
 - [0012 — 몬테카를로 추천은 한 번에 하나만](00-decisions/0012-serialize-monte-carlo.md) — 동시 실행이 n² 로 무너진다. 알고리즘이 아니라 실행 방식을 고친다
 - [0013 — 꿈 소재별 해몽 풀이는 프론트 상수로 둔다](00-decisions/0013-dream-meanings-in-frontend.md) — 색인 대상 10개뿐인 원고를 위해 계약을 늘리지 않는다
+- [0014 — 번호놀이터 게임](00-decisions/0014-number-playground.md) — 미니게임 6종으로 번호를 뽑는다. 순수 Canvas, 결과 미저장, 게임마다 세션 분리
 
 ## 10-contracts — 세션 간 계약 ★
 
@@ -46,17 +47,29 @@
 - [db-schema](10-contracts/db-schema.md) — Postgres DDL, **DB↔API 매핑표**, 롤 권한. `ALTER DEFAULT PRIVILEGES` 함정
 - [db-naming-standard](10-contracts/db-naming-standard.md) — 표준단어·도메인 접미어·제약 명명규칙. 새 컬럼을 만들 때 읽는다
 - [api-contract](10-contracts/api-contract.md) — 백엔드 REST 엔드포인트와 **표현 규약**(확률 필드명 금지). 회차·추천·꿈해몽·뉴스·사이트맵
+- [api-contract-admin](10-contracts/api-contract-admin.md) — 운영자 전용 계약. 아이디+비밀번호+**OTP 2단계**, 커서 페이징. 2026-09-08 에 위에서 분리
 - [api-contract-stats](10-contracts/api-contract-stats.md) — 통계 전용 계약. `window`·**기간 조회**·구간 메타·정렬 규약. 2026-08-18 에 위에서 분리
+- [api-contract-analysis](10-contracts/api-contract-analysis.md) — ✅ **구현 완료**(2026-09-03). 조합 분석 계약(`GET /api/lotto/analyze`). 번호별 지표·조합 패턴(AC값·이월수)·**과거 회차 대조**·가정 집계. 2026-09-01 에 프론트가 화면 요구에서 역산해 먼저 적었고, 백엔드 구현 뒤 프론트의 클라이언트 계산(`lib/analyze.ts`)을 걷어냈다
 - [worker-jobs](10-contracts/worker-jobs.md) — `lotto`·`news`·`video_*` 잡의 크론·락·수동 트리거 스펙. 2026-08-28 에 영상 잡 3종 추가
 - [env-vars](10-contracts/env-vars.md) — 컴포넌트별 `env.sample`, **`.env` 열람 금지**, 사용자에게 요청할 미확정 값
+- [playground-game-contract](10-contracts/playground-game-contract.md) — ★ 번호놀이터 게임 모듈 계약. 게임 세션 6개의 유일한 접점. NumberPool·좌표계·소유 경계
 
 ## 20-design — 디자인 시스템
 
 - [design-tokens](20-design/design-tokens.md) — 색·타이포·간격·radius·shadow CSS 변수. 라이트/다크 두 세트
 - [responsive-rules](20-design/responsive-rules.md) — 브레이크포인트 3단, mobile-first, 터치 타겟 44px, CLS 방지
 - [components](20-design/components.md) — 볼·카드·헤더·캐러셀·광고 슬롯 사양
+- [number-analysis-page](20-design/number-analysis-page.md) — ⏳ **draft.** `/lotto/analyze` 4블록 구성. **돌아왔을 때 뽑은 번호를 지키는 방법**(sessionStorage)과 색인 금지 정책
 - [accessibility](20-design/accessibility.md) — a11y 체크리스트. 색만으로 정보를 전달하지 않기
+- [home-v3-trust-data](20-design/home-v3-trust-data.md) — ✕ **미채택 시안. 코드는 2026-09-02 에 삭제됐고 git 에도 없다.** 40~60대·모바일 조건에서 내린 결정(본문 17px·헤어라인 조판·강조색 잠금)과 함정 3건만 참고용으로 남긴다
 - [home-v2-concept](20-design/home-v2-concept.md) — ✕ **미채택 시안. 코드는 2026-08-21 에 삭제됐다**(`24ad827` 에 남아 있다). 격리 기법(`body:has()` 스코프·트랙 넘침)만 참고용으로 남긴다
+- [playground](20-design/playground.md) — 번호놀이터 페이지 설계. 라우트·결과 화면·진행 보존·메뉴/광고 연결. ✅ **헤더 내비 폭 실측 완료** — 1024px 에서 nav 565px·1줄·잘림 없음. `/lotto` 를 뺀 것으로 충분했고 예비해 둔 조이기(폰트·패딩 축소, 영상/뉴스 드로어 이동)는 쓰지 않았다. 메뉴를 더 늘리면 다시 잰다
+- [game-g01-shooting](20-design/game-g01-shooting.md) — G01 오리 사격장 작업 지시서(은닉형)
+- [game-g02-crane](20-design/game-g02-crane.md) — G02 크레인 뽑기 작업 지시서(예약형). ★ 가장 먼저 착수해 계약을 실전 검증한다
+- [game-g03-flyball](20-design/game-g03-flyball.md) — G03 **로또볼 홈런** 작업 지시서(색힌트형·타이밍). **✅ 2026-09-10 전면 재설계 완료** — 게이지 두 번 → **야구 타격 한 번**, 번호 숨김(색만 노출), 기회 9번·40m 문턱
+- [game-g04-curling](20-design/game-g04-curling.md) — G04 얼음판 컬링 작업 지시서. 유일한 보드형 45칸, 중복 시 재투
+- [game-g05-plinko](20-design/game-g05-plinko.md) — G05 플린코 낙하 작업 지시서. 45칸이 아니라 9빈인 이유. **✅ 2026-09-16 구현 완료** — 색 힌트형 전환(번호 대신 구간색, 깨져야 나온다)·stage 640→430·9행 재설계. 못 배치는 1,800회 실측으로 확정(벽 위에 못을 얹는다)
+- [game-g06-ringdash](20-design/game-g06-ringdash.md) — G06 링 통과 비행 작업 지시서. ⚠ 이탈 방지가 최대 과제
 
 ## 30-seo — 검색·광고·분석
 

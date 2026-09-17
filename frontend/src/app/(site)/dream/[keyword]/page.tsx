@@ -77,8 +77,8 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   */
   const meaning = getDreamMeaning(keyword.slug);
   const description = meaning
-    ? `${word} 꿈은 ${meaning.summary} 전해 오는 해석을 바탕으로 참고용 로또 번호를 추천해 드립니다. 꿈과 당첨 사이에는 인과관계가 없으며 당첨을 보장하지 않습니다.`
-    : `${word} 꿈을 소재로 참고용 로또 번호를 만들어 보세요. 꿈과 당첨 사이에는 인과관계가 없으며 당첨을 보장하지 않습니다.`;
+    ? `${word} 꿈은 ${meaning.summary} 전해 오는 해석을 바탕으로 참고용 로또 번호를 만들어 드립니다. 오래 전해 내려온 이야기를 소재로 한 재미용 콘텐츠입니다.`
+    : `${word} 꿈을 소재로 참고용 로또 번호를 만들어 보세요. 오래 전해 내려온 이야기를 소재로 한 재미용 콘텐츠입니다.`;
   const url = `/dream/${encodeURIComponent(keyword.slug)}`;
 
   /*
@@ -169,8 +169,8 @@ export default async function DreamKeywordPage({ params }: Params) {
           <p>
             꿈해몽은 꿈에 나타난 소재를 두고 오랫동안 전해 내려온{" "}
             <strong>민간 해석</strong>입니다. {word} 꿈 역시 지역과 시대에 따라
-            여러 갈래의 풀이가 전해집니다. 어느 풀이가 옳은지 가릴 방법은
-            없으며, 이 페이지는 특정 해석을 사실로 주장하지 않습니다.
+            여러 갈래의 풀이가 전해집니다. 이 페이지는 그 가운데 널리 알려진
+            풀이를 모아 정리한 것입니다.
           </p>
           <p>
             위 입력창에 꿈의 내용을 자유롭게 적으면, 꿈에서 핵심이 되는 단어를

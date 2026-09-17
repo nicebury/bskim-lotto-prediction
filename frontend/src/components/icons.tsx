@@ -116,6 +116,29 @@ export function PensionIcon(props: IconProps) {
   );
 }
 
+/**
+ * 번호놀이터 — 게임패드.
+ *
+ * ⚠ **`fill` 로 그린다.** `playground.md` 는 "stroke 1.8" 로 적었지만, 이 파일의
+ *   `SERVICE_ICONS` 여섯 개는 전부 `fill="currentColor"` 실루엣이다(파일 첫 주석의 규약).
+ *   한 줄에 나란히 서는 타일에서 하나만 선 그림이면 그것만 얇게 튄다. 규약을 따르고
+ *   그 사실을 [[playground]] 에 남겼다.
+ *
+ * 몸체를 채우고 십자키·버튼을 **도려낸다**(`evenodd`) — 뚫린 자리로 타일 배경이 비쳐
+ * 다른 다섯 아이콘과 같은 인상이 된다.
+ */
+export function PlayIcon(props: IconProps) {
+  return (
+    <svg {...BASE} {...props}>
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M8.2 5.5h7.6a5.6 5.6 0 0 1 5.53 4.68l.83 5A4.3 4.3 0 0 1 17.92 20a4.3 4.3 0 0 1-3.4-1.66l-.72-.92h-3.6l-.72.92A4.3 4.3 0 0 1 6.08 20a4.3 4.3 0 0 1-4.24-4.82l.83-5A5.6 5.6 0 0 1 8.2 5.5Zm-.65 2.9a.9.9 0 0 0-.9.9v.85h-.85a.9.9 0 0 0 0 1.8h.85v.85a.9.9 0 0 0 1.8 0v-.85h.85a.9.9 0 0 0 0-1.8H8.45V9.3a.9.9 0 0 0-.9-.9Zm7.55 1.15a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2Zm2.6 2.6a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2Z"
+      />
+    </svg>
+  );
+}
+
 /** 타일 슬러그 → 아이콘. site.ts 의 `accent` 값과 키를 맞춘다. */
 export const SERVICE_ICONS = {
   lotto: LottoIcon,
@@ -124,6 +147,7 @@ export const SERVICE_ICONS = {
   dream: DreamIcon,
   news: NewsIcon,
   pension: PensionIcon,
+  play: PlayIcon,
 } as const;
 
 export type ServiceIconKey = keyof typeof SERVICE_ICONS;
@@ -379,6 +403,233 @@ export function ScaleIcon(props: IconProps) {
       <path d="M4 8h16" />
       <path d="M4 8l-2 5a3 3 0 0 0 6 0L6 8" />
       <path d="M18 8l-2 5a3 3 0 0 0 6 0L20 8" />
+    </svg>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 번호 추천 화면 아이콘 (2026-09-17)
+ *
+ * 정밀 분석의 일곱 단계와 여섯 가지 기준에 붙는다. "절차 문서 같다" 는 지적을 받고
+ * 단계·기준마다 **모양으로 먼저 읽히게** 하려고 만들었다. 위 선 계열(`STROKE_BASE`)과
+ * 같은 굵기다 — 한 화면에 나란히 놓인다.
+ *
+ * ⚠ 트로피·왕관·돈다발을 그리지 않는다. 결과를 약속하는 그림으로 읽힌다
+ *   (→ docs/wiki/40-domain/forbidden-expressions.md).
+ * ──────────────────────────────────────────────────────────── */
+
+/** 빈도 — 공책에 바를 정(正) 자 세듯 긋는 금. */
+export function TallyIcon(props: IconProps) {
+  return (
+    <svg {...STROKE_BASE} {...props}>
+      <rect x="4" y="3" width="16" height="18" rx="2" />
+      <path d="M8 8v8" />
+      <path d="M11 8v8" />
+      <path d="M14 8v8" />
+      <path d="M7 15l10-6" />
+    </svg>
+  );
+}
+
+/** 출현 주기 — 모래시계. '얼마나 쉬었나' 를 센다. */
+export function HourglassIcon(props: IconProps) {
+  return (
+    <svg {...STROKE_BASE} {...props}>
+      <path d="M6 3h12" />
+      <path d="M6 21h12" />
+      <path d="M7 3c0 5 10 5 10 9s-10 4-10 9" />
+      <path d="M17 3c0 5-10 5-10 9s10 4 10 9" />
+    </svg>
+  );
+}
+
+/** 최근 흐름 — 꺾은선. */
+export function WaveIcon(props: IconProps) {
+  return (
+    <svg {...STROKE_BASE} {...props}>
+      <path d="M3 17l5-5 4 3 8-8" />
+      <path d="M15 7h5v5" />
+    </svg>
+  );
+}
+
+/** 종합 — 겹쳐 쌓은 종이 석 장. 네 관점을 한 상에 올린다. */
+export function LayersIcon(props: IconProps) {
+  return (
+    <svg {...STROKE_BASE} {...props}>
+      <path d="M12 3l9 5-9 5-9-5 9-5Z" />
+      <path d="M3 12.5l9 5 9-5" />
+      <path d="M3 17l9 5 9-5" />
+    </svg>
+  );
+}
+
+/** 가상 추첨 — 주사위. 무작위로 수없이 굴린다는 뜻. */
+export function DiceIcon(props: IconProps) {
+  return (
+    <svg {...STROKE_BASE} {...props}>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="3.5" />
+      <circle cx="8.5" cy="8.5" r="1" fill="currentColor" stroke="none" />
+      <circle cx="15.5" cy="8.5" r="1" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="8.5" cy="15.5" r="1" fill="currentColor" stroke="none" />
+      <circle cx="15.5" cy="15.5" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+/** 추천 번호 — 번호가 적힌 표 한 장(가장자리가 파인 티켓). */
+export function TicketIcon(props: IconProps) {
+  return (
+    <svg {...STROKE_BASE} {...props}>
+      <path d="M3 8a2 2 0 0 0 2-2h14a2 2 0 0 0 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 0-2 2H5a2 2 0 0 0-2-2v-2a2 2 0 0 0 0-4V8Z" />
+      <path d="M9 6v12" strokeDasharray="1.5 2.5" />
+    </svg>
+  );
+}
+
+/** 번호대 균형 — 세 구간에서 둘씩. */
+export function SegmentsIcon(props: IconProps) {
+  return (
+    <svg {...STROKE_BASE} {...props}>
+      <rect x="3" y="5" width="5" height="14" rx="1.5" />
+      <rect x="9.5" y="5" width="5" height="14" rx="1.5" />
+      <rect x="16" y="5" width="5" height="14" rx="1.5" />
+      <circle cx="5.5" cy="9.5" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="5.5" cy="14.5" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="9.5" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="14.5" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="18.5" cy="9.5" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="18.5" cy="14.5" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+/** 안 나오던 번호 되짚기 — 돌아오는 화살표. */
+export function ReturnIcon(props: IconProps) {
+  return (
+    <svg {...STROKE_BASE} {...props}>
+      <path d="M9 14l-5-5 5-5" />
+      <path d="M4 9h10a6 6 0 0 1 0 12h-3" />
+    </svg>
+  );
+}
+
+/** 동반 출현 — 맞물린 두 고리. */
+export function PairIcon(props: IconProps) {
+  return (
+    <svg {...STROKE_BASE} {...props}>
+      <circle cx="9" cy="12" r="5.5" />
+      <circle cx="15" cy="12" r="5.5" />
+    </svg>
+  );
+}
+
+/** 실행 — 재생 삼각형. 시뮬레이션 시작 버튼에 붙는다. */
+export function PlayGlyph(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden focusable={false} {...props}>
+      <path d="M8 5.5v13a1 1 0 0 0 1.52.85l10.4-6.5a1 1 0 0 0 0-1.7L9.52 4.65A1 1 0 0 0 8 5.5Z" />
+    </svg>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 영상·뉴스 화면 아이콘 (2026-09-17)
+ *
+ * 선 계열(`STROKE_BASE`)이다. ⚠ 유튜브 로고·쇼츠 로고를 흉내 내지 않는다 — 상표다
+ * (→ components/video/YouTubeAttribution.tsx 머리말). 쇼츠는 '세로로 긴 화면' 으로만 그린다.
+ * ──────────────────────────────────────────────────────────── */
+
+/** 검색 — 돋보기. */
+export function SearchGlyph(props: IconProps) {
+  return (
+    <svg {...STROKE_BASE} {...props}>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="M16 16l4.5 4.5" />
+    </svg>
+  );
+}
+
+/** 세로 영상 — 세로로 긴 화면 + 재생 표시. '쇼츠' 배지와 탭에 붙는다. */
+export function PortraitIcon(props: IconProps) {
+  return (
+    <svg {...STROKE_BASE} {...props}>
+      <rect x="6.5" y="2.5" width="11" height="19" rx="2.5" />
+      <path d="M10.5 9.5v5l4-2.5-4-2.5Z" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+/** 가로 영상 — 가로로 긴 화면 + 재생 표시. */
+export function LandscapeIcon(props: IconProps) {
+  return (
+    <svg {...STROKE_BASE} {...props}>
+      <rect x="2.5" y="5.5" width="19" height="13" rx="2.5" />
+      <path d="M10.5 9.5v5l4-2.5-4-2.5Z" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+/** 모아 보기 — 네 칸 격자. '전체' 탭. */
+export function TilesIcon(props: IconProps) {
+  return (
+    <svg {...STROKE_BASE} {...props}>
+      <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
+      <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
+      <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
+      <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
+    </svg>
+  );
+}
+
+/** 왼쪽 화살표 — '목록으로'. */
+export function ArrowLeftIcon(props: IconProps) {
+  return (
+    <svg {...STROKE_BASE} {...props}>
+      <path d="M19 12H5" />
+      <path d="M11 6l-6 6 6 6" />
+    </svg>
+  );
+}
+
+/** 오른쪽 화살표 — '다음' · 이어지는 링크. */
+export function ArrowRightIcon(props: IconProps) {
+  return (
+    <svg {...STROKE_BASE} {...props}>
+      <path d="M5 12h14" />
+      <path d="M13 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+/** 바깥으로 — 새 창에서 원문 열기. */
+export function ExternalIcon(props: IconProps) {
+  return (
+    <svg {...STROKE_BASE} {...props}>
+      <path d="M14 4h6v6" />
+      <path d="M20 4l-9 9" />
+      <path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+    </svg>
+  );
+}
+
+/** 불꽃 — '인기순'. 조회수가 많다는 뜻일 뿐, 결과를 약속하지 않는다. */
+export function FlameIcon(props: IconProps) {
+  return (
+    <svg {...STROKE_BASE} {...props}>
+      <path d="M12 21c-3.9 0-6.5-2.6-6.5-6.2 0-3.3 2.4-5.4 3.6-7.8.3 1.8 1.2 3 2.4 3.6-.2-3 1.1-5.6 3.6-7.1-.3 2.7.6 4.6 2.1 6.3 1.3 1.5 1.3 3.2 1.3 5C18.5 18.4 15.9 21 12 21Z" />
+    </svg>
+  );
+}
+
+/** 저장하지 않음 — 서랍에 사선. '영상 파일은 저장하지 않습니다'. */
+export function NoStoreIcon(props: IconProps) {
+  return (
+    <svg {...STROKE_BASE} {...props}>
+      <path d="M4 8h16v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8Z" />
+      <path d="M3 4h18v4H3z" />
+      <path d="M4 21L20 5" />
     </svg>
   );
 }

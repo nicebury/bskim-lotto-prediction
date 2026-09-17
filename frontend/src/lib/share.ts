@@ -63,7 +63,7 @@ export function buildShareTextAll(params: {
   siteName: string
   url?: string
 }): string {
-  const lines = [`${params.siteName} 추천 번호 · ${params.strategyLabel} · ${params.sets.length}조합`, '']
+  const lines = [`${params.siteName} 추천 번호 · ${params.strategyLabel} · ${params.sets.length}개`, '']
   params.sets.forEach((numbers, i) => {
     lines.push(`${i + 1}. ${numbers.join(' · ')}`)
   })
@@ -258,7 +258,7 @@ export async function drawSetsImage(params: {
   ctx.fillText(params.siteName, SIZE / 2, 108)
 
   ctx.font = `700 32px ${family}`
-  const labelText = `${params.strategyLabel} · ${rows}조합`
+  const labelText = `${params.strategyLabel} · 추천 ${rows}개`
   const labelWidth = ctx.measureText(labelText).width + 60
   roundRect(ctx, (SIZE - labelWidth) / 2, 168, labelWidth, 60, 30)
   ctx.fillStyle = '#3B4FD8'
@@ -382,7 +382,7 @@ export async function shareSets(params: {
   image?: Blob | null
 }): Promise<ShareOutcome> {
   const text = buildShareTextAll(params)
-  const title = `${params.siteName} 추천 번호 ${params.sets.length}조합`
+  const title = `${params.siteName} 추천 번호 ${params.sets.length}개`
 
   if (typeof navigator.share === 'function') {
     try {
