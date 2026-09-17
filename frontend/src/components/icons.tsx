@@ -633,3 +633,41 @@ export function NoStoreIcon(props: IconProps) {
     </svg>
   );
 }
+
+/* ── 번호 분석 '이 돈이면' 환산 (2026-09-17) ───────────────────────── */
+
+/** 치킨 — 닭다리. */
+export function DrumstickIcon(props: IconProps) {
+  return (
+    <svg {...STROKE_BASE} {...props}>
+      <path d="M15.5 3.5a5 5 0 0 1 5 5c0 3.6-3.8 6.2-7.2 6.2l-3 3a2 2 0 1 1-2.6 2.6 2 2 0 1 1-2.6-2.6 2 2 0 1 1 2.6-2.6l3-3c0-3.4 2.3-8.6 4.8-8.6Z" />
+    </svg>
+  );
+}
+
+/** 커피 — 손잡이 달린 잔. */
+export function CupIcon(props: IconProps) {
+  return (
+    <svg {...STROKE_BASE} {...props}>
+      <path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9Z" />
+      <path d="M16 11h1.5a2.5 2.5 0 0 1 0 5H16" />
+      <path d="M8 3v3" />
+      <path d="M12 3v3" />
+    </svg>
+  );
+}
+
+/** 영화 — 필름 한 칸. */
+export function FilmIcon(props: IconProps) {
+  return (
+    <svg {...STROKE_BASE} {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M7 4v16" />
+      <path d="M17 4v16" />
+      <path d="M3 9h4" />
+      <path d="M3 15h4" />
+      <path d="M17 9h4" />
+      <path d="M17 15h4" />
+    </svg>
+  );
+}

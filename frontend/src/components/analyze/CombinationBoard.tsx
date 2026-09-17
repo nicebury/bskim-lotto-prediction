@@ -14,23 +14,39 @@ export function CombinationBoard({ combination }: { combination: AnalyzeCombinat
   const { reference } = combination
   const pct = (r: number) => `${Math.round(r * 100)}%`
 
-  const rows: { label: string; mine: string; ref: string | null; help?: string }[] = [
+  /*
+   * `share` 는 역대에서 **같은 값이 나온 회차의 비율**(응답 값). 있으면 타일 아래 게이지로 그린다.
+   * ⚠ 이것은 지나간 회차의 관찰 비율이지 앞으로의 가능성이 아니다 — 문구도 "역대 N%" 로만 쓴다.
+   */
+  const rows: { label: string; mine: string; ref: string | null; share?: number; help?: string }[] = [
     {
       label: '번호 합계',
       mine: formatNumber(combination.sum),
-      ref: `같은 10단위 구간이 ${pct(reference.sum_band_share)}`,
+      ref: `같은 10단위 구간이 역대 ${pct(reference.sum_band_share)}`,
+      share: reference.sum_band_share,
     },
-    { label: '홀짝 비율', mine: combination.odd_even, ref: `역대 ${pct(reference.odd_even_share)}` },
+    {
+      label: '홀짝 비율',
+      mine: combination.odd_even,
+      ref: `같은 비율이 역대 ${pct(reference.odd_even_share)}`,
+      share: reference.odd_even_share,
+    },
     {
       label: '고저 비율',
       mine: combination.high_low,
-      ref: `역대 ${pct(reference.high_low_share)}`,
+      ref: `같은 비율이 역대 ${pct(reference.high_low_share)}`,
+      share: reference.high_low_share,
       help: '23 이상을 고, 22 이하를 저로 봅니다.',
     },
     {
       label: '연속번호',
       mine: combination.consecutive_pairs === 0 ? '없음' : `${combination.consecutive_pairs}쌍`,
-      ref: `연속을 포함한 회차가 ${pct(reference.consecutive_share)}`,
+      // ⚠ 게이지는 **내 조합과 같은 쪽**의 비율이다. 연속이 없는 조합에 '연속 포함' 비율을 그리면 반대를 가리킨다.
+      ref:
+        combination.consecutive_pairs > 0
+          ? `연속을 포함한 회차가 역대 ${pct(reference.consecutive_share)}`
+          : `연속이 없는 회차가 역대 ${pct(1 - reference.consecutive_share)}`,
+      share: combination.consecutive_pairs > 0 ? reference.consecutive_share : 1 - reference.consecutive_share,
       help: '값이 1 차이 나는 이웃 쌍을 셉니다. 24·25·26이면 두 쌍입니다.',
     },
     {
@@ -44,7 +60,8 @@ export function CombinationBoard({ combination }: { combination: AnalyzeCombinat
       ref:
         reference.ac_histogram[String(combination.ac_value)] === undefined
           ? null
-          : `같은 값이 ${pct(reference.ac_histogram[String(combination.ac_value)])}`,
+          : `같은 값이 역대 ${pct(reference.ac_histogram[String(combination.ac_value)])}`,
+      share: reference.ac_histogram[String(combination.ac_value)],
       help: '여섯 번호에서 둘씩 뽑아 만든 차이 15개 가운데 서로 다른 값의 개수에서 5를 뺀 값입니다. 0부터 10까지 나오며, 클수록 번호 사이 간격이 고르지 않게 흩어져 있다는 뜻입니다.',
     },
     {
@@ -74,38 +91,34 @@ export function CombinationBoard({ combination }: { combination: AnalyzeCombinat
     },
   ]
 
+  /*
+    ── 표시 ─────────────────────────────────────────────────────────
+    ⚠ 2026-09-17 표 → **타일**. 지표 이름 · 내 값(크게) · 역대에서 얼마나 흔했나(게이지) 를 한
+      칸에 모았다. 표는 "내 값" 과 "역대" 가 다른 열에 떨어져 눈이 좌우로 오갔다.
+    ⚠ 견줄 값이 없는 지표도 타일을 지우지 않는다 — 조합마다 타일 수가 달라지면 무엇이 빠졌는지 모른다.
+  */
   return (
-    <table className="cb-table">
-      <caption className="sr-only">내 조합의 지표와 역대 회차 분포</caption>
-      <thead>
-        <tr>
-          <th scope="col">지표</th>
-          <th scope="col">내 조합</th>
-          <th scope="col">역대 분포</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.label}>
-            <th scope="row">
-              <span className="cb-label">
-                {r.label}
-                {r.help && <HelpTip title={r.label}>{r.help}</HelpTip>}
+    <ul className="cbt">
+      {rows.map((r) => (
+        <li key={r.label} className="cbt-tile">
+          <span className="cbt-label">
+            {r.label}
+            {r.help && <HelpTip title={r.label}>{r.help}</HelpTip>}
+          </span>
+          <strong className="cbt-value">{r.mine}</strong>
+          {r.share !== undefined ? (
+            <>
+              <span className="cbt-meter" aria-hidden="true">
+                <span style={{ width: `${Math.max(2, Math.round(r.share * 100))}%` }} />
               </span>
-            </th>
-            <td data-label="내 조합">
-              <strong>{r.mine}</strong>
-            </td>
-            {/*
-              ⚠ 견줄 값이 없는 지표는 오른쪽 칸만 비운다. 행 자체를 지우면 표가 조합마다
-                달라 보여 무엇이 빠졌는지 알 수 없다.
-            */}
-            <td data-label="역대 분포" className="cb-ref">
-              {r.ref ?? '-'}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+              <span className="cbt-ref">{r.ref}</span>
+            </>
+          ) : (
+            // ⚠ 견줄 역대 값이 없는 지표는 설명 줄을 비운다. 같은 안내를 네 번 되풀이하면 소음이다.
+            r.ref && <span className="cbt-ref">{r.ref}</span>
+          )}
+        </li>
+      ))}
+    </ul>
   )
 }

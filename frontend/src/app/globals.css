@@ -21,3 +21,5 @@
 @import '../styles/dream.css';
 /* 영상·뉴스 화면(2026-09-17). components.css 의 `.video-*` 일부를 덮어쓰므로 그 뒤에 둔다. */
 @import '../styles/media.css';
+/* 번호 분석 화면(2026-09-17). components.css 의 `.pm-ball`·`.fg-*` 를 함께 쓰므로 그 뒤에 둔다. */
+@import '../styles/analyze.css';

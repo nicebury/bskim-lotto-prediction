@@ -1,0 +1,976 @@
+/*
+ * 번호 분석 화면(`/lotto/analyze`) — 2026-09-17 재설계.
+ * → app/(site)/lotto/analyze/page.tsx · components/analyze/*
+ *
+ * ── 이 파일이 생긴 이유 ─────────────────────────────────────────────
+ * 사용자 지적: "분석된 내용을 이해하기 쉽게. 특히 '매주 샀다면' 은 횟수를 보여 주는 게 아니라
+ * **처음부터 이 숫자로 샀다면 이렇게 됐겠구나** 가 쉽고 재미있게 보여야 한다".
+ * 종전 화면은 표 다섯 개(손익 표 · 일치 표 · 번호 표 · 격자 · 지표 표)였다.
+ *
+ * 접두어: `az-`(화면 뼈대) · `tm-`(매주 샀다면, time machine) · `pm2-`(몇 개나 맞았나) ·
+ * `nfc-`(번호 카드) · `cbt-`(조합 타일). 종전 `.rt-*` `.pm-table` `.nf-table` `.cb-table` 은
+ * 쓰는 곳이 없어졌다. ⚠ `.pm-ball`(겹친 번호 테두리)은 **다시 쓴다** — components.css 에 둔다.
+ *
+ * ⚠ 색·크기는 tokens.css 변수. 강조 세로 띠 금지. 손익은 부호를 글자로도 쓴다(색만으로 전하지 않는다).
+ * ──────────────────────────────────────────────────────────── */
+
+/* ────────────────────────────────────────────────────────────
+ * 1. 머리 — 번호 · 요약 칩 · 내보내기 · 절 이동
+ * ──────────────────────────────────────────────────────────── */
+
+.az-hero {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  margin: var(--space-4) 0 var(--space-6);
+  padding: var(--space-8) var(--space-5) var(--space-6);
+  border-radius: 28px;
+  text-align: center;
+  background:
+    radial-gradient(60% 80% at 50% 0%, color-mix(in oklab, var(--color-primary) 14%, transparent), transparent 70%),
+    var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+.az-eyebrow {
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.06em;
+  color: var(--color-primary);
+}
+
+.az-hero h1 {
+  margin: 0;
+  font-size: clamp(1.5rem, 1.15rem + 1.3vw, 2.2rem);
+  letter-spacing: var(--ls-hero);
+  word-break: keep-all;
+}
+
+.az-lede {
+  margin: 0;
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+.az-balls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.az-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.az-chips li {
+  padding: 6px var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.az-chips b {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.az-chips li[data-tone='loss'] b {
+  color: var(--color-danger);
+}
+
+.az-actions {
+  width: 100%;
+  max-width: 560px;
+}
+
+.az-jump {
+  display: flex;
+  gap: var(--space-2);
+  max-width: 100%;
+  margin-top: var(--space-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.az-jump::-webkit-scrollbar {
+  display: none;
+}
+
+.az-jump a {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  min-height: 44px;
+  padding-inline: var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.az-jump a:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+/* 절 카드. 첫 절('매주 샀다면')이 주인공이라 배경을 따로 준다. */
+.az-sec {
+  padding: var(--space-5);
+  border-radius: 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  scroll-margin-top: calc(var(--header-height) + var(--space-4));
+}
+
+@media (min-width: 640px) {
+  .az-sec {
+    padding: var(--space-8);
+  }
+}
+
+.az-sec[data-feature] {
+  background:
+    radial-gradient(70% 50% at 100% 0%, color-mix(in oklab, var(--svc-reco) 12%, transparent), transparent 70%),
+    var(--color-surface);
+}
+
+.az-sec h2 {
+  scroll-margin-top: calc(var(--header-height) + var(--space-6));
+}
+
+.az-sec-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.az-sec-head h2 {
+  margin: 0;
+  font-size: clamp(1.2rem, 1rem + 0.7vw, 1.5rem);
+  letter-spacing: var(--ls-title);
+  word-break: keep-all;
+}
+
+.az-sec-no {
+  display: grid;
+  place-items: center;
+  flex: none;
+  min-width: 2.4rem;
+  height: 1.7rem;
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-black);
+  font-variant-numeric: tabular-nums;
+}
+
+.az-sec-lede {
+  margin: calc(var(--space-2) * -1) 0 var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+  word-break: keep-all;
+}
+
+/* 공용 소제목(이 화면 안) */
+.tm-sub {
+  margin: 0 0 var(--space-3);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-black);
+  letter-spacing: var(--ls-title);
+  color: var(--color-text);
+}
+
+.tm-wall-note {
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--color-text-subtle);
+  word-break: keep-all;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 2. 매주 샀다면 — 언제부터 · 복권 벽 · 돈의 흐름 · 이 돈이면
+ * ──────────────────────────────────────────────────────────── */
+
+.tm {
+  display: grid;
+  gap: var(--space-8);
+}
+
+.tm-when {
+  margin: 0 0 var(--space-4);
+  font-size: clamp(1.05rem, 0.95rem + 0.5vw, 1.3rem);
+  line-height: 1.5;
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+.tm-when strong {
+  color: var(--color-text);
+}
+
+.tm-stats {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 640px) {
+  .tm-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
+}
+
+.tm-stats li {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-4);
+  border-radius: 18px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+
+.tm-stats li[data-accent] {
+  background: color-mix(in oklab, var(--color-primary) 8%, var(--color-surface));
+  border-color: color-mix(in oklab, var(--color-primary) 30%, var(--color-border));
+}
+
+.tm-stats span {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+}
+
+.tm-stats strong {
+  font-size: clamp(1.7rem, 1.3rem + 1.5vw, 2.3rem);
+  font-weight: var(--fw-black);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.tm-stats li[data-accent] strong {
+  color: var(--color-primary);
+}
+
+.tm-stats small {
+  margin-left: 2px;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-bold);
+}
+
+.tm-stats em {
+  font-size: var(--fs-xs);
+  font-style: normal;
+  color: var(--color-text-subtle);
+}
+
+/* ── 복권 벽 ──────────────────────────────────────────── */
+
+.tm-wall {
+  margin: 0;
+}
+
+/*
+ * 한 칸 = 한 장. 칸 크기를 고정하고 줄 수는 폭에 맡긴다.
+ * ⚠ 1,241칸이라 칸을 크게 두면 화면을 몇 번 넘긴다. 7px 칸 + 2px 간격이면 375px 폭(안쪽 약 300px)에
+ *   한 줄 33칸 · 약 38줄(340px) 로 한 화면 안에 든다.
+ */
+.tm-wall-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 7px);
+  gap: 2px;
+  padding: var(--space-3);
+  border-radius: 14px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+
+@media (min-width: 900px) {
+  .tm-wall-grid {
+    grid-template-columns: repeat(auto-fill, 9px);
+    gap: 3px;
+  }
+}
+
+.tm-wall-grid i {
+  display: block;
+  aspect-ratio: 1;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--color-text) 14%, transparent);
+}
+
+/*
+ * 당첨 칸. ⚠ 볼 5구간 색(--ball-*)을 쓰지 않는다 — 볼 색은 '번호 구간' 이라는 뜻이 박혀 있다.
+ * 등수는 서비스 색표에서 고른다.
+ */
+.tm-wall-grid i[data-kind='r5'],
+.tm-legend li[data-kind='r5'] i {
+  background: var(--svc-reco);
+}
+
+.tm-wall-grid i[data-kind='r4'],
+.tm-legend li[data-kind='r4'] i {
+  background: var(--svc-dream);
+}
+
+.tm-wall-grid i[data-kind='top'],
+.tm-legend li[data-kind='top'] i {
+  background: var(--color-primary);
+}
+
+.tm-wall-grid i[data-kind='r5'],
+.tm-wall-grid i[data-kind='r4'],
+.tm-wall-grid i[data-kind='top'] {
+  transform: scale(1.25);
+  box-shadow: 0 0 0 1px var(--color-surface);
+}
+
+.tm-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.tm-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tm-legend i {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--color-text) 14%, transparent);
+}
+
+.tm-legend b {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 돈의 흐름 ────────────────────────────────────────── */
+
+.tm-bars {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.tm-bar {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 4px var(--space-3);
+}
+
+@media (min-width: 640px) {
+  .tm-bar {
+    grid-template-columns: 6rem minmax(0, 1fr) 9rem;
+    grid-template-rows: auto;
+  }
+}
+
+.tm-bar-label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+}
+
+.tm-bar-track {
+  display: block;
+  height: 22px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  overflow: hidden;
+}
+
+.tm-bar-track > span {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+}
+
+.tm-bar[data-kind='spent'] .tm-bar-track > span {
+  background: color-mix(in oklab, var(--color-text) 55%, var(--color-surface));
+}
+
+.tm-bar[data-kind='returned'] .tm-bar-track > span {
+  background: var(--svc-lotto);
+}
+
+.tm-bar strong {
+  grid-column: 2;
+  font-size: var(--fs-body);
+  font-weight: var(--fw-black);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 640px) {
+  .tm-bar strong {
+    grid-column: auto;
+    text-align: right;
+  }
+}
+
+.tm-prizes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tm-prizes li {
+  padding: 6px var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.tm-prizes b {
+  color: var(--color-text);
+}
+
+.tm-prizes span {
+  margin-left: 4px;
+  font-weight: var(--fw-bold);
+  color: var(--color-text);
+}
+
+/*
+ * 결과 — 이 블록에서 가장 큰 숫자. 손실이면 옅은 빨강 바탕.
+ * ⚠ 색만으로 전하지 않는다 — 부호(−)가 글자로 붙는다.
+ */
+.tm-result {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding: var(--space-5);
+  border-radius: 20px;
+  background: color-mix(in oklab, var(--svc-lotto) 10%, var(--color-surface));
+}
+
+.tm-result[data-loss] {
+  background: color-mix(in oklab, var(--color-danger) 8%, var(--color-surface));
+}
+
+@media (min-width: 640px) {
+  .tm-result {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: var(--space-6);
+  }
+}
+
+.tm-result > div {
+  display: grid;
+}
+
+.tm-result-label {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--color-text-muted);
+}
+
+.tm-result strong {
+  font-size: clamp(2rem, 1.5rem + 2vw, 2.8rem);
+  font-weight: var(--fw-black);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--svc-lotto);
+}
+
+.tm-result[data-loss] strong {
+  color: var(--color-danger);
+}
+
+.tm-result p {
+  margin: 0;
+  font-size: var(--fs-body);
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+.tm-result p b {
+  color: var(--color-text);
+  font-size: 1.15em;
+}
+
+.tm-note {
+  margin: var(--space-3) 0 0;
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+/* ── 이 돈이면 ────────────────────────────────────────── */
+
+.tm-equiv ul {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 640px) {
+  .tm-equiv ul {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
+}
+
+.tm-equiv li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-4);
+  border-radius: 18px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+
+.tm-equiv-icon {
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--svc-reco-bg);
+  color: var(--color-warning);
+}
+
+.tm-equiv strong {
+  font-size: 1.6rem;
+  font-weight: var(--fw-black);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.tm-equiv small {
+  margin-left: 2px;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+}
+
+.tm-equiv li > span:last-child {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 3. 몇 개나 맞았나 — 사다리 · 짜릿했던 순간
+ * ──────────────────────────────────────────────────────────── */
+
+.pm2 {
+  display: grid;
+  gap: var(--space-8);
+}
+
+.pm2-lede {
+  margin: 0 0 var(--space-4);
+  font-size: var(--fs-body);
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+.pm2-lede strong {
+  color: var(--color-text);
+}
+
+.pm2-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 6px;
+}
+
+.pm2-table th[scope='row'] {
+  width: 3.2rem;
+  padding: 0;
+  text-align: left;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.pm2-barcell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0;
+}
+
+.pm2-bar {
+  flex: 1;
+  height: 20px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-2);
+  overflow: hidden;
+}
+
+.pm2-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: color-mix(in oklab, var(--color-text) 25%, var(--color-surface));
+}
+
+/* 등수에 드는 칸(3개 이상)만 색. 나머지는 회색 — 대부분이 낙첨이라는 것이 색으로도 보인다. */
+.pm2-table tr[data-win] .pm2-bar > span {
+  background: linear-gradient(90deg, var(--svc-reco), var(--svc-dream));
+}
+
+.pm2-count {
+  flex: none;
+  min-width: 4rem;
+  text-align: right;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.pm2-table tr[data-zero] .pm2-count,
+.pm2-table tr[data-zero] th {
+  color: var(--color-text-subtle);
+}
+
+.pm2-rankcell {
+  width: 4.2rem;
+  padding: 0 0 0 var(--space-2);
+  text-align: right;
+}
+
+.pm2-rank {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--svc-reco-bg);
+  color: var(--color-text);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  white-space: nowrap;
+}
+
+.pm2-miss {
+  font-size: var(--fs-xs);
+  color: var(--color-text-subtle);
+}
+
+.pm2-exact {
+  margin: var(--space-3) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+/* ── 짜릿했던 순간 — 복권 한 장 모양 ─────────────────────── */
+
+.pm2-tickets {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 720px) {
+  .pm2-tickets {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .pm2-tickets {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/*
+ * 복권 한 장. 위쪽 날짜 줄과 아래 볼 줄 사이를 **점선**으로 가른다 — 복권 용지의 절취선.
+ * ⚠ 좌우 반원 홈은 `radial-gradient` 마스크로 판다(요소를 더하지 않는다).
+ */
+.pm2-ticket {
+  position: relative;
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: 16px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  -webkit-mask: radial-gradient(circle 9px at 0 58%, transparent 98%, #000) left / 51% 100% no-repeat,
+    radial-gradient(circle 9px at 100% 58%, transparent 98%, #000) right / 51% 100% no-repeat;
+  mask: radial-gradient(circle 9px at 0 58%, transparent 98%, #000) left / 51% 100% no-repeat,
+    radial-gradient(circle 9px at 100% 58%, transparent 98%, #000) right / 51% 100% no-repeat;
+}
+
+.pm2-ticket[data-top] {
+  background: color-mix(in oklab, var(--svc-reco) 12%, var(--color-surface));
+  border-color: color-mix(in oklab, var(--svc-reco) 40%, var(--color-border));
+}
+
+.pm2-ticket-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-bottom: var(--space-3);
+  border-bottom: 2px dashed var(--color-border-strong);
+}
+
+.pm2-ticket-date {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+}
+
+.pm2-ticket-round {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+}
+
+.pm2-ticket-balls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pm2-ticket-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.pm2-ticket-foot strong {
+  color: var(--color-text);
+}
+
+.pm2-ticket-prize {
+  margin-left: auto;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--color-text);
+  color: var(--color-surface);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 4. 번호 카드
+ * ──────────────────────────────────────────────────────────── */
+
+.nfc {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 560px) {
+  .nfc {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .nfc {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.nfc-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: 18px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+
+.nfc-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.nfc-total {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.nfc-total strong {
+  font-size: 1.6rem;
+  font-weight: var(--fw-black);
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.nfc-last {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: 10px;
+  background: var(--color-surface);
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+}
+
+.nfc-last b {
+  color: var(--color-text);
+}
+
+.nfc-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2) var(--space-3);
+  margin: 0;
+}
+
+.nfc-list div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--fs-xs);
+}
+
+.nfc-list dt {
+  color: var(--color-text-muted);
+}
+
+.nfc-list dd {
+  margin: 0;
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 5. 조합 타일
+ * ──────────────────────────────────────────────────────────── */
+
+.cbt {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 720px) {
+  .cbt {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
+}
+
+@media (min-width: 1024px) {
+  .cbt {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.cbt-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border-radius: 16px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+
+.cbt-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+}
+
+.cbt-value {
+  font-size: 1.45rem;
+  font-weight: var(--fw-black);
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.cbt-meter {
+  display: block;
+  height: 6px;
+  margin-top: auto;
+  border-radius: var(--radius-pill);
+  background: color-mix(in oklab, var(--color-text) 10%, transparent);
+  overflow: hidden;
+}
+
+.cbt-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+}
+
+.cbt-ref {
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--color-text-subtle);
+  word-break: keep-all;
+}
+
+.cbt-tile > .cbt-ref:only-of-type {
+  margin-top: auto;
+}
+
+/*
+ * 45칸 격자는 components.css `.fg-*` 를 그대로 쓴다.
+ * ⚠ 절 카드 안에서 폭을 묶는다. 1,100px 폭을 9칸으로 나누면 칸 하나가 110px 이라 번호판이 아니라
+ *   타일 벽처럼 보였다(캡처로 확인). 560px 이면 칸이 60px 안팎으로 한눈에 든다.
+ */
+.az-sec .fg {
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+.az-sec + .analyze-back,
+.disclaimer + .analyze-back {
+  margin-top: var(--space-6);
+}

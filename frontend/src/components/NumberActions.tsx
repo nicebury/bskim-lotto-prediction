@@ -131,16 +131,20 @@ export function NumberActions({
         ⚠ `AdBreakLink` 인 이유: 광고를 켜면 이 이동이 문서를 새로 불러온다. 사용자가 전면
           광고를 원한 자리가 **정확히 여기**다("분석을 눌러 페이지가 이동하면").
           광고가 꺼져 있는 지금은 평범한 `<Link>` 와 완전히 같이 동작한다.
-        ⚠ `aria-label` 이 보이는 글자("분석")를 품는다 — WCAG 2.5.3(Label in Name).
+        ⚠ `aria-label` 이 보이는 글자("샀다면")를 품는다 — WCAG 2.5.3(Label in Name).
+        ⚠ **글자를 "분석" 에서 "샀다면?" 으로 바꿨다**(2026-09-17 사용자 결정). 이 버튼이 여는 화면의
+          주인공이 "1회차부터 매주 이 번호로 샀다면" 이야기라, '분석' 보다 누르고 싶은 이유가 글자에
+          드러난다. 화면 제목("이 번호, 예전에 샀다면?")과도 이어진다. 주소(`/lotto/analyze`)와
+          prop 이름(`showAnalyze`)은 그대로 둔다 — 공유된 링크가 깨지면 안 된다.
       */}
       {showAnalyze && (
         <AdBreakLink
           href={analyzeHref(numbers)}
           className="action-btn is-analyze"
-          aria-label={`${strategyLabel} 번호 분석`}
+          aria-label={`${strategyLabel} 번호로 예전부터 샀다면? 역대 기록 보기`}
         >
-          <ChartIcon />
-          <span>분석</span>
+          <RewindIcon />
+          <span>샀다면?</span>
         </AdBreakLink>
       )}
 
@@ -215,17 +219,16 @@ const ICON = {
 }
 
 /**
- * 분석 아이콘 — 막대 셋.
- * ⚠ 같은 파일의 다른 아이콘과 **같은 규격**(24 격자, `currentColor`)이다. 규격이 어긋나면
- *   한 줄에 놓인 네 아이콘의 굵기가 제각각으로 보인다.
+ * '샀다면?' 아이콘 — 거꾸로 도는 시계(되감기).
+ * ⚠ 막대 셋(통계)에서 바꿨다. 버튼 글자가 "샀다면?" 이 되면서 **과거로 돌아가 본다** 는 뜻이
+ *   맞다. 같은 파일의 다른 아이콘과 **같은 규격**(`ICON`, 24 격자)이다.
  */
-function ChartIcon() {
+function RewindIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M4 20h16" />
-      <path d="M7 20v-6" />
-      <path d="M12 20V7" />
-      <path d="M17 20v-9" />
+    <svg {...ICON}>
+      <path d="M3 12a9 9 0 1 0 2.64-6.36" />
+      <path d="M3 3v5h5" />
+      <path d="M12 7.5V12l3 2" />
     </svg>
   )
 }

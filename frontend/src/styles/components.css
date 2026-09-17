@@ -1732,7 +1732,16 @@ a.tile:hover .tile-glyph {
   border-top: none;
 }
 
-/* 라벨이 두 글자라 아이콘과 붙여도 좁다. 가로 패딩을 없애 세 칸이 균등하게 나뉜다. */
+/*
+ * ⚠ 버튼이 넷(샀다면? · 복사 · 저장 · 공유)이면 **네 칸**으로 눕힌다(2026-09-17).
+ *   3열 고정 규칙은 버튼이 셋이던 때의 것이라, 넷째 버튼('공유')이 둘째 줄에 혼자 떨어져
+ *   카드 아래가 들쭉날쭉했다(홈 캐러셀 500px 캡처로 확인).
+ */
+.number-actions.is-compact[data-cols='4'] {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/* 라벨이 두 글자라 아이콘과 붙여도 좁다. 가로 패딩을 없애 칸이 균등하게 나뉜다. */
 .number-actions.is-compact .action-btn {
   gap: var(--space-1);
   padding-inline: 0;
@@ -2607,94 +2616,7 @@ a.tile:hover .tile-glyph {
   letter-spacing: 0;
 }
 
-/*
- * 번호별 기록 표.
- *
- * ⚠ **좁은 화면에서는 표가 아니다.** 열이 여섯이라 375px 에서 그대로 두면 넘친다. 행마다
- *   카드로 쌓고 각 셀 앞에 `data-label` 을 붙여 무슨 값인지 밝힌다 — 머리글이 화면에서
- *   사라지므로 값만 남으면 읽을 수 없다.
- * ⚠ 마크업은 하나뿐이다(`<table>`). 좁은 화면용 DOM 을 따로 만들면 같은 데이터가 두 벌
- *   생기고, 스크린리더는 그 둘을 다 읽는다.
- */
-.nf-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.nf-num {
-  display: inline-grid;
-  place-items: center;
-  min-width: 34px;
-  height: 34px;
-  border-radius: var(--radius-pill);
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  font-weight: var(--fw-bold);
-  font-size: var(--fs-sm);
-}
-
-.nf-dim {
-  color: var(--color-text-subtle);
-  font-size: var(--fs-xs);
-}
-
-@media (max-width: 767px) {
-  .nf-table thead {
-    /* ⚠ `display: none` 이 아니라 화면에서만 감춘다. 스크린리더는 머리글을 계속 쓴다. */
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-  }
-
-  .nf-table tr {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: var(--space-1) var(--space-3);
-    align-items: center;
-    padding: var(--space-3) 0;
-    border-bottom: 1px solid var(--color-border);
-  }
-
-  .nf-table tr > th {
-    grid-row: span 5;
-  }
-
-  .nf-table td {
-    display: flex;
-    justify-content: space-between;
-    gap: var(--space-3);
-    font-size: var(--fs-sm);
-  }
-
-  /* 머리글이 안 보이므로 값 앞에 이름을 낸다. */
-  .nf-table td::before {
-    content: attr(data-label);
-    color: var(--color-text-muted);
-    font-size: var(--fs-xs);
-  }
-}
-
-@media (min-width: 768px) {
-  .nf-table th,
-  .nf-table td {
-    padding: var(--space-2) var(--space-3);
-    text-align: left;
-    border-bottom: 1px solid var(--color-border);
-    font-size: var(--fs-sm);
-  }
-
-  .nf-table thead th {
-    color: var(--color-text-muted);
-    font-size: var(--fs-xs);
-    font-weight: var(--fw-semibold);
-  }
-
-  .nf-table td::before {
-    content: none;
-  }
-}
+/* ⚠ 옛 번호별 기록 표(`.nf-table`)는 2026-09-17 카드(`styles/analyze.css` `.nfc-*`)로 바뀌어 걷어냈다. */
 
 /*
  * 45칸 빈도 격자.
@@ -2773,159 +2695,8 @@ a.tile:hover .tile-glyph {
 .fg-legend-scale i[data-level='3'] { background: color-mix(in oklab, var(--color-primary) 62%, var(--color-surface)); }
 .fg-legend-scale i[data-level='4'] { background: var(--color-primary); }
 
-/* ── 조합 패턴 표 ─────────────────────────────────────── */
-
-/*
- * ⚠ `.nf-table` 과 같은 규칙을 쓴다 — 좁은 화면에서는 표가 아니라 행 카드로 쌓는다.
- *   같은 화면 안에서 표 둘이 다르게 접히면 그것만으로 읽기가 어려워진다.
- */
-.cb-table,
-.pm-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.cb-label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.cb-ref {
-  color: var(--color-text-muted);
-  font-size: var(--fs-xs);
-}
-
-@media (max-width: 767px) {
-  .cb-table thead {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-  }
-
-  .cb-table tr {
-    display: grid;
-    gap: 2px;
-    padding: var(--space-3) 0;
-    border-bottom: 1px solid var(--color-border);
-  }
-
-  .cb-table tr > th {
-    text-align: left;
-    font-size: var(--fs-sm);
-  }
-
-  .cb-table td {
-    display: flex;
-    justify-content: space-between;
-    gap: var(--space-3);
-    font-size: var(--fs-sm);
-  }
-
-  .cb-table td::before {
-    content: attr(data-label);
-    color: var(--color-text-muted);
-    font-size: var(--fs-xs);
-  }
-}
-
-@media (min-width: 768px) {
-  .cb-table th,
-  .cb-table td,
-  .pm-table th,
-  .pm-table td {
-    padding: var(--space-2) var(--space-3);
-    text-align: left;
-    border-bottom: 1px solid var(--color-border);
-    font-size: var(--fs-sm);
-  }
-
-  .cb-table thead th,
-  .pm-table thead th {
-    color: var(--color-text-muted);
-    font-size: var(--fs-xs);
-    font-weight: var(--fw-semibold);
-  }
-
-  .cb-table td::before {
-    content: none;
-  }
-}
-
-/* ── 과거 회차 대조 ───────────────────────────────────── */
-
-.pm-table th,
-.pm-table td {
-  padding: var(--space-2) var(--space-3);
-  text-align: left;
-  border-bottom: 1px solid var(--color-border);
-  font-size: var(--fs-sm);
-}
-
-/* 0회인 줄은 흐리게. 지우지 않는 이유는 "없었다" 도 정보이기 때문이다. */
-.pm-table tr[data-zero] {
-  color: var(--color-text-muted);
-}
-
-.pm-rank {
-  color: var(--color-text-muted);
-  font-size: var(--fs-xs);
-}
-
-.pm-total,
-.pm-exact {
-  margin: var(--space-3) 0 0;
-  font-size: var(--fs-xs);
-  color: var(--color-text-muted);
-}
-
-.pm-closest {
-  margin-top: var(--space-5);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--color-border);
-}
-
-.pm-closest h3 {
-  margin: 0 0 var(--space-3);
-  font-size: var(--fs-h3);
-}
-
-.pm-list {
-  display: grid;
-  gap: var(--space-4);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.pm-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-2);
-  font-size: var(--fs-sm);
-}
-
-.pm-date {
-  color: var(--color-text-subtle);
-  font-size: var(--fs-xs);
-}
-
-.pm-badge {
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-semibold);
-}
-
-.pm-balls {
-  gap: var(--space-2);
-}
+/* ⚠ 옛 조합 표·일치 표(`.cb-table` `.pm-table` `.pm-closest` …)는 2026-09-17 에 styles/analyze.css 의
+ *   타일·사다리·티켓(`.cbt-*` `.pm2-*`)으로 바뀌어 걷어냈다. `.pm-ball` 은 티켓에서 계속 쓴다. */
 
 /*
  * 겹친 번호.
@@ -2953,65 +2724,7 @@ a.tile:hover .tile-glyph {
   transform: scale(1.06);
 }
 
-/* ── 1회차부터 샀다면 ─────────────────────────────────── */
-
-.rt-rows {
-  display: grid;
-  gap: var(--space-2);
-  margin: 0;
-}
-
-.rt-rows > div {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: var(--space-3);
-  font-size: var(--fs-sm);
-}
-
-.rt-rows dt {
-  color: var(--color-text-muted);
-}
-
-.rt-rows dd {
-  margin: 0;
-  text-align: right;
-}
-
-/*
- * 손익.
- * ⚠ 이 블록에서 사용자가 기억해야 할 숫자는 이것 하나다. 가장 크게 낸다.
- * ⚠ **색으로만 전달하지 않는다.** 부호(−)를 글자로 함께 쓴다(WCAG 1.4.1).
- */
-.rt-net {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin: var(--space-4) 0 0;
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--color-border);
-}
-
-.rt-net-label {
-  font-size: var(--fs-sm);
-  color: var(--color-text-muted);
-}
-
-.rt-net strong {
-  font-size: var(--fs-h2);
-  font-weight: var(--fw-bold);
-}
-
-.rt-net[data-loss] strong {
-  color: var(--color-danger);
-}
-
-.rt-note {
-  margin: var(--space-3) 0 0;
-  font-size: var(--fs-xs);
-  color: var(--color-text-muted);
-}
+/* ⚠ 옛 '1회차부터 샀다면' 표(`.rt-*`)는 2026-09-17 styles/analyze.css 의 `.tm-*` 로 바뀌어 걷어냈다. */
 
 /* ────────────────────────────────────────────────────────────
  * Breadcrumb — 화면의 항목과 JSON-LD BreadcrumbList 가 일치해야 한다.
