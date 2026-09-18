@@ -39,7 +39,12 @@ import { usePathname } from 'next/navigation'
  */
 const TABS = [
   { href: '/', label: '홈', icon: HomeIcon },
-  { href: '/lotto/stat', label: '통계', icon: ChartIcon },
+  /*
+    ⚠ 헤더와 같은 이름을 쓴다(2026-09-18 '번호통계'→'번호분석').
+    ⚠ '분석' 두 글자로 줄이지 않는다 — 옆 칸이 '분석추천' 이라 어느 쪽이 무엇인지 흐려진다.
+      375px 에서 한 칸이 75px 이라 네 글자가 들어간다(11px 글자 기준 약 46px).
+  */
+  { href: '/lotto/stat', label: '번호분석', icon: ChartIcon },
   { href: '/lotto/recommend', label: '분석추천', icon: SparkIcon },
   // 헤더 NAV_ITEMS 와 같은 순서 — 꿈해몽이 분석추천 바로 뒤(2026-09-17).
   { href: '/dream', label: '꿈해몽', icon: MoonIcon },

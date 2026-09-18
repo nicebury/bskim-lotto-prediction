@@ -57,7 +57,7 @@ export default async function PatternPage() {
         items={[
           { name: "홈", href: "/" },
           { name: "로또 6/45", href: "/lotto" },
-          { name: "번호 통계", href: "/lotto/stat" },
+          { name: "번호분석", href: "/lotto/stat" },
           { name: "조합 패턴", href: "/lotto/stat/pattern" },
         ]}
       />

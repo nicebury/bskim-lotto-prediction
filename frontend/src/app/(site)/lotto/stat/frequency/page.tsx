@@ -74,7 +74,7 @@ export default async function FrequencyPage() {
         items={[
           { name: "홈", href: "/" },
           { name: "로또 6/45", href: "/lotto" },
-          { name: "번호 통계", href: "/lotto/stat" },
+          { name: "번호분석", href: "/lotto/stat" },
           { name: "출현 빈도", href: "/lotto/stat/frequency" },
         ]}
       />

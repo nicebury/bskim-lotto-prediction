@@ -73,7 +73,8 @@ export function FrequencyGrid({
           <i data-level={4} />
         </span>
         {formatNumber(min)}회(가장 적게)부터 {formatNumber(max)}회(가장 많이)까지, 색이
-        짙을수록 자주 나온 번호입니다. 테두리가 있는 칸이 내 번호입니다.
+        짙을수록 자주 나온 번호입니다. <strong className="fg-mine-word">붉은 점선</strong> 칸이 내
+        번호입니다.
       </p>
     </div>
   )

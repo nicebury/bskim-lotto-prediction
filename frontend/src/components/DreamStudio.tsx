@@ -1,11 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { browserDreamRecommend } from '@/lib/api'
+import { scrollToResultSoon } from '@/lib/scroll-to'
 import type { DreamMatch, DreamResult, DreamTier, DreamTierKey } from '@/lib/api-types'
 import { traitSummaryLine } from '@/lib/traits'
 import { BulkActions } from './BulkActions'
+import { DreamReading } from './DreamReading'
 import { Card, EmptyState } from './Card'
 import { LottoBall } from './LottoBall'
 import { NumberActions } from './NumberActions'
@@ -53,6 +55,20 @@ export function DreamStudio({ initialText = '' }: { initialText?: string }) {
   /** 제외 없이 받은 결과의 tier 별 풀. 제외 스위치를 그리는 근거다(위 `run` 주석). */
   const [basePools, setBasePools] = useState<DreamResult['tiers'] | null>(null)
 
+  /*
+    ── 풀이 팝업(2026-09-18) ────────────────────────────────────────
+    ⚠ **새 꿈을 풀 때만** 띄운다(`reading`). 개수를 바꾸거나 번호를 빼는 것은 같은 꿈을 계속
+      보는 중이라, 그때마다 점집 장면이 다시 뜨면 성가시다.
+    ⚠ 받은 결과를 잠시 `pending` 에 담아 둔다. 팝업이 도는 동안 뒤에서 화면이 바뀌면 닫힐 때
+      튄다(추천 화면의 뽑기 팝업과 같은 규칙).
+  */
+  const [reading, setReading] = useState(false)
+  const [arrived, setArrived] = useState(false)
+  const [pending, setPending] = useState<DreamResult | null>(null)
+
+  /** 결과 블록. 풀이가 끝나면 이 자리로 화면을 옮긴다(사용자 요청). */
+  const resultRef = useRef<HTMLDivElement>(null)
+
   const toggleExcluded = (n: number) => {
     const next = new Set(excluded)
     if (next.has(n)) next.delete(n)
@@ -91,9 +107,16 @@ export function DreamStudio({ initialText = '' }: { initialText?: string }) {
     if (resetExcluded) setExcluded(sending)
     setLoading(true)
     setError(null)
+    // 새 꿈일 때만 점집 장면을 띄운다(위 `reading` 주석).
+    if (resetExcluded) {
+      setReading(true)
+      setArrived(false)
+      setPending(null)
+    }
     try {
       const next = await browserDreamRecommend(trimmed, nextCount, [...sending])
-      setResult(next)
+      if (resetExcluded) setPending(next)
+      else setResult(next)
       /*
         제외 없이 받은 결과의 풀을 따로 기억한다.
         ⚠ 서버가 제외한 번호를 `pool` 에서도 빼기 때문에, 그것만 보고 스위치를 그리면
@@ -106,14 +129,34 @@ export function DreamStudio({ initialText = '' }: { initialText?: string }) {
       setResult(null)
     } finally {
       setLoading(false)
+      setArrived(true)
     }
+  }
+
+  /** 풀이 장면이 끝났다. 그때 결과를 화면에 올리고 그 자리로 옮긴다. */
+  const finishReading = () => {
+    setReading(false)
+    if (!pending) return
+    setResult(pending)
+    setPending(null)
+    scrollToResultSoon(() => resultRef.current)
+  }
+
+  /** 그만두기. 받아 둔 풀이는 버린다 — 보여 주지 않기로 한 것을 몰래 반영하지 않는다. */
+  const cancelReading = () => {
+    setReading(false)
+    setPending(null)
   }
 
   const remaining = MAX_LENGTH - text.length
 
   return (
     <div>
-      <Card>
+      {/*
+        입력 카드. ⚠ 점집 풍 화면이라 카드도 **한지 위에 적는 느낌**으로 둔다(`dream-desk`).
+        공용 `Card` 를 쓰지 않는 이유는 이 화면만 바탕과 테두리가 다르기 때문이다.
+      */}
+      <div className="dream-desk">
         <form
           onSubmit={(event) => {
             event.preventDefault()
@@ -176,20 +219,34 @@ export function DreamStudio({ initialText = '' }: { initialText?: string }) {
 
           <div className="hero-cta">
             <button type="submit" className="btn btn-primary" disabled={loading || !text.trim()}>
-              {loading ? '꿈을 분석하는 중…' : '꿈해몽 번호추천'}
+              {loading ? '꿈을 풀어 보는 중…' : '꿈 풀이 보기'}
             </button>
           </div>
 
-          {loading && (
-            <p className="muted" style={{ fontSize: 'var(--fs-xs)', marginTop: 'var(--space-3)' }}>
-              처음 실행할 때는 분석 모델을 불러오느라 20초가량 걸릴 수 있습니다. 잠시만 기다려
-              주세요.
-            </p>
-          )}
+          {/*
+            ⚠ 로딩 안내는 팝업(`DreamReading`)이 맡는다. 여기서도 같은 말을 하면 두 곳이
+              같은 소리를 내고, 팝업 뒤에 가려 보이지도 않는다.
+          */}
         </form>
-      </Card>
+      </div>
 
-      <div aria-live="polite" aria-busy={loading} style={{ marginTop: 'var(--space-5)' }}>
+      {reading && (
+        <DreamReading
+          text={text.trim()}
+          picked={firstSetOf(pending)}
+          done={arrived}
+          onFinished={finishReading}
+          onCancel={cancelReading}
+        />
+      )}
+
+      <div
+        aria-live="polite"
+        aria-busy={loading}
+        className="dream-result-anchor"
+        ref={resultRef}
+        style={{ marginTop: 'var(--space-5)' }}
+      >
         {error && (
           <Card>
             <EmptyState>{error}</EmptyState>
@@ -210,6 +267,21 @@ export function DreamStudio({ initialText = '' }: { initialText?: string }) {
       </div>
     </div>
   )
+}
+
+/**
+ * 팝업에서 하나씩 드러낼 여섯 개 — **쓸 수 있는 첫 범위의 첫 조합**이다.
+ *
+ * ⚠ 지어내지 않는다. 풀이가 비었으면(찾은 단어가 없으면) `null` 이고, 그때 팝업은 번호 자리를
+ *   비운 채 끝난다 — 결과 화면이 "단어를 찾지 못했다" 고 말한다.
+ */
+function firstSetOf(result: DreamResult | null): number[] | null {
+  if (!result) return null
+  for (const key of ['tier1', 'tier2', 'tier3'] as const) {
+    const numbers = result.tiers[key]?.sets?.[0]?.numbers
+    if (numbers && numbers.length > 0) return numbers
+  }
+  return null
 }
 
 /**

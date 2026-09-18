@@ -2527,71 +2527,8 @@ a.tile:hover .tile-glyph {
   display: none;
 }
 
-/* ────────────────────────────────────────────────────────────
- * 짧은 진행 팝업 (RecommendProgress, 2026-09-02)
- *
- * ⚠ 배경(`.sim-backdrop`)은 시뮬레이터와 공유한다. 같은 성격의 덮개가 두 벌 있을 이유가 없다.
- * ──────────────────────────────────────────────────────────── */
-
-.reco-progress {
-  display: grid;
-  justify-items: center;
-  gap: var(--space-4);
-  width: min(92vw, 380px);
-  padding: var(--space-6) var(--space-5);
-  border-radius: var(--radius-card);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-pop);
-  text-align: center;
-}
-
-/*
- * 번호 볼 여섯 개가 차례로 차오른다.
- * ⚠ 결과가 번호 여섯 개라서 기다리는 모양도 여섯 개다. 무엇을 기다리는지 모양이 말해 준다.
- */
-.reco-progress-balls {
-  display: flex;
-  gap: var(--space-2);
-}
-
-.reco-progress-balls span {
-  width: 14px;
-  height: 14px;
-  border-radius: var(--radius-pill);
-  background: var(--color-primary-soft);
-  animation: reco-progress-pulse 1.1s ease-in-out infinite;
-}
-
-@keyframes reco-progress-pulse {
-  0%,
-  100% {
-    background: var(--color-primary-soft);
-    transform: scale(0.82);
-  }
-  40% {
-    background: var(--color-primary);
-    transform: scale(1);
-  }
-}
-
-/*
- * ⚠ 움직임을 끈 사용자에게는 **정지한 상태로** 보여준다. 애니메이션만 지우면 첫 프레임의
- *   흐린 색으로 굳어 꺼져 보이므로, 색을 확실히 준다.
- */
-@media (prefers-reduced-motion: reduce) {
-  .reco-progress-balls span {
-    animation: none;
-    background: var(--color-primary);
-    transform: none;
-  }
-}
-
-.reco-progress-text {
-  margin: 0;
-  font-size: var(--fs-sm);
-  color: var(--color-text);
-  line-height: var(--lh-body);
-}
+/* ⚠ 옛 짧은 진행 팝업(`RecommendProgress` · `.reco-progress*`)은 2026-09-18 에 6가지 추천의
+ *   뽑기 연출(`simulator/DrawRunner`)로 바뀌어 컴포넌트와 함께 걷어냈다. */
 
 /* 분석 화면의 돌아가기. 네 블록을 다 읽고 나면 위로 올라가기 멀어 아래에도 둔다. */
 .analyze-back {
@@ -2662,10 +2599,18 @@ a.tile:hover .tile-glyph {
 .fg-cell[data-level='3'] { background: color-mix(in oklab, var(--color-primary) 62%, var(--color-surface)); }
 .fg-cell[data-level='4'] { background: var(--color-primary); color: var(--color-on-accent); }
 
-/* 내 번호. 색이 아니라 테두리로 구분한다 — 농도와 겹치지 않는 신호라야 둘 다 읽힌다. */
+/*
+ * 내 번호.
+ * ⚠ 농도(파랑)와 겹치지 않는 신호라야 둘 다 읽힌다 — 그래서 **테두리**다.
+ * ⚠ 2026-09-18 에 **붉은 점선**으로 바꿨다(사용자 요청). 종전에는 본문색 실선이라 짙은 칸 위에서
+ *   테두리인지 칸 경계인지 구분되지 않았다. 점선이라 색을 구별하지 못해도 **선 모양**으로 갈린다.
+ * ⚠ `outline` 이 아니라 `border` 다. 칸이 이미 2px 투명 테두리를 깔고 있어 자리를 차지하지 않는다
+ *   — `outline` 으로 두면 칸 밖으로 그려져 옆 칸과 겹친다.
+ */
 .fg-cell[data-mine] {
-  border-color: var(--color-text);
-  font-weight: var(--fw-bold);
+  border: 2px dashed var(--color-danger);
+  font-weight: var(--fw-black);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--color-danger) 18%, transparent);
 }
 
 .fg-legend {
@@ -3128,142 +3073,8 @@ a.tile:hover .tile-glyph {
  * 값은 전부 서버가 계산한 것이고 여기서는 길이·밝기로 옮기기만 한다.
  * ════════════════════════════════════════════════════════════ */
 
-/* ── 통계 3종 이동 카드 ────────────────────────────────
- * 탭으로 만들었더니 너무 작아 눈에 띄지 않는다는 지적이 있었다(사용자). 예전 허브의 카드
- * 형태로 되돌리되 세 화면 어디에나 둔다 — 이동 수단이자 "여기서 무엇을 볼 수 있는가" 를
- * 알려 주는 안내다.
- * ──────────────────────────────────────────────────────── */
-
-.stat-cards {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-3);
-  margin-top: var(--space-6);
-}
-
-.stat-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-height: 104px;
-  padding: var(--space-4) var(--space-5);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  color: var(--color-text);
-  text-decoration: none;
-  transition: box-shadow var(--dur) var(--ease-out), transform var(--dur) var(--ease-out);
-}
-
-/* 파스텔 배경은 서비스 색 체계를 그대로 쓴다(가이드 카드와 같은 언어). */
-.stat-card[data-accent='stats'] { background: var(--svc-stats-bg); }
-.stat-card[data-accent='lotto'] { background: var(--svc-lotto-bg); }
-.stat-card[data-accent='reco'] { background: var(--svc-reco-bg); }
-
-.stat-card:hover {
-  color: var(--color-text);
-  box-shadow: var(--shadow-card-hover);
-  transform: translateY(-2px);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .stat-card:hover {
-    transform: none;
-  }
-}
-
-/*
- * 현재 보고 있는 화면. 링크가 아니라 <div> 로 렌더되고(자기 자신으로 가는 링크는 눌러도
- * 아무 일이 없다), 테두리를 굵혀 구분한다. 색만으로 알리지 않도록 "지금 보는 중" 문구와
- * sr-only 안내를 함께 둔다.
- */
-.stat-card[data-current] {
-  border-width: 2px;
-  border-color: var(--color-primary);
-  cursor: default;
-}
-
-.stat-card[data-current]:hover {
-  box-shadow: none;
-  transform: none;
-}
-
-/* 아이콘 + 제목을 한 줄에. 제목이 두 줄로 접혀도 아이콘은 첫 줄에 붙어 있어야 한다. */
-.stat-card-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-/*
- * 아이콘 타일. 파스텔 카드 위에 흰 타일을 얹어 아이콘이 배경에 묻히지 않게 한다.
- * 색은 서비스 색을 그대로 쓰되 `currentColor` 로 아이콘에 전달한다 —
- * SVG 안에 hex 를 박으면 다크 모드에서 따로 고쳐야 한다.
- */
-.stat-card-icon {
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-}
-
-.stat-card-icon svg {
-  width: 20px;
-  height: 20px;
-}
-
-.stat-card-icon[data-accent='stats'] { color: var(--svc-stats); }
-.stat-card-icon[data-accent='lotto'] { color: var(--svc-lotto); }
-.stat-card-icon[data-accent='reco'] { color: var(--svc-reco); }
-
-@media (min-width: 640px) {
-  .stat-card-icon {
-    width: 44px;
-    height: 44px;
-  }
-  .stat-card-icon svg {
-    width: 24px;
-    height: 24px;
-  }
-}
-
-.stat-card-title {
-  font-size: var(--fs-h3);
-  font-weight: var(--fw-bold);
-  letter-spacing: var(--ls-title);
-}
-
-.stat-card-summary {
-  flex: 1;
-  font-size: var(--fs-sm);
-  color: var(--color-text-muted);
-  line-height: var(--lh-body);
-}
-
-/*
- * "보러 가기 →". 카드에서 **누를 수 있다는 것을 알리는 유일한 문구**라 작으면 안 된다는
- * 지적이 있었다(사용자). 기존 --fs-xs 의 1.5배로 키우고 굵기도 한 단계 올린다.
- * ⚠ 값을 직접 박지 않고 calc 로 유도한다 — 타이포 스케일이 바뀌면 같이 따라가야 한다.
- * 대비는 파스텔 3색 위에서 5.29~5.66 으로 AA 여유가 있다(2026-08-21 계산).
- */
-.stat-card-cue {
-  font-size: calc(var(--fs-xs) * 1.5);
-  font-weight: var(--fw-bold);
-  color: var(--color-primary);
-  line-height: var(--lh-tight);
-}
-
-.stat-card[data-current] .stat-card-cue {
-  color: var(--color-text-muted);
-}
-
-@media (min-width: 640px) {
-  .stat-cards {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
+/* ⚠ 옛 통계 3종 이동 카드(`.stat-card*`)는 2026-09-18 에 styles/stat-board.css 의 4카드
+ *   (`.sb-navcard`)로 바뀌어 걷어냈다. */
 
 /* ── 조회 조건 바 ─────────────────────────────────────── */
 
@@ -3431,11 +3242,7 @@ a.tile:hover .tile-glyph {
   gap: var(--space-2);
 }
 
-.stat-blocks {
-  display: grid;
-  gap: var(--space-6);
-  margin-top: var(--space-4);
-}
+/* ⚠ `.stat-blocks`(옛 hot-cold 3블록 묶음)는 2026-09-18 개편으로 쓰는 곳이 없어졌다. */
 
 .stat-block {
   padding: var(--space-5);
@@ -6739,135 +6546,10 @@ a.tile:hover .tile-glyph {
   color: var(--color-text-muted);
 }
 
-/* ── 순위 표 (003) ────────────────────────────────────────
- * 여섯 열(순위·번호·출현·비율·최근 출현·추세)은 375px 에 들어가지 않는다. 기본 .stat-table
- * 의 `min-width: 360px` + `nowrap` 을 그대로 두면 마지막 열이 늘 잘려 보인다(실측).
- * 그래서 이 변형에서만 폭을 풀고, 넓어지면 원래 크기로 돌아간다. mobile-first.
- * ──────────────────────────────────────────────────────── */
-
-.stat-table-rank {
-  min-width: 0;
-  font-size: var(--fs-xs);
-}
-
-.stat-table-rank td {
-  padding: var(--space-2) 5px;
-  /* '1232회 · 2회 전' 처럼 긴 값이 두 줄로 접히게 한다. */
-  white-space: normal;
-}
-
-/*
- * 머리글은 접히면 안 된다. 표를 2열로 나눈 뒤 '순위'·'출현' 이 글자마다 줄바꿈돼
- * 세로로 늘어졌다(실측). 두 글자짜리 라벨이라 접어서 얻을 폭도 없다.
- */
-.stat-table-rank th {
-  padding: var(--space-2) 5px;
-  white-space: nowrap;
-}
-
-/* 숫자 열은 접히면 오히려 읽기 나빠 한 줄로 유지한다. */
-.stat-table-rank .stat-num {
-  white-space: nowrap;
-}
-
-/*
- * 좁은 화면에서 추세는 기호(↑↓—)만 보인다. `display:none` 이 아니라 시각적으로만 감추는
- * 방식을 쓴다 — 라벨을 아예 지우면 기호의 뜻이 스크린리더에 전달되지 않고, 텍스트를 따로
- * 복제하면 두 번 읽힌다.
- */
-.stat-table-rank .trend-label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-/*
- * 기본 `.trend` 는 `inline-grid` 라 자식(기호·라벨)이 각각 한 행을 차지한다 — 기호 아래에
- * 라벨이 떨어져 배지가 두 줄로 쪼개졌다(실측). 이 표에서는 둘을 한 줄에 놓아야 하므로
- * flex 로 바꾼다. 다른 화면의 `.trend` 는 건드리지 않는다.
- */
-.stat-table-rank .trend {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  white-space: nowrap;
-}
-
-@media (min-width: 640px) {
-  .stat-table-rank {
-    font-size: var(--fs-sm);
-  }
-
-  .stat-table-rank th,
-  .stat-table-rank td {
-    padding: var(--space-2);
-  }
-
-  .stat-table-rank .trend-label {
-    position: static;
-    width: auto;
-    height: auto;
-    overflow: visible;
-    clip-path: none;
-  }
-}
-
-/* ── 순위 표 폭 배분 · 블록 배치 (사용자 피드백) ──────────
- * 표가 카드 폭을 다 채우지 못해 내용이 왼쪽에 몰려 보였다. 텍스트 열 하나가 남는 공간을
- * 흡수하게 하면 나머지 열이 좌우로 퍼진다. `width: 99%` 는 "남는 만큼 가져가라" 는
- * 관용 표현이다(100% 로 두면 다른 열이 최소 폭으로 짓눌린다).
- * ──────────────────────────────────────────────────────── */
-
-/* 여섯 열 표: 5번째(최근 출현)가 늘어난다. */
-.stat-table-rank td:nth-child(5),
-.stat-table-rank th:nth-child(5) {
-  width: 99%;
-}
-
-/* 네 열 표: 마지막(마지막 출현)이 늘어난다. 위 규칙은 5번째 열이 없어 적용되지 않는다. */
-.stat-table-overdue td:nth-child(4),
-.stat-table-overdue th:nth-child(4) {
-  width: 99%;
-}
-
-/*
- * 넓은 화면에서 세 블록을 세로로만 쌓으면 오른쪽이 통째로 비어 화면이 한쪽으로 쏠려
- * 보인다. 앞의 두 표(같은 여섯 열)를 나란히 놓고, 열 수가 다른 세 번째는 전폭으로 둔다.
- */
-@media (min-width: 1024px) {
-  .stat-blocks {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .stat-blocks > .stat-block:nth-child(3) {
-    grid-column: 1 / -1;
-  }
-}
-
-/*
- * 추세 범례. 표 아래에 항상 보인다(팝업이 스크롤 컨테이너에 잘려 대체한 것).
- * 안에 들어가는 `.trend` 배지는 표에서 쓰는 것과 **같은 모양**이라 눈으로 바로 대응된다.
- */
-.trend-legend {
-  margin: var(--space-3) 0 0;
-  font-size: var(--fs-xs);
-  line-height: 1.9;
-  color: var(--color-text-muted);
-}
-
-.trend-legend .trend {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  /* 배지 뒤에 쉼표가 오므로 오른쪽 여백은 최소로 — 안 그러면 "배지 , 같으면" 처럼 벌어진다. */
-  margin-left: 3px;
-  margin-right: 1px;
-  font-size: var(--fs-xs);
-  vertical-align: middle;
-}
+/* ⚠ 옛 순위 표(`.stat-table-rank` · `.stat-table-overdue` · `.trend-legend`)는 2026-09-18 에
+ *   막대 목록(styles/stat-board.css `.sb-rank`)으로 바뀌어 걷어냈다. `.trend` 배지는 계속 쓴다.
+ * ⚠ `.stat-blocks` 의 2열 배치 규칙도 함께 걷어냈다 — 그 묶음을 쓰던 화면이 사라졌다.
+ *   빈도·패턴 화면이 쓰는 `.stat-block`(카드 한 장)은 그대로 남아 있다. */
 
 /*
  * 카드가 다섯 장이라 2열에서 마지막 한 장만 홀로 남아 오른쪽이 빈다.

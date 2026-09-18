@@ -671,3 +671,18 @@ export function FilmIcon(props: IconProps) {
     </svg>
   );
 }
+
+/**
+ * 되감기 시계 — '샀다면?'(과거로 돌아가 본다).
+ * ⚠ `NumberActions` 안의 같은 그림과 **모양을 맞춘다.** 한 사이트에서 같은 뜻의 아이콘이
+ *   두 모양이면 다른 기능으로 읽힌다. 그쪽은 버튼 전용 규격(16px)이라 파일 안에 두었다.
+ */
+export function RewindGlyph(props: IconProps) {
+  return (
+    <svg {...STROKE_BASE} {...props}>
+      <path d="M3 12a9 9 0 1 0 2.64-6.36" />
+      <path d="M3 3v5h5" />
+      <path d="M12 7.5V12l3 2" />
+    </svg>
+  );
+}

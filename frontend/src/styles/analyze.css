@@ -974,3 +974,8 @@
 .disclaimer + .analyze-back {
   margin-top: var(--space-6);
 }
+
+/* 범례에서 '붉은 점선' 이라는 말도 같은 색으로 — 글자와 그림이 서로를 가리킨다. */
+.fg-mine-word {
+  color: var(--color-danger);
+}

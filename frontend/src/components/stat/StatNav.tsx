@@ -1,16 +1,20 @@
 import { AdBreakLink } from '@/components/AdBreakLink'
+import { RewindGlyph } from '@/components/icons'
 import { STAT_PAGES, type StatPageKey } from '@/lib/site'
+import { MyNumbersCard } from './MyNumbersCard'
 
 /**
- * 카드 아이콘.
+ * 번호분석 4카드 (2026-09-18 개편).
  *
- * ⚠ 장식이 아니라 **그 화면이 무엇인지**를 가리킨다. 순위 화면은 내림차순 막대, 빈도
- *   화면은 일부가 채워진 45칸 격자, 패턴 화면은 반으로 나뉜 원(=비율)이다.
- * ⚠ 트로피를 쓰지 않는다 — '당첨'을 암시해 심사에서 도박 조장으로 읽힐 수 있다
- *   (→ docs/wiki/40-domain/forbidden-expressions.md). 달력도 쓰지 않는다 — 이 화면들은
- *   날짜가 아니라 번호에 관한 것이다.
- * 색은 `currentColor` 를 받아 카드가 정하므로 다크 모드에서 따로 손댈 것이 없다.
+ * 종전 세 장에 **'내 번호 분석'** 한 장을 더했다(사용자 요청). 넷째 카드는 다른 화면으로 가지
+ * 않고 **같은 화면 아래의 번호판**(`MyNumbersCard`)으로 내려간다 — 번호를 고르는 일은 여기서
+ * 끝나고, 결과만 '샀다면?' 화면으로 넘어간다.
+ *
+ * ⚠ 서버 컴포넌트다. 링크와 앵커뿐이라 JS 가 필요 없다.
+ * ⚠ 현재 화면 카드는 링크가 아니라 `<div>` 다. 자기 자신으로 가는 링크는 눌러도 아무 일이
+ *   없어 사용자를 헷갈리게 하고, 낭독기에도 갈 곳처럼 읽힌다.
  */
+
 const ICONS: Record<StatPageKey, React.ReactNode> = {
   'hot-cold': (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
@@ -41,58 +45,66 @@ const ICONS: Record<StatPageKey, React.ReactNode> = {
   ),
 }
 
-/**
- * 통계 3종 이동 카드.
- *
- * 종전에는 다른 통계를 보려면 뒤로 가기로 허브에 돌아가야 했고, 그것을 없애려고 탭을
- * 달았더니 이번에는 **너무 작아 눈에 띄지 않는다**는 지적이 나왔다(사용자). 그래서 예전
- * 허브의 카드 형태로 되돌리되, 허브 페이지가 아니라 **세 화면 어디에나** 둔다.
- * 이동 수단이자 "여기서 무엇을 볼 수 있는가" 를 알려 주는 안내 역할을 겸한다.
- *
- * 서버 컴포넌트다 — 링크뿐이라 JS 가 필요 없다. `usePathname()` 을 쓰면 이 카드 하나
- * 때문에 통계 페이지 전체가 클라이언트 경계를 넘는다.
- *
- * ⚠ 링크가 `AdBreakLink` 다. **분석 화면으로 깊이 들어가는 이동**이라, 나중에 광고를 켰을
- *   때 전면 광고가 뜰 수 있는 자리로 골랐다(→ components/AdBreakLink.tsx). 광고가 꺼져
- *   있는 동안은 `<Link>` 와 완전히 같이 동작하므로 지금은 아무 차이가 없다. 그 컴포넌트도
- *   서버 컴포넌트라 이 파일은 서버에 남는다.
- *
- * 현재 항목은 링크가 아니라 `<div>` 로 낸다. 자기 자신으로 가는 링크는 눌러도 아무 일이
- * 일어나지 않아 사용자를 헷갈리게 하고, 스크린리더에도 갈 곳처럼 읽힌다.
- */
 export function StatNav({ current }: { current: StatPageKey }) {
+  /*
+    ⚠ 넷째 카드는 화면마다 성격이 다르다.
+      · '많이 나온 번호' 화면 — 카드가 **번호판을 여는 버튼**이다(`MyNumbersCard`). 번호판은
+        평소 접혀 있고, 카드를 눌러야 열린다(2026-09-18 사용자 요청).
+      · 빈도·패턴 화면 — 그 화면에는 번호판이 없으므로 **번호판이 있는 화면으로 건너뛴다.**
+        도착하면 `#mynum` 을 보고 저절로 열린다.
+  */
+  const cards = STAT_PAGES.map((page) => {
+    const isCurrent = page.key === current
+    const body = (
+      <>
+        <span className="sb-card-icon" data-accent={page.accent}>
+          {ICONS[page.key]}
+        </span>
+        <span className="sb-card-title">{page.title}</span>
+        <span className="sb-card-summary">{page.summary}</span>
+        <span className="sb-card-cue" aria-hidden="true">
+          {isCurrent ? '지금 보는 중' : '보러 가기 →'}
+        </span>
+      </>
+    )
+
+    return isCurrent ? (
+      <div key={page.key} className="sb-navcard" data-accent={page.accent} data-current="">
+        {/* 색과 문구만으로 현재 위치를 전달하지 않는다 — 보조 기술에도 알린다. */}
+        <span className="sr-only">현재 보고 있는 화면입니다.</span>
+        {body}
+      </div>
+    ) : (
+      <AdBreakLink
+        key={page.key}
+        className="sb-navcard"
+        href={page.href}
+        data-accent={page.accent}
+      >
+        {body}
+      </AdBreakLink>
+    )
+  })
+
+  if (current === 'hot-cold') {
+    return <MyNumbersCard cards={cards} />
+  }
+
   return (
-    <nav className="stat-cards" aria-label="통계 종류">
-      {STAT_PAGES.map((page) => {
-        const isCurrent = page.key === current
-
-        const body = (
-          <>
-            <span className="stat-card-head">
-              <span className="stat-card-icon" data-accent={page.accent}>
-                {ICONS[page.key]}
-              </span>
-              <span className="stat-card-title">{page.title}</span>
-            </span>
-            <span className="stat-card-summary">{page.summary}</span>
-            <span className="stat-card-cue" aria-hidden="true">
-              {isCurrent ? '지금 보는 중' : '보러 가기 →'}
-            </span>
-          </>
-        )
-
-        return isCurrent ? (
-          <div key={page.key} className="stat-card" data-accent={page.accent} data-current="">
-            {/* 색과 문구만으로 현재 위치를 전달하지 않는다 — 보조 기술에도 알린다. */}
-            <span className="sr-only">현재 보고 있는 화면입니다.</span>
-            {body}
-          </div>
-        ) : (
-          <AdBreakLink key={page.key} className="stat-card" href={page.href} data-accent={page.accent}>
-            {body}
-          </AdBreakLink>
-        )
-      })}
+    <nav className="sb-cards" aria-label="번호분석 종류">
+      {cards}
+      <a className="sb-navcard is-mine" href="/lotto/stat#mynum" data-accent="reco">
+        <span className="sb-card-icon" data-accent="reco">
+          <RewindGlyph />
+        </span>
+        <span className="sb-card-title">내 번호 분석</span>
+        <span className="sb-card-summary">
+          번호 6개를 고르면 그 번호로 예전부터 샀다면 어땠을지 보여 드립니다.
+        </span>
+        <span className="sb-card-cue" aria-hidden="true">
+          번호 고르기 →
+        </span>
+      </a>
     </nav>
   )
 }

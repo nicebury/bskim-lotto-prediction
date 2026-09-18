@@ -1502,6 +1502,16 @@
   }
 }
 
+/*
+ * ⚠ 뽑기가 끝나면 이 자리로 화면이 옮겨 온다(`scrollToResultSoon`). 헤더가 sticky 라 그냥
+ *   맨 위에 붙이면 **제목 줄이 헤더에 가린다**(실측 top=0). `scroll-margin-top` 으로 그만큼
+ *   띄운다 — 위치를 계산하지 않고 브라우저에 맡기는 방법이다.
+ */
+.pick-result,
+.ai-reco-result {
+  scroll-margin-top: calc(var(--header-height) + var(--space-5));
+}
+
 .pick-result {
   display: grid;
   gap: var(--space-3);

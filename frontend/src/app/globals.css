@@ -23,3 +23,5 @@
 @import '../styles/media.css';
 /* 번호 분석 화면(2026-09-17). components.css 의 `.pm-ball`·`.fg-*` 를 함께 쓰므로 그 뒤에 둔다. */
 @import '../styles/analyze.css';
+/* 번호분석 화면(2026-09-18 개편). 조회 바·도움말은 components.css 것을 그대로 쓴다. */
+@import '../styles/stat-board.css';

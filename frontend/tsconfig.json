@@ -31,13 +31,14 @@
   "include": [
     "**/*.ts",
     "**/*.tsx",
+    ".next-g03dev/types/**/*.ts",
     ".next-g05/types/**/*.ts",
     ".next-g06/types/**/*.ts",
     ".next-g06dev/types/**/*.ts",
     ".next-prod/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-g03dev/types/**/*.ts"
+    ".next-preview/types/**/*.ts"
   ],
   // ⚠ 빌드 산출물의 라우트 타입(`.next*/types/**`)을 넣지 않는다.
   //    `NEXT_DIST_DIR` 로 dev(`.next`)와 prod(`.next-prod`)를 갈라 쓰기 때문에 둘을 함께

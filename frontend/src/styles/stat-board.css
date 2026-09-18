@@ -1,0 +1,826 @@
+/*
+ * 번호분석 화면(`/lotto/stat`) — 2026-09-18 개편.
+ * → app/(site)/lotto/stat/page.tsx · components/stat/{StatNav,HotColdBoard,MyNumbersCard}
+ *
+ * ── 이 파일이 생긴 이유 ─────────────────────────────────────────────
+ * 사용자 요청: "디자인을 좀 세련되게, 주로 통계 분석이니 일반인도 딱 보고 이해가 쉬웠으면".
+ * 종전 화면의 여섯 열 표를 **막대 목록**으로 바꾸고, 이동 카드에 '내 번호 분석' 을 더했다.
+ *
+ * 접두어는 `sb-`(stat board) · `mynum-`. 종전 표 스타일(`.stat-table-rank` 등)은 쓰는 곳이 없어졌다.
+ * ⚠ 2026-09-18 까지는 `/lotto/stat2` 미리보기였다(접두어 `s2-`). 사용자가 확인한 뒤 이 화면이
+ *   `/lotto/stat` 이 되었고 stat2 는 지웠다.
+ * ⚠ 조회 바(`.statbar-*`)·도움말(`HelpTip`)·번호 하나 보기는 기존 것을 그대로 쓴다 —
+ *   같은 일을 하는 부품이 두 벌이 되면 한쪽만 고쳐진다.
+ * ⚠ 색·크기는 tokens.css 변수. 강조 세로 띠 금지. 상태를 색만으로 전하지 않는다.
+ * ──────────────────────────────────────────────────────────── */
+
+/* ────────────────────────────────────────────────────────────
+ * 1. 머리
+ * ──────────────────────────────────────────────────────────── */
+
+.sb-hero {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 var(--space-2);
+  padding: var(--space-6) var(--space-5);
+  border-radius: 24px;
+  background:
+    radial-gradient(70% 90% at 100% 0%, color-mix(in oklab, var(--svc-stats) 16%, transparent), transparent 70%),
+    var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+@media (min-width: 640px) {
+  .sb-hero {
+    padding: var(--space-8);
+  }
+}
+
+.sb-eyebrow {
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.04em;
+  color: var(--svc-stats);
+}
+
+.sb-hero h1 {
+  margin: 0;
+  font-size: clamp(1.5rem, 1.2rem + 1vw, 2rem);
+  letter-spacing: var(--ls-hero);
+  word-break: keep-all;
+}
+
+.sb-lede {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: var(--lh-body);
+  word-break: keep-all;
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 2. 이동 카드 넷
+ * ──────────────────────────────────────────────────────────── */
+
+.sb-cards {
+  display: grid;
+  gap: var(--space-3);
+}
+
+@media (min-width: 640px) {
+  .sb-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .sb-cards {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/*
+ * 카드. 앞 세 장은 링크(`a`)이고 넷째('내 번호 분석')는 **버튼**이라 버튼 기본 모양을 지운다
+ * — 넷이 같은 모양이어야 같은 줄에 선 것으로 읽힌다.
+ */
+.sb-navcard {
+  display: grid;
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  align-content: start;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border-radius: 20px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  text-decoration: none;
+  transition:
+    transform var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out);
+}
+
+@media (hover: hover) {
+  a.sb-navcard:hover {
+    transform: translateY(-3px);
+    border-color: color-mix(in oklab, var(--color-primary) 35%, var(--color-border));
+    box-shadow: 0 14px 30px -22px color-mix(in oklab, var(--color-primary) 55%, transparent);
+  }
+}
+
+/* 지금 보고 있는 카드. 색만으로 알리지 않는다 — 문구와 `sr-only` 안내가 함께 간다. */
+.sb-navcard[data-current] {
+  background:
+    radial-gradient(100% 80% at 100% 0%, color-mix(in oklab, var(--svc-stats) 14%, transparent), transparent 70%),
+    var(--color-surface);
+  border-color: color-mix(in oklab, var(--svc-stats) 45%, var(--color-border));
+}
+
+/* 넷째 카드(내 번호 분석)는 성격이 달라 바탕을 달리한다 — 이동이 아니라 '여기서 한다'. */
+.sb-navcard.is-mine[data-open] {
+  border-color: color-mix(in oklab, var(--color-warning) 55%, var(--color-border));
+  box-shadow: 0 10px 24px -18px color-mix(in oklab, var(--color-warning) 70%, transparent);
+}
+
+.sb-navcard.is-mine {
+  background:
+    radial-gradient(100% 80% at 100% 0%, color-mix(in oklab, var(--svc-reco) 18%, transparent), transparent 70%),
+    var(--color-surface);
+}
+
+.sb-card-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: var(--svc-stats-bg);
+  color: var(--svc-stats);
+}
+
+.sb-card-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.sb-card-icon[data-accent='lotto'] {
+  background: var(--svc-lotto-bg);
+  color: var(--svc-lotto);
+}
+
+.sb-card-icon[data-accent='reco'] {
+  background: var(--svc-reco-bg);
+  color: var(--color-warning);
+}
+
+.sb-card-icon[data-accent='dream'] {
+  background: var(--svc-dream-bg);
+  color: var(--svc-dream);
+}
+
+.sb-card-title {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-title);
+  word-break: keep-all;
+}
+
+.sb-card-summary {
+  font-size: var(--fs-xs);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+.sb-card-cue {
+  margin-top: var(--space-1);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--color-primary);
+}
+
+.sb-navcard[data-current] .sb-card-cue {
+  color: var(--color-text-subtle);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 3. 내 번호 분석
+ * ──────────────────────────────────────────────────────────── */
+
+/* 번호판. 카드 격자 **아래**에 열린다(격자 안이 아니다 — `nav` 밖이라야 한다). */
+.mynum {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+  padding: var(--space-5);
+  border-radius: 24px;
+  background:
+    radial-gradient(60% 70% at 0% 0%, color-mix(in oklab, var(--svc-reco) 14%, transparent), transparent 70%),
+    var(--color-surface);
+  border: 1px solid var(--color-border);
+  scroll-margin-top: calc(var(--header-height) + var(--space-4));
+}
+
+@media (min-width: 640px) {
+  .mynum {
+    padding: var(--space-8);
+  }
+}
+
+.mynum-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.mynum-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--color-surface);
+  color: var(--color-warning);
+  box-shadow: var(--shadow-card);
+}
+
+.mynum-close {
+  min-height: 40px;
+  padding-inline: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.mynum-close:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.mynum-head h3 {
+  margin: 0;
+  font-size: var(--fs-h2);
+  letter-spacing: var(--ls-title);
+}
+
+.mynum-head p {
+  margin: var(--space-1) 0 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+.mynum-head strong {
+  color: var(--color-text);
+}
+
+/* ── 용지(수동 마킹 칸) ─────────────────────────────────
+ *
+ * ⚠ 실제 로또 용지를 본떴다(2026-09-18 사용자 요청) — **한 줄에 일곱 칸**, 번호마다 동그라미,
+ *   고르면 연필로 칠한 자국. 복권을 사 본 사람이 설명 없이 알아보는 모양이 목적이다.
+ * ⚠ **공식 용지 흉내가 아니다.** 상표·로고를 쓰지 않고 머리글에 '연습용' 을 적는다.
+ * ⚠ 종이색을 새 hex 로 만들지 않는다. 라이트에서는 `--svc-reco`(따뜻한 색)를 아주 옅게 섞어
+ *   종이 느낌을 내고, 다크에서는 같은 식이 자동으로 어두운 종이가 된다.
+ * ──────────────────────────────────────────────────────── */
+
+/* ⚠ 용지는 **좁다.** 카드 폭을 다 채우면 종이가 아니라 판때기로 보인다(실제 용지도 손바닥 폭이다). */
+.mynum-slip {
+  max-width: 520px;
+  border-radius: 14px;
+  background:
+    repeating-linear-gradient(
+      180deg,
+      transparent 0 34px,
+      color-mix(in oklab, var(--color-text) 3%, transparent) 34px 35px
+    ),
+    color-mix(in oklab, var(--svc-reco) 5%, var(--color-surface));
+  border: 1px solid color-mix(in oklab, var(--color-warning) 28%, var(--color-border));
+  overflow: hidden;
+}
+
+.mynum-slip-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px dashed color-mix(in oklab, var(--color-warning) 35%, var(--color-border));
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.06em;
+  color: var(--color-warning);
+}
+
+.mynum-slip-mode {
+  padding: 2px var(--space-2);
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--color-warning) 14%, transparent);
+}
+
+/* 용지 왼쪽의 게임 칸 표시(A). 실제 용지에도 A~E 가 세로로 인쇄돼 있다. */
+.mynum-slip-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+
+.mynum-slip-letter {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-top: 2px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in oklab, var(--color-warning) 40%, transparent);
+  color: var(--color-warning);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-black);
+}
+
+/*
+ * 45칸 — **한 줄에 일곱 개**(1~7 · 8~14 …). 마지막 줄은 43·44·45 셋만 찬다.
+ * ⚠ 375px 에서 칸 하나가 약 38px 이라 터치 타겟 44px 에 모자란다. 칸마다 `::after` 로
+ *   보이지 않는 3px 여백을 둘러 44px 을 만든다 — 간격이 6px 이라 옆 칸과 겹치지 않는다.
+ */
+.mynum-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  max-width: 420px;
+}
+
+.mynum-cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  min-height: 38px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+/* 보이지 않는 터치 여백(위 주석). */
+.mynum-cell::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+}
+
+/* 인쇄된 동그라미. 고르면 이 안이 칠해진다. */
+.mynum-cell-num {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid color-mix(in oklab, var(--color-text) 22%, transparent);
+  background: color-mix(in oklab, var(--color-surface) 70%, transparent);
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.mynum-cell:hover:not(:disabled) .mynum-cell-num {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+/*
+ * 연필 자국.
+ * ⚠ 완전한 원이 아니라 **살짝 기울어진 타원**이다. 손으로 칠한 자국처럼 보이게 하려는 것이고,
+ *   그래야 '인쇄된 동그라미' 와 '내가 칠한 것' 이 구분된다.
+ * ⚠ 색만으로 알리지 않는다 — 숫자가 반전되고 `aria-pressed` 가 상태를 말한다.
+ */
+/* ⚠ 위아래를 눌러 **타원**으로 만든다. 정원이면 인쇄된 동그라미를 덮은 것처럼 보여
+     '내가 칠했다' 는 느낌이 나지 않는다(캡처로 확인). */
+.mynum-mark {
+  position: absolute;
+  inset: 4px 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-text);
+  opacity: 0;
+  transform: rotate(-8deg) scale(0.6);
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.mynum-cell[data-on] .mynum-mark {
+  opacity: 0.92;
+  transform: rotate(-8deg) scale(1);
+}
+
+.mynum-cell[data-on] .mynum-cell-num {
+  position: relative;
+  z-index: 1;
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-surface);
+  font-weight: var(--fw-black);
+}
+
+.mynum-cell:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mynum-mark {
+    transition: none;
+  }
+}
+
+.mynum-foot {
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+/*
+ * ⚠ 넓은 화면에서는 **용지 옆**에 고른 번호와 버튼을 둔다. 용지가 520px 로 좁아 그 오른쪽이
+ *   통째로 비었는데(캡처로 확인), 손이 가는 것(버튼)을 눈이 가는 것(용지) 옆에 두는 편이 낫다.
+ */
+@media (min-width: 900px) {
+  .mynum {
+    grid-template-columns: 520px minmax(0, 1fr);
+    grid-template-areas:
+      'head head'
+      'slip foot';
+    align-items: start;
+    column-gap: var(--space-8);
+  }
+
+  .mynum-head {
+    grid-area: head;
+  }
+
+  .mynum-slip {
+    grid-area: slip;
+  }
+
+  .mynum-foot {
+    grid-area: foot;
+    align-content: start;
+    gap: var(--space-4);
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .mynum-actions {
+    justify-content: flex-start;
+  }
+}
+
+.mynum-picked {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-height: 36px;
+}
+
+.mynum-balls {
+  display: flex;
+  gap: 4px;
+}
+
+.mynum-count {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.mynum-left,
+.mynum-empty {
+  font-weight: var(--fw-regular);
+  color: var(--color-text-muted);
+  font-size: var(--fs-sm);
+}
+
+.mynum-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.mynum-reset {
+  min-height: 44px;
+  padding-inline: var(--space-3);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: none;
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.mynum-reset:hover {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
+.mynum-random {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+}
+
+.mynum-go {
+  min-height: 44px;
+  padding-inline: var(--space-6);
+  font-weight: var(--fw-bold);
+}
+
+/* ────────────────────────────────────────────────────────────
+ * 4. 순위 막대 목록
+ * ──────────────────────────────────────────────────────────── */
+
+.sb-board {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/* 구간 한 줄 요약 — 목록을 읽기 전에 무슨 일이 있었는지 말한다. */
+.sb-summary {
+  margin: 0;
+  padding: var(--space-4) var(--space-5);
+  border-radius: 18px;
+  background: color-mix(in oklab, var(--svc-stats) 8%, var(--color-surface));
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+.sb-summary strong {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.sb-lists {
+  display: grid;
+  gap: var(--space-4);
+}
+
+@media (min-width: 1024px) {
+  .sb-lists {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.sb-card {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-radius: 20px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+
+.sb-card.is-wide {
+  margin-top: var(--space-4);
+}
+
+.sb-card-head h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--fs-h2);
+  letter-spacing: var(--ls-title);
+}
+
+.sb-card-head p {
+  margin: var(--space-1) 0 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+/*
+ * 한 줄 = 순위 · 볼 · **횟수** · 막대 · 최근 출현 · 추세.
+ *
+ * ⚠ **횟수가 막대 앞이다**(2026-09-18 사용자 요청). 그리고 칸마다 **폭을 고정**한다 —
+ *   `auto` 로 두면 "7번 35%" 와 "0번 0%" 의 폭이 달라 숫자 시작점이 줄마다 흔들렸다.
+ *   훑는 화면에서는 세로줄이 맞아야 읽힌다.
+ * ⚠ 좁은 화면에서는 막대를 **둘째 줄**로 내린다. 375px 에 여섯 칸을 한 줄에 넣으면 막대가
+ *   20px 도 안 되어 길이를 견줄 수 없다(그러면 막대를 둔 뜻이 없다).
+ */
+.sb-rank {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * ⚠ **모든 화면에서 한 줄**이다(2026-09-18 재조정). 좁은 화면에서 막대를 둘째 줄로 내렸더니
+ *   한 항목이 두 줄이 되어 목록이 화면을 가득 메웠고, 추세 배지만 덩그러니 떠 보였다(사용자 지적).
+ * ⚠ 막대는 **고정 폭**이다. 남는 폭을 다 먹게 두면 화면이 넓을수록 막대만 길어지는데, 이 막대는
+ *   서로 견주려고 두는 것이지 길이 자체가 값이 아니다.
+ * ⚠ 열 폭은 머리글(`.sb-rank-head`)과 **같은 값**을 쓴다. 한쪽만 고치면 세로선이 어긋난다.
+ */
+.sb-rank-head,
+.sb-rank > li {
+  display: grid;
+  grid-template-columns: 1.2rem auto 3.6rem 56px minmax(0, 1fr) 2rem;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-1);
+}
+
+@media (min-width: 420px) {
+  .sb-rank-head,
+  .sb-rank > li {
+    grid-template-columns: 1.4rem auto 4.4rem 78px minmax(0, 1fr) 2.2rem;
+    gap: var(--space-2);
+    padding-inline: var(--space-2);
+  }
+}
+
+@media (min-width: 640px) {
+  .sb-rank-head,
+  .sb-rank > li {
+    grid-template-columns: 1.4rem auto 4.6rem 110px minmax(0, 1fr) 2.2rem;
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-2) var(--space-3);
+  }
+}
+
+.sb-rank > li {
+  border-radius: 12px;
+  background: var(--color-surface-2);
+}
+
+/* 머리글 — 목록과 같은 격자 위의 작은 글자. 배경 없이 선 하나로 목록과 나눈다. */
+.sb-rank-head {
+  margin: 0 0 var(--space-1);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.7rem;
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.02em;
+  color: var(--color-text-subtle);
+}
+
+.sb-rank-head > span:nth-child(5) {
+  text-align: right;
+}
+
+.sb-rank-head > span:nth-child(6) {
+  text-align: center;
+}
+
+.sb-rank-no {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--color-text-subtle);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.sb-rank-bar {
+  display: block;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in oklab, var(--color-text) 8%, transparent);
+  overflow: hidden;
+}
+
+.sb-rank-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--svc-stats);
+}
+
+/* 목록마다 막대 색을 달리해 두 목록을 섞어 보지 않게 한다(길이 자체는 같은 자다). */
+.sb-card[data-tone='cold'] .sb-rank-bar > span {
+  background: color-mix(in oklab, var(--svc-stats) 45%, var(--color-surface));
+}
+
+.sb-card[data-tone='overdue'] .sb-rank-bar > span {
+  background: var(--svc-reco);
+}
+
+/*
+ * 횟수 칸. ⚠ "7번" 과 "0번" 의 자리가 어긋나지 않게 **숫자 부분에 최소 폭**을 준다.
+ *   `tabular-nums` 만으로는 글자 수가 다른 "10번" 과 "7번" 이 밀린다.
+ */
+.sb-rank-count {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.sb-rank-count b {
+  min-width: 2.4rem;
+}
+
+.sb-rank-overdue .sb-rank-count b {
+  min-width: 3.4rem;
+}
+
+.sb-rank-count b {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-black);
+  font-variant-numeric: tabular-nums;
+}
+
+.sb-rank-count small {
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.sb-rank-last {
+  font-size: var(--fs-xs);
+  color: var(--color-text-subtle);
+  white-space: nowrap;
+  text-align: right;
+}
+
+/*
+ * 추세 배지.
+ * ⚠ 공용 `.trend` 는 `inline-grid` 라 기호와 말이 **세로로 쌓인다**(원래 표에서는 좁은 화면에서
+ *   말을 감췄기 때문에 문제가 없었다). 여기서는 가로 한 줄로 되돌린다 — 행 높이가 들쭉날쭉하면
+ *   목록을 훑을 수 없다.
+ * ⚠ 1,100px 아래에서는 말을 시각적으로만 감춘다(기호만 남는다). 텍스트를 지우지 않고 감추므로
+ *   낭독기에는 "후반에 더" 가 그대로 들린다.
+ */
+.sb-rank > li > .trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+/*
+ * ⚠ 목록 안에서는 **기호만** 남기고 말("후반에 더")은 시각적으로 감춘다. 두 목록을 나란히
+ *   놓으면 카드 하나가 520px 안팎인데, 배지가 말까지 달면 60px 을 먹어 **막대가 90px 로**
+ *   눌린다(캡처로 확인) — 막대가 이 화면의 요점이라 그쪽에 폭을 준다.
+ * ⚠ 글자를 지우는 것이 아니라 감추는 것이라 낭독기에는 그대로 들리고, 기호의 뜻은 목록 바로
+ *   아래 범례가 늘 글자로 설명한다.
+ */
+.sb-rank .trend-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* 기호만 남으므로 배지 폭을 줄인다. */
+/*
+ * ⚠ 기호가 배지 **가운데**에 오게 한다(2026-09-18 사용자 지적). `inline-flex` 는 내용이 왼쪽에
+ *   붙으므로 `justify-content` 를 주고, 배지 자체도 칸 가운데에 놓는다(`justify-self`).
+ */
+.sb-rank > li > .trend {
+  min-width: 2.2rem;
+  padding-inline: 0;
+  justify-content: center;
+  justify-self: center;
+}
+
+/*
+ * 미출현 목록은 추세 칸이 없다(계약이 그 필드를 주지 않는다). 다섯 칸이고 '쉰 기간' 이 넓다.
+ *
+ * ⚠ 여기서는 막대가 **남는 폭을 다 쓴다**(2026-09-18 사용자 요청). 위 두 목록과 사정이 다르다 —
+ *   저쪽은 카드 둘이 나란히 서서 폭이 좁고 막대를 짧게 묶어야 글이 밀리지 않지만, 이 목록은
+ *   전폭 카드 하나라 남는 자리가 크다. 짧게 묶어 두면 오른쪽이 통째로 빈다.
+ */
+.sb-rank-head-overdue,
+.sb-rank-overdue > li {
+  grid-template-columns: 1.2rem auto 5.4rem minmax(0, 1fr) 5.6rem;
+}
+
+@media (min-width: 420px) {
+  .sb-rank-head-overdue,
+  .sb-rank-overdue > li {
+    grid-template-columns: 1.4rem auto 6.4rem minmax(0, 1fr) 6.2rem;
+  }
+}
+
+@media (min-width: 640px) {
+  .sb-rank-head-overdue,
+  .sb-rank-overdue > li {
+    grid-template-columns: 1.4rem auto 7.4rem minmax(0, 1fr) 6.6rem;
+  }
+}
+
+.sb-legend {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-body);
+  color: var(--color-text-muted);
+  word-break: keep-all;
+}
+
+.sb-legend .trend {
+  margin-inline: 2px;
+}

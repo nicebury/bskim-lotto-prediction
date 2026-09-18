@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, type SVGProps } from "react";
+import { useEffect, useRef, useState, type SVGProps } from "react";
 
 import { browserRecommend } from "@/lib/api";
 import { loadReco, saveReco } from "@/lib/reco-store";
-import { RecommendProgress } from "./RecommendProgress";
+import { DrawRunner } from "./simulator/DrawRunner";
+import { scrollToResultSoon } from "@/lib/scroll-to";
 import type { RecommendSet, RecommendStrategy } from "@/lib/api-types";
 import { STRATEGIES, strategyMeta } from "@/lib/strategies";
 import { traitRows, traitSentence, traitSummaryLine } from "@/lib/traits";
@@ -66,15 +67,37 @@ export function RecommendStudio({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /*
+    ── 뽑는 과정 팝업(2026-09-18) ──────────────────────────────────
+    ⚠ 응답이 오자마자 결과를 그리지 않는다. 정밀 분석과 마찬가지로 **과정을 보여 준 뒤** 그린다
+      (사용자 요청). 그래서 받은 결과를 `pending` 에 잠시 담아 두고, 팝업이 끝나면 화면에 올린다.
+    ⚠ 팝업이 도는 동안 결과를 미리 바꾸면 뒤에서 화면이 바뀌어 팝업이 닫힐 때 튄다.
+  */
+  const [running, setRunning] = useState(false);
+  const [arrived, setArrived] = useState(false);
+  const [pending, setPending] = useState<{
+    sets: RecommendSet[];
+    hotWindow: number | null;
+    strategy: RecommendStrategy;
+  } | null>(null);
+
+  /** 결과 블록. 뽑기가 끝나면 이 자리로 화면을 옮긴다(전체 복사 버튼이 맨 위에 있다). */
+  const resultRef = useRef<HTMLDivElement>(null);
+
   const generate = async () => {
     const next = strategy;
     setLoading(true);
+    setRunning(true);
+    setArrived(false);
+    setPending(null);
     setError(null);
     try {
       const result = await browserRecommend(next, count);
-      setSets(result.sets);
-      setHotWindow(result.hot_window);
-      setResultStrategy(next);
+      setPending({
+        sets: result.sets,
+        hotWindow: result.hot_window,
+        strategy: next,
+      });
       /*
         ⚠ 분석 화면에 갔다 돌아왔을 때 되살리려고 담아 둔다. '분석' 을 누를 때가 아니라
           **결과를 받을 때** 담는다 — 뒤로가기·스와이프처럼 버튼을 거치지 않는 이동도
@@ -93,7 +116,25 @@ export function RecommendStudio({
       setSets([]);
     } finally {
       setLoading(false);
+      setArrived(true);
     }
+  };
+
+  /** 팝업의 걸음이 끝났다. 그때 결과를 화면에 올리고 그 자리로 옮긴다. */
+  const finishDraw = () => {
+    setRunning(false);
+    if (!pending) return;
+    setSets(pending.sets);
+    setHotWindow(pending.hotWindow);
+    setResultStrategy(pending.strategy);
+    setPending(null);
+    scrollToResultSoon(() => resultRef.current);
+  };
+
+  /** 그만두기. 받아 둔 결과는 버린다 — 보여 주지 않기로 한 것을 몰래 반영하지 않는다. */
+  const cancelDraw = () => {
+    setRunning(false);
+    setPending(null);
   };
 
   /*
@@ -125,7 +166,16 @@ export function RecommendStudio({
         ⚠ **누른 뒤 무엇이 도는지 보여준다**(2026-09-02 사용자 요청). 6가지 추천은 응답이
           빨라서 결과만 슬쩍 바뀌었고, 그러면 눌린 것인지조차 알기 어려웠다.
       */}
-      <RecommendProgress open={loading} />
+      {running && (
+        <DrawRunner
+          strategyLabel={strategyMeta(pending?.strategy ?? strategy).label}
+          strategyShort={strategyMeta(pending?.strategy ?? strategy).short}
+          picked={pending?.sets[0]?.numbers ?? null}
+          done={arrived}
+          onFinished={finishDraw}
+          onCancel={cancelDraw}
+        />
+      )}
 
       {/*
         ── ① 방식 고르기 ─────────────────────────────────────
@@ -242,7 +292,7 @@ export function RecommendStudio({
       </div>
 
       {/* 비동기 상태를 스크린리더에 알린다. */}
-      <div aria-live="polite" aria-busy={loading} className="pick-result">
+      <div aria-live="polite" aria-busy={loading} className="pick-result" ref={resultRef}>
         {error ? (
           <Card>
             <EmptyState>{error}</EmptyState>

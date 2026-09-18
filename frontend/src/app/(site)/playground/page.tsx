@@ -35,16 +35,28 @@ export default function PlaygroundPage() {
         ]}
       />
 
-      <section className="section">
-        <h1>번호놀이터</h1>
-        <p className="muted" style={{ marginTop: 'var(--space-2)' }}>
-          게임을 즐기며 번호 6개를 모아 보세요. 모은 번호는 바로 분석·저장·공유할 수 있습니다.
+      {/*
+        ⚠ 2026-09-18 재설계(사용자 요청: "흥미를 끌어서 게임을 하게끔"). 제목 한 줄 + 회색
+          설명이던 머리를 히어로 카드로 세우고, 고르기 전에 알면 좋은 사실을 칩으로 짧게 낸다.
+        ⚠ 칩에 **걸리는 시간을 적지 않는다** — 카드에서 "약 60초" 를 뺀 것과 같은 이유다.
+      */}
+      <section className="pg-hero" aria-labelledby="pg-title">
+        <p className="pg-eyebrow">미니게임 6가지</p>
+        <h1 id="pg-title">놀다 보면, 번호 여섯 개</h1>
+        <p className="pg-lede">
+          쏘고 뽑고 굴리다 보면 번호가 하나씩 쌓입니다. 여섯 개를 모으면 그대로 한 조합이 되고,
+          바로 분석·저장·공유할 수 있습니다.
         </p>
+        <ul className="pg-hero-chips">
+          <li>설치 없이 바로</li>
+          <li>모으면 곧장 분석</li>
+          <li>같은 번호는 두 번 안 나와요</li>
+        </ul>
       </section>
 
       <section className="section" aria-labelledby="pg-list-title">
         <div className="section-head">
-          <h2 id="pg-list-title">게임 고르기</h2>
+          <h2 id="pg-list-title">무엇부터 해볼까요?</h2>
         </div>
         <GameGrid />
       </section>

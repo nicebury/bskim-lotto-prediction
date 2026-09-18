@@ -238,3 +238,322 @@
   margin-top: var(--space-4);
   border-style: dashed;
 }
+
+/* ────────────────────────────────────────────────────────────
+ * 점집 풍 화면 (2026-09-18)
+ *
+ * 사용자 요청: "조금 더 세련되고 꿈을 분석해 주는 것 같은 풍으로. 마치 점집에 들어온 것 같은".
+ *
+ * ⚠ **사진을 쓰지 않는다.** 무료 이미지라도 출처·이용 범위를 따져야 하고(법적 판단은 사용자
+ *   몫), 큰 사진 한 장이 이 화면에서 가장 무거운 짐이 된다. 밤하늘·달·별은 CSS 로 그린다.
+ * ⚠ 분위기는 점집이되 **문구는 사실에 머문다** — 화면 어디에도 '좋은 꿈 · 대박 · 당첨' 을
+ *   쓰지 않는다(→ docs/wiki/40-domain/forbidden-expressions.md).
+ * ⚠ 밤하늘은 **라이트 모드에서도 어둡다.** 이 블록만은 테마를 따르지 않는 의도적 예외이고,
+ *   그 위 글자는 흰색으로 고정해 대비를 지킨다(토큰이 뒤집혀도 흰 글자가 유지되도록).
+ * ──────────────────────────────────────────────────────────── */
+
+.dream-hero {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 var(--space-2);
+  padding: var(--space-8) var(--space-5);
+  border-radius: 24px;
+  /* 밤하늘 — 남보라에서 검보라로. 새 hex 는 만들되 이 화면 전용 배경 한 벌이다. */
+  background:
+    radial-gradient(120% 90% at 80% -10%, #3b2d6b 0%, transparent 60%),
+    radial-gradient(90% 80% at 10% 110%, #2a1f4d 0%, transparent 65%),
+    linear-gradient(160deg, #1b1533 0%, #120f26 100%);
+  color: #f4f1ff;
+}
+
+@media (min-width: 640px) {
+  .dream-hero {
+    padding: var(--space-12) var(--space-8);
+  }
+}
+
+.dream-hero-sky,
+.reading-sky {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* 별. `--i` 로 자리와 깜빡임 시점을 흩는다 — 규칙적으로 놓이면 밤하늘이 아니라 격자가 된다. */
+.dream-hero-sky i,
+.reading-sky i {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #fff;
+  opacity: 0.55;
+  top: calc(6% + (var(--i) * 37deg) * 0 + (var(--i) * 5.3%));
+  left: calc((var(--i) * 13.7%) - (var(--i) * 0.5%) - 5%);
+  transform: translate(0, 0);
+}
+
+.dream-hero-sky i:nth-child(even),
+.reading-sky i:nth-child(even) {
+  width: 2px;
+  height: 2px;
+  opacity: 0.35;
+  top: calc(12% + (var(--i) * 4.1%));
+  left: calc(8% + (var(--i) * 11.3%));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .dream-hero-sky i,
+  .reading-sky i {
+    animation: dream-twinkle 3.6s ease-in-out infinite;
+    animation-delay: calc(var(--i) * 210ms);
+  }
+}
+
+@keyframes dream-twinkle {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+
+/* 달 — 큰 원에 그림자를 겹쳐 초승달로 깎는다(요소 하나로). */
+.dream-hero-moon,
+.reading-moon {
+  position: absolute;
+  right: 8%;
+  top: 14%;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff6d8, #f2dfa3);
+  box-shadow:
+    0 0 40px rgb(255 240 200 / 0.35),
+    inset -18px -6px 0 -2px #1b1533;
+  opacity: 0.9;
+}
+
+@media (max-width: 559px) {
+  .dream-hero-moon {
+    width: 56px;
+    height: 56px;
+    top: 10%;
+    right: 6%;
+  }
+}
+
+.dream-hero-eyebrow {
+  position: relative;
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.08em;
+  color: #cbb9ff;
+}
+
+.dream-hero h1 {
+  position: relative;
+  margin: 0;
+  max-width: 18ch;
+  font-size: clamp(1.5rem, 1.2rem + 1.4vw, 2.2rem);
+  letter-spacing: var(--ls-hero);
+  color: #fff;
+  word-break: keep-all;
+}
+
+.dream-hero-lede {
+  position: relative;
+  max-width: 46ch;
+  margin: 0;
+  line-height: var(--lh-body);
+  color: #d9d2f5;
+  word-break: keep-all;
+}
+
+/* ── 입력 카드(한지 느낌) ─────────────────────────────── */
+
+.dream-desk {
+  position: relative;
+  padding: var(--space-5);
+  border-radius: 20px;
+  background:
+    radial-gradient(80% 60% at 100% 0%, color-mix(in oklab, var(--svc-dream) 10%, transparent), transparent 70%),
+    var(--color-surface);
+  border: 1px solid color-mix(in oklab, var(--svc-dream) 22%, var(--color-border));
+  box-shadow: 0 18px 40px -30px color-mix(in oklab, var(--svc-dream) 60%, transparent);
+}
+
+@media (min-width: 640px) {
+  .dream-desk {
+    padding: var(--space-6);
+  }
+}
+
+.dream-desk .dream-label-row label {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-bold);
+}
+
+/* ── 풀이 팝업 ────────────────────────────────────────── */
+
+.dream-backdrop {
+  background: rgb(12 10 26 / 0.72);
+}
+
+.reading {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  max-width: 460px;
+  padding: var(--space-6) var(--space-5) var(--space-5);
+  border-radius: 24px;
+  background:
+    radial-gradient(110% 80% at 80% -10%, #3b2d6b 0%, transparent 60%),
+    linear-gradient(160deg, #1b1533 0%, #120f26 100%);
+  color: #f4f1ff;
+  box-shadow: 0 30px 70px -30px rgb(0 0 0 / 0.7);
+}
+
+.reading-eyebrow {
+  position: relative;
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.08em;
+  color: #cbb9ff;
+}
+
+.reading-title {
+  position: relative;
+  margin: var(--space-1) 0 var(--space-3);
+  font-size: var(--fs-h2);
+  letter-spacing: var(--ls-title);
+  color: #fff;
+  word-break: keep-all;
+}
+
+.reading .reading-moon {
+  width: 60px;
+  height: 60px;
+  right: 6%;
+  top: 8%;
+}
+
+/* 적어 주신 꿈. 인용부호와 기울임으로 '들은 말' 임을 보인다. */
+.reading-quote {
+  position: relative;
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: 14px;
+  background: rgb(255 255 255 / 0.07);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: #e5dffb;
+  word-break: keep-all;
+}
+
+/* 세 걸음 — 점 세 개가 차례로 차오른다. */
+.reading-steps {
+  position: relative;
+  display: flex;
+  gap: 6px;
+  margin-bottom: var(--space-3);
+}
+
+.reading-steps span {
+  height: 4px;
+  flex: 1;
+  border-radius: var(--radius-pill);
+  background: rgb(255 255 255 / 0.18);
+  transition: background var(--dur) var(--ease-out);
+}
+
+.reading-steps span[data-state='done'] {
+  background: rgb(255 255 255 / 0.5);
+}
+
+.reading-steps span[data-state='active'] {
+  background: #cbb9ff;
+}
+
+.reading-now {
+  position: relative;
+  min-height: 74px;
+}
+
+.reading-now p {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+  color: #d9d2f5;
+  word-break: keep-all;
+}
+
+.reading-wait {
+  margin-top: var(--space-2) !important;
+  color: #b8aee0 !important;
+  font-size: var(--fs-xs) !important;
+}
+
+/* 하나씩 놓이는 번호. 자리는 처음부터 여섯 개를 잡아 둔다(놓일 때 화면이 흔들리지 않게). */
+.reading-balls {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  gap: var(--space-2);
+  margin: var(--space-4) 0;
+}
+
+.reading-ball {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px dashed rgb(255 255 255 / 0.25);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-black);
+  font-variant-numeric: tabular-nums;
+  color: #1b1533;
+}
+
+.reading-ball[data-on] {
+  border: 0;
+  background: radial-gradient(circle at 35% 30%, #fff6d8, #f2c94c);
+  box-shadow: 0 6px 18px -6px rgb(242 201 76 / 0.6);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .reading-ball[data-on] {
+    animation: reading-pop 320ms var(--ease-out) both;
+  }
+}
+
+@keyframes reading-pop {
+  from {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+}
+
+.reading-cancel {
+  position: relative;
+  width: 100%;
+  background: rgb(255 255 255 / 0.1);
+  border-color: rgb(255 255 255 / 0.2);
+  color: #efe9ff;
+}
+
+.reading-cancel:hover {
+  background: rgb(255 255 255 / 0.16);
+}
+
+/* 풀이가 끝나면 이 자리로 화면이 옮겨 온다. 헤더에 가리지 않게 띄운다. */
+.dream-result-anchor {
+  scroll-margin-top: calc(var(--header-height) + var(--space-5));
+}

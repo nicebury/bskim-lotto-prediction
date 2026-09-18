@@ -59,10 +59,27 @@ export default async function DreamPage() {
         ]}
       />
 
-      <section className="section">
-        <h1>꿈해몽 로또 번호 추천</h1>
-        <p className="muted" style={{ marginTop: "var(--space-2)" }}>
-          꿈꾼 내용을 적어주시면 꿈을 해석하여 번호를 추천해 드립니다.
+      {/*
+        ── 머리 ────────────────────────────────────────────
+        ⚠ 2026-09-18 재설계(사용자 요청: "마치 점집에 들어온 것 같은" 풍). 밤하늘 바탕에 달과
+          별을 두었다. 그림은 **CSS·SVG 로 그린다** — 사진을 쓰면 출처와 이용 범위를 따져야 하고
+          (저작권 판단은 사용자 몫: [[legal-policy-decisions-need-user]]), 무게도 늘어난다.
+        ⚠ 분위기는 점집이되 **말은 사실에 머문다.** "좋은 꿈", "대박" 같은 말을 쓰지 않는다
+          (→ docs/wiki/40-domain/forbidden-expressions.md).
+      */}
+      <section className="dream-hero" aria-labelledby="dream-title">
+        <div className="dream-hero-sky" aria-hidden="true">
+          <span className="dream-hero-moon" />
+          {Array.from({ length: 18 }, (_, i) => (
+            <i key={i} style={{ "--i": i } as React.CSSProperties} />
+          ))}
+        </div>
+
+        <p className="dream-hero-eyebrow">꿈해몽 번호</p>
+        <h1 id="dream-title">간밤의 꿈, 무슨 뜻일까요?</h1>
+        <p className="dream-hero-lede">
+          꿈에서 본 것을 적어 주시면 옛 해몽 자료에서 같은 상징을 찾아 풀이하고, 그 풀이에 얽힌
+          번호를 모아 보여 드립니다.
         </p>
       </section>
 

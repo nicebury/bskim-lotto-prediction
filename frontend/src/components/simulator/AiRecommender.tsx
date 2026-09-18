@@ -1,8 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { browserSimulate, simulateFallback } from '@/lib/api'
+import { scrollToResultSoon } from '@/lib/scroll-to'
 import type { RecommendSet, SimulateResult, SimulateTrials } from '@/lib/api-types'
 import { formatNumber } from '@/lib/format'
 import { loadReco, saveReco } from '@/lib/reco-store'
@@ -101,10 +102,19 @@ export function AiRecommender() {
     }
   }
 
+  /** 결과 블록. 단계가 끝나면 여기로 화면을 옮긴다(전체 복사 버튼이 맨 위에 있다). */
+  const resultRef = useRef<HTMLDivElement>(null)
+
   /** 단계가 모두 끝났다. 그때 비로소 결과를 화면에 올린다. */
   const finish = useCallback(() => {
     setRunning(false)
     setResult(pending)
+    /*
+      ⚠ **결과 자리로 화면을 옮긴다**(2026-09-18 사용자 요청). 팝업이 닫히면 사용자는 여전히
+        설정 화면을 보고 있어 뽑힌 번호를 스스로 찾아 내려가야 했다.
+      ⚠ 결과가 없으면(요청 실패) 움직이지 않는다 — 빈 자리로 끌고 가면 더 헷갈린다.
+    */
+    if (pending) scrollToResultSoon(() => resultRef.current)
     /*
       ⚠ **여기서 담는다.** '분석' 을 누를 때가 아니다 — 뒤로가기·스와이프처럼 버튼을 거치지
         않는 이동에서도 돌아왔을 때 번호가 남아 있어야 한다(→ lib/reco-store.ts).
@@ -265,7 +275,7 @@ export function AiRecommender() {
         </Card>
       )}
 
-      {result && <SimulateResultView result={result} />}
+      {result && <SimulateResultView result={result} anchorRef={resultRef} />}
 
       {running && (
         <SimulatorRunner
@@ -281,7 +291,14 @@ export function AiRecommender() {
   )
 }
 
-function SimulateResultView({ result }: { result: SimulateResult }) {
+function SimulateResultView({
+  result,
+  anchorRef,
+}: {
+  result: SimulateResult
+  /** 결과가 나오면 이 자리로 화면이 옮겨 온다(→ `scrollToResultSoon`). */
+  anchorRef?: React.RefObject<HTMLDivElement | null>
+}) {
   if (result.sets.length === 0) {
     return (
       <Card>
@@ -291,7 +308,7 @@ function SimulateResultView({ result }: { result: SimulateResult }) {
   }
 
   return (
-    <div className="ai-reco-result">
+    <div className="ai-reco-result" ref={anchorRef}>
       {/*
         결과 위에 무엇을 했는지 한 줄. 팝업이 닫힌 뒤에도 근거가 화면에 남아야 한다 —
         단계는 지나가지만 사실은 남는다.
